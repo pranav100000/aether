@@ -10,7 +10,7 @@
 aether is an agent-agnostic cloud development environment. Users get instant cloud VMs they can access via browser or connect their preferred coding agent (Claude Code, Codex, etc.). Think "Replit, but you bring your own AI."
 
 **Timeline:** 10 weeks to launch
-**Estimated effort:** ~298 hours
+**Estimated effort:** ~280 hours
 **Team:** 2 engineers (Pranav + Praveer)
 
 ---
@@ -38,17 +38,17 @@ aether is an agent-agnostic cloud development environment. Users get instant clo
 │                                                                         │
 │  ┌─────────┐      ┌─────────┐      ┌─────────┐      ┌─────────┐      ┌─────────┐
 │  │   VM    │      │  Auth   │      │ Editor  │      │ Agents  │      │ Billing │
-│  │ + Term  │ ───► │ + CRUD  │ ───► │ + Files │ ───► │ + SSH   │ ───► │ + Launch│
+│  │ + Term  │ ───► │ + CRUD  │ ───► │ + Files │ ───► │ + Keys  │ ───► │ + Launch│
 │  └─────────┘      └─────────┘      └─────────┘      └─────────┘      └─────────┘
 │                                                                         │
 │  Deliverables:    Deliverables:    Deliverables:    Deliverables:    Deliverables:
-│  • Fly Machines   • Supabase auth  • CodeMirror     • SSH keys       • Usage track
-│  • SSH proxy      • User/Project   • File tree      • Agent tokens   • Stripe
-│  • xterm.js       • React app      • SFTP backend   • Activity view  • Limits
-│  • Basic UI       • Terminal page  • Fly Volumes    • Setup guides   • Dashboard
+│  • Fly Machines   • Supabase auth  • CodeMirror     • API key store  • Usage track
+│  • SSH proxy      • User/Project   • File tree      • Pre-installed  • Stripe
+│  • xterm.js       • React app      • SFTP backend   • Env injection  • Limits
+│  • Basic UI       • Terminal page  • Fly Volumes    • Usage tracking • Dashboard
 │                                    • Port forward                    • Landing
 │                                                                         │
-│  ~54 hours        ~59 hours        ~63 hours        ~54 hours        ~68 hours
+│  ~54 hours        ~59 hours        ~63 hours        ~36 hours        ~68 hours
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -118,7 +118,8 @@ aether/
 │   │   │   │   ├── projects.go    # Project CRUD (Phase 2)
 │   │   │   │   ├── terminal.go    # WebSocket terminal (Phase 1)
 │   │   │   │   ├── files.go       # File operations (Phase 3)
-│   │   │   │   ├── agents.go      # Agent tokens (Phase 4)
+│   │   │   │   ├── apikeys.go     # API key management (Phase 4)
+│   │   │   │   ├── analytics.go   # Agent usage analytics (Phase 4)
 │   │   │   │   └── billing.go     # Billing endpoints (Phase 5)
 │   │   │   │
 │   │   │   ├── middleware/
@@ -140,11 +141,12 @@ aether/
 │   │   │   │   ├── db/
 │   │   │   │   │   ├── client.go  # Postgres client
 │   │   │   │   │   ├── projects.go# Project queries
-│   │   │   │   │   ├── agents.go  # Agent token queries (Phase 4)
+│   │   │   │   │   ├── apikeys.go # API key queries (Phase 4)
+│   │   │   │   │   ├── analytics.go # Agent usage queries (Phase 4)
 │   │   │   │   │   └── usage.go   # Usage tracking (Phase 5)
 │   │   │   │   │
 │   │   │   │   ├── crypto/
-│   │   │   │   │   └── keys.go    # SSH key generation (Phase 4)
+│   │   │   │   │   └── encryption.go # AES-256-GCM encryption (Phase 4)
 │   │   │   │   │
 │   │   │   │   └── stripe/
 │   │   │   │       ├── client.go  # Stripe client (Phase 5)
@@ -153,7 +155,7 @@ aether/
 │   │   │   └── models/
 │   │   │       ├── project.go
 │   │   │       ├── user.go
-│   │   │       ├── agent.go       # Phase 4
+│   │   │       ├── agent_usage.go # Phase 4
 │   │   │       └── usage.go       # Phase 5
 │   │   │
 │   │   └── pkg/                   # Shared utilities (if needed)
@@ -212,11 +214,8 @@ aether/
 │   │       │   │   ├── PreviewButton.tsx  # Phase 3
 │   │       │   │   └── StatusBar.tsx
 │   │       │   │
-│   │       │   ├── agents/        # Phase 4
-│   │       │   │   ├── AgentModal.tsx
-│   │       │   │   ├── AgentList.tsx
-│   │       │   │   ├── AgentTerminal.tsx
-│   │       │   │   └── AgentGuides.tsx
+│   │       │   ├── settings/      # Phase 4
+│   │       │   │   └── ConnectedAccounts.tsx
 │   │       │   │
 │   │       │   └── billing/       # Phase 5
 │   │       │       ├── UsageBar.tsx
@@ -240,7 +239,7 @@ aether/
 │   │       │   ├── useTerminal.ts     # Phase 1
 │   │       │   ├── useFiles.ts        # Phase 3
 │   │       │   ├── useEditor.ts       # Phase 3
-│   │       │   ├── useAgents.ts       # Phase 4
+│   │       │   ├── useApiKeys.ts      # Phase 4
 │   │       │   └── useUsage.ts        # Phase 5
 │   │       │
 │   │       ├── lib/
@@ -281,7 +280,6 @@ aether/
 │   │       ├── index.ts
 │   │       ├── project.ts
 │   │       ├── user.ts
-│   │       ├── agent.ts
 │   │       └── api.ts             # API request/response types
 │   │
 │   ├── ui/                        # Shared UI components (optional)
@@ -331,7 +329,7 @@ aether/
 │   │
 │   ├── migrations/
 │   │   ├── 20240101000000_initial_schema.sql      # Phase 2
-│   │   ├── 20240101000001_agent_tokens.sql        # Phase 4
+│   │   ├── 20240101000001_api_keys_agent_usage.sql # Phase 4
 │   │   └── 20240101000002_usage_billing.sql       # Phase 5
 │   │
 │   ├── seed.sql                   # Dev seed data
@@ -362,8 +360,7 @@ aether/
 │   │
 │   ├── guides/
 │   │   ├── getting-started.md
-│   │   ├── connecting-claude-code.md
-│   │   ├── connecting-codex.md
+│   │   ├── using-agents.md        # Phase 4
 │   │   └── self-hosting.md        # Future
 │   │
 │   └── prd/
@@ -505,26 +502,29 @@ aether/
      │                │                │                │                │
 ```
 
-### Agent Connects
+### User Runs Agent
 
 ```
 ┌──────────┐     ┌──────────┐     ┌──────────┐
-│  Agent   │     │  Fly VM  │     │ Backend  │
-│(Claude)  │     │          │     │          │
+│  Browser │     │  Fly VM  │     │ Backend  │
+│(Terminal)│     │          │     │          │
 └────┬─────┘     └────┬─────┘     └────┬─────┘
      │                │                │
-     │  SSH connect   │                │
+     │  User types:   │                │
+     │  $ claude      │                │
      ├───────────────►│                │
      │                │                │
-     │  (Key in authorized_keys)       │
-     │◄──────────────►│                │
-     │  Shell session │                │
+     │  (ANTHROPIC_API_KEY already     │
+     │   injected as env var on start) │
      │                │                │
-     │  Execute commands               │
-     ├───────────────►│                │
+     │  Claude Code starts             │
      │◄───────────────┤                │
      │                │                │
-     │  (User watches via tmux)        │
+     │  Agent session │                │
+     │◄──────────────►│                │
+     │                │                │
+     │  (Backend tracks agent usage    │
+     │   via terminal output patterns) │
      │                │                │
 ```
 
@@ -554,7 +554,9 @@ FLY_ORG=personal
 SSH_PRIVATE_KEY_PATH=/secrets/ssh_key
 # Or: SSH_PRIVATE_KEY=base64_encoded_key
 
-# Encryption (for agent private keys)
+# Encryption (for user API keys)
+# Generate with: openssl rand -hex 32
+# Store with: fly secrets set ENCRYPTION_MASTER_KEY=<key>
 ENCRYPTION_MASTER_KEY=32_byte_hex_string
 
 # Stripe (Phase 5)
@@ -622,15 +624,19 @@ projects (
 ### Phase 4: Agents
 
 ```sql
-agent_tokens (
-    id                      uuid PK
-    project_id              uuid FK → projects
-    public_key              text
-    private_key_encrypted   text
-    name                    text
-    last_used_at            timestamptz
-    created_at              timestamptz
-    expires_at              timestamptz
+-- Add to profiles table
+profiles.api_keys_encrypted  text  -- Encrypted JSON: {"anthropic": "sk-...", "openai": "sk-..."}
+
+-- Agent usage tracking
+agent_usage (
+    id              uuid PK
+    user_id         uuid FK → profiles
+    project_id      uuid FK → projects
+    agent           text              -- 'claude', 'codex', 'aider'
+    model           text              -- 'claude-sonnet-4-20250514', 'gpt-4' (if detectable)
+    started_at      timestamptz
+    ended_at        timestamptz
+    created_at      timestamptz
 )
 ```
 
@@ -698,10 +704,10 @@ POST   /projects/:id/files/rename   Rename/move file
 
 ### Phase 4
 ```
-GET    /projects/:id/agents             List agent tokens
-POST   /projects/:id/agents             Create agent token
-DELETE /projects/:id/agents/:tokenId    Revoke agent token
-WS     /projects/:id/agent-terminal     Agent activity stream
+GET    /user/api-keys                   List connected providers
+POST   /user/api-keys                   Add/update API key
+DELETE /user/api-keys/:provider         Remove API key
+GET    /admin/analytics/agents          Agent usage analytics (internal)
 ```
 
 ### Phase 5
@@ -838,8 +844,8 @@ docker push registry.fly.io/aether-vms/base:latest
 | 4 | 2 | Product | Project CRUD, React app, workspace page |
 | 5 | 3 | Editor | SFTP backend, file tree component |
 | 6 | 3 | Editor | CodeMirror integration, port forwarding |
-| 7 | 4 | Agents | SSH key generation, agent tokens |
-| 8 | 4 | Agents | Connection UI, activity monitoring |
+| 7 | 4 | Agents | API key storage, encryption, env injection |
+| 8 | 4 | Agents | Connected accounts UI, usage tracking |
 | 9 | 5 | Billing | Usage tracking, Stripe integration |
 | 10 | 5 | Launch | Polish, landing page, monitoring |
 
@@ -851,7 +857,7 @@ docker push registry.fly.io/aether-vms/base:latest
 |------|-------------|--------|------------|-------|
 | Fly API instability | Low | High | Error handling, retries, fallback messaging | — |
 | Usage tracking gaps | Medium | High | Reconciliation cron, Fly API as source of truth | — |
-| SSH key security breach | Low | Critical | Encryption at rest, audit logging, rotation | — |
+| API key security breach | Low | Critical | Encryption at rest, server-side only decryption | — |
 | Free tier abuse | High | Medium | Rate limiting, IP blocking, manual review | — |
 | Scope creep | High | Medium | Strict phase boundaries, defer to backlog | — |
 | Performance issues | Medium | Medium | Load testing, monitoring, optimization sprints | — |
