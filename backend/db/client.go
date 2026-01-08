@@ -35,9 +35,23 @@ type Project struct {
 	ErrorMessage   *string    `json:"error_message,omitempty"`
 	BaseImage      string     `json:"base_image"`
 	EnvVars        any        `json:"env_vars"`
+	CPUKind        string     `json:"cpu_kind"`
+	CPUs           int        `json:"cpus"`
+	MemoryMB       int        `json:"memory_mb"`
+	VolumeSizeGB   int        `json:"volume_size_gb"`
+	GPUKind        *string    `json:"gpu_kind,omitempty"`
 	LastAccessedAt *time.Time `json:"last_accessed_at,omitempty"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
+}
+
+// HardwareConfig represents VM hardware configuration
+type HardwareConfig struct {
+	CPUKind      string
+	CPUs         int
+	MemoryMB     int
+	VolumeSizeGB int
+	GPUKind      *string
 }
 
 func NewClient(databaseURL string) (*Client, error) {
@@ -111,8 +125,9 @@ func (c *Client) UpdateProfile(ctx context.Context, userID string, displayName s
 func (c *Client) ListProjects(ctx context.Context, userID string) ([]Project, error) {
 	rows, err := c.pool.Query(ctx, `
 		SELECT id, user_id, name, description, fly_machine_id, fly_volume_id,
-		       status, error_message, base_image, env_vars, last_accessed_at,
-		       created_at, updated_at
+		       status, error_message, base_image, env_vars,
+		       cpu_kind, cpus, memory_mb, volume_size_gb, gpu_kind,
+		       last_accessed_at, created_at, updated_at
 		FROM projects
 		WHERE user_id = $1
 		ORDER BY updated_at DESC
@@ -128,8 +143,9 @@ func (c *Client) ListProjects(ctx context.Context, userID string) ([]Project, er
 		err := rows.Scan(
 			&p.ID, &p.UserID, &p.Name, &p.Description,
 			&p.FlyMachineID, &p.FlyVolumeID, &p.Status, &p.ErrorMessage,
-			&p.BaseImage, &p.EnvVars, &p.LastAccessedAt,
-			&p.CreatedAt, &p.UpdatedAt,
+			&p.BaseImage, &p.EnvVars,
+			&p.CPUKind, &p.CPUs, &p.MemoryMB, &p.VolumeSizeGB, &p.GPUKind,
+			&p.LastAccessedAt, &p.CreatedAt, &p.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan project: %w", err)
@@ -147,8 +163,9 @@ func (c *Client) ListProjects(ctx context.Context, userID string) ([]Project, er
 func (c *Client) GetProject(ctx context.Context, projectID string) (*Project, error) {
 	row := c.pool.QueryRow(ctx, `
 		SELECT id, user_id, name, description, fly_machine_id, fly_volume_id,
-		       status, error_message, base_image, env_vars, last_accessed_at,
-		       created_at, updated_at
+		       status, error_message, base_image, env_vars,
+		       cpu_kind, cpus, memory_mb, volume_size_gb, gpu_kind,
+		       last_accessed_at, created_at, updated_at
 		FROM projects
 		WHERE id = $1
 	`, projectID)
@@ -157,8 +174,9 @@ func (c *Client) GetProject(ctx context.Context, projectID string) (*Project, er
 	err := row.Scan(
 		&p.ID, &p.UserID, &p.Name, &p.Description,
 		&p.FlyMachineID, &p.FlyVolumeID, &p.Status, &p.ErrorMessage,
-		&p.BaseImage, &p.EnvVars, &p.LastAccessedAt,
-		&p.CreatedAt, &p.UpdatedAt,
+		&p.BaseImage, &p.EnvVars,
+		&p.CPUKind, &p.CPUs, &p.MemoryMB, &p.VolumeSizeGB, &p.GPUKind,
+		&p.LastAccessedAt, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -173,8 +191,9 @@ func (c *Client) GetProject(ctx context.Context, projectID string) (*Project, er
 func (c *Client) GetProjectByUser(ctx context.Context, projectID, userID string) (*Project, error) {
 	row := c.pool.QueryRow(ctx, `
 		SELECT id, user_id, name, description, fly_machine_id, fly_volume_id,
-		       status, error_message, base_image, env_vars, last_accessed_at,
-		       created_at, updated_at
+		       status, error_message, base_image, env_vars,
+		       cpu_kind, cpus, memory_mb, volume_size_gb, gpu_kind,
+		       last_accessed_at, created_at, updated_at
 		FROM projects
 		WHERE id = $1 AND user_id = $2
 	`, projectID, userID)
@@ -183,8 +202,9 @@ func (c *Client) GetProjectByUser(ctx context.Context, projectID, userID string)
 	err := row.Scan(
 		&p.ID, &p.UserID, &p.Name, &p.Description,
 		&p.FlyMachineID, &p.FlyVolumeID, &p.Status, &p.ErrorMessage,
-		&p.BaseImage, &p.EnvVars, &p.LastAccessedAt,
-		&p.CreatedAt, &p.UpdatedAt,
+		&p.BaseImage, &p.EnvVars,
+		&p.CPUKind, &p.CPUs, &p.MemoryMB, &p.VolumeSizeGB, &p.GPUKind,
+		&p.LastAccessedAt, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -196,19 +216,37 @@ func (c *Client) GetProjectByUser(ctx context.Context, projectID, userID string)
 	return &p, nil
 }
 
-func (c *Client) CreateProject(ctx context.Context, userID, name string, description *string, baseImage string) (*Project, error) {
+func (c *Client) CreateProject(ctx context.Context, userID, name string, description *string, baseImage string, hw *HardwareConfig) (*Project, error) {
+	// Use defaults if hardware config is nil
+	cpuKind := "shared"
+	cpus := 1
+	memoryMB := 1024
+	volumeSizeGB := 5
+	var gpuKind *string
+
+	if hw != nil {
+		cpuKind = hw.CPUKind
+		cpus = hw.CPUs
+		memoryMB = hw.MemoryMB
+		volumeSizeGB = hw.VolumeSizeGB
+		gpuKind = hw.GPUKind
+	}
+
 	var p Project
 	err := c.pool.QueryRow(ctx, `
-		INSERT INTO projects (user_id, name, description, base_image, status)
-		VALUES ($1, $2, $3, $4, 'stopped')
+		INSERT INTO projects (user_id, name, description, base_image, status,
+		                      cpu_kind, cpus, memory_mb, volume_size_gb, gpu_kind)
+		VALUES ($1, $2, $3, $4, 'stopped', $5, $6, $7, $8, $9)
 		RETURNING id, user_id, name, description, fly_machine_id, fly_volume_id,
-		          status, error_message, base_image, env_vars, last_accessed_at,
-		          created_at, updated_at
-	`, userID, name, description, baseImage).Scan(
+		          status, error_message, base_image, env_vars,
+		          cpu_kind, cpus, memory_mb, volume_size_gb, gpu_kind,
+		          last_accessed_at, created_at, updated_at
+	`, userID, name, description, baseImage, cpuKind, cpus, memoryMB, volumeSizeGB, gpuKind).Scan(
 		&p.ID, &p.UserID, &p.Name, &p.Description,
 		&p.FlyMachineID, &p.FlyVolumeID, &p.Status, &p.ErrorMessage,
-		&p.BaseImage, &p.EnvVars, &p.LastAccessedAt,
-		&p.CreatedAt, &p.UpdatedAt,
+		&p.BaseImage, &p.EnvVars,
+		&p.CPUKind, &p.CPUs, &p.MemoryMB, &p.VolumeSizeGB, &p.GPUKind,
+		&p.LastAccessedAt, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create project: %w", err)
@@ -225,13 +263,15 @@ func (c *Client) UpdateProject(ctx context.Context, projectID, userID string, na
 		    description = COALESCE($4, description)
 		WHERE id = $1 AND user_id = $2
 		RETURNING id, user_id, name, description, fly_machine_id, fly_volume_id,
-		          status, error_message, base_image, env_vars, last_accessed_at,
-		          created_at, updated_at
+		          status, error_message, base_image, env_vars,
+		          cpu_kind, cpus, memory_mb, volume_size_gb, gpu_kind,
+		          last_accessed_at, created_at, updated_at
 	`, projectID, userID, name, description).Scan(
 		&p.ID, &p.UserID, &p.Name, &p.Description,
 		&p.FlyMachineID, &p.FlyVolumeID, &p.Status, &p.ErrorMessage,
-		&p.BaseImage, &p.EnvVars, &p.LastAccessedAt,
-		&p.CreatedAt, &p.UpdatedAt,
+		&p.BaseImage, &p.EnvVars,
+		&p.CPUKind, &p.CPUs, &p.MemoryMB, &p.VolumeSizeGB, &p.GPUKind,
+		&p.LastAccessedAt, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -301,8 +341,9 @@ func (c *Client) UpdateProjectLastAccessed(ctx context.Context, projectID string
 func (c *Client) GetIdleRunningProjects(ctx context.Context, timeout time.Duration) ([]Project, error) {
 	rows, err := c.pool.Query(ctx, `
 		SELECT id, user_id, name, description, fly_machine_id, fly_volume_id,
-		       status, error_message, base_image, env_vars, last_accessed_at,
-		       created_at, updated_at
+		       status, error_message, base_image, env_vars,
+		       cpu_kind, cpus, memory_mb, volume_size_gb, gpu_kind,
+		       last_accessed_at, created_at, updated_at
 		FROM projects
 		WHERE status = 'running'
 		  AND last_accessed_at < now() - $1::interval
@@ -318,8 +359,9 @@ func (c *Client) GetIdleRunningProjects(ctx context.Context, timeout time.Durati
 		err := rows.Scan(
 			&p.ID, &p.UserID, &p.Name, &p.Description,
 			&p.FlyMachineID, &p.FlyVolumeID, &p.Status, &p.ErrorMessage,
-			&p.BaseImage, &p.EnvVars, &p.LastAccessedAt,
-			&p.CreatedAt, &p.UpdatedAt,
+			&p.BaseImage, &p.EnvVars,
+			&p.CPUKind, &p.CPUs, &p.MemoryMB, &p.VolumeSizeGB, &p.GPUKind,
+			&p.LastAccessedAt, &p.CreatedAt, &p.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan project: %w", err)

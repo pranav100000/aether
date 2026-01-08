@@ -109,7 +109,7 @@ func TestValidateCreateProject(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			input, errs := ValidateCreateProject(tt.projName, tt.description)
+			input, errs := ValidateCreateProject(tt.projName, tt.description, nil)
 			if tt.wantErr {
 				if !errs.HasErrors() {
 					t.Error("expected errors, got none")

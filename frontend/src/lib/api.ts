@@ -6,11 +6,54 @@ if (!API_URL) {
   throw new Error("Missing VITE_API_URL environment variable")
 }
 
+export interface HardwareConfig {
+  cpu_kind: "shared" | "performance"
+  cpus: number
+  memory_mb: number
+  volume_size_gb: number
+  gpu_kind?: "a10" | "l40s" | "a100-40gb" | "a100-80gb" | null
+}
+
+export interface HardwarePreset {
+  id: string
+  name: string
+  description: string
+  config: HardwareConfig
+}
+
+export const HARDWARE_PRESETS: HardwarePreset[] = [
+  {
+    id: "small",
+    name: "Small",
+    description: "1 shared CPU, 1GB RAM, 5GB storage",
+    config: { cpu_kind: "shared", cpus: 1, memory_mb: 1024, volume_size_gb: 5 },
+  },
+  {
+    id: "medium",
+    name: "Medium",
+    description: "2 shared CPUs, 2GB RAM, 10GB storage",
+    config: { cpu_kind: "shared", cpus: 2, memory_mb: 2048, volume_size_gb: 10 },
+  },
+  {
+    id: "large",
+    name: "Large",
+    description: "4 shared CPUs, 4GB RAM, 20GB storage",
+    config: { cpu_kind: "shared", cpus: 4, memory_mb: 4096, volume_size_gb: 20 },
+  },
+  {
+    id: "performance",
+    name: "Performance",
+    description: "2 performance CPUs, 4GB RAM, 20GB storage",
+    config: { cpu_kind: "performance", cpus: 2, memory_mb: 4096, volume_size_gb: 20 },
+  },
+]
+
 export interface Project {
   id: string
   name: string
   description?: string
   status: "stopped" | "starting" | "running" | "stopping" | "error"
+  hardware: HardwareConfig
   fly_machine_id?: string
   error_message?: string
   last_accessed_at?: string
@@ -21,6 +64,14 @@ export interface Project {
 export interface CreateProjectInput {
   name: string
   description?: string
+  hardware?: {
+    preset?: string
+    cpu_kind?: string
+    cpus?: number
+    memory_mb?: number
+    volume_size_gb?: number
+    gpu_kind?: string | null
+  }
 }
 
 export interface UpdateProjectInput {

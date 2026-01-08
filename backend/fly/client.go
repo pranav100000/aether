@@ -46,6 +46,7 @@ type GuestConfig struct {
 	CPUKind  string `json:"cpu_kind"`
 	CPUs     int    `json:"cpus"`
 	MemoryMB int    `json:"memory_mb"`
+	GPUKind  string `json:"gpu_kind,omitempty"`
 }
 
 type Service struct {

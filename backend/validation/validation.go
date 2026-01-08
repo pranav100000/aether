@@ -1,6 +1,7 @@
 package validation
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -124,14 +125,153 @@ func ValidateFileName(name string) *ValidationError {
 	return nil
 }
 
+// HardwareConfig represents validated hardware configuration
+type HardwareConfig struct {
+	CPUKind      string
+	CPUs         int
+	MemoryMB     int
+	VolumeSizeGB int
+	GPUKind      *string
+}
+
+var (
+	validCPUKinds = map[string]bool{"shared": true, "performance": true}
+	validGPUKinds = map[string]bool{"a10": true, "l40s": true, "a100-40gb": true, "a100-80gb": true}
+
+	// Valid CPU/Memory combinations for Fly.io
+	validSharedConfigs = map[int][]int{
+		1: {256, 512, 1024, 2048},
+		2: {512, 1024, 2048, 4096},
+		4: {1024, 2048, 4096, 8192},
+		8: {2048, 4096, 8192, 16384},
+	}
+	validPerformanceConfigs = map[int][]int{
+		1:  {2048, 4096, 8192},
+		2:  {4096, 8192, 16384},
+		4:  {8192, 16384, 32768},
+		8:  {16384, 32768},
+		16: {32768},
+	}
+)
+
+// GetPresetConfig returns a preset hardware configuration
+func GetPresetConfig(preset string) *HardwareConfig {
+	switch preset {
+	case "small":
+		return &HardwareConfig{CPUKind: "shared", CPUs: 1, MemoryMB: 1024, VolumeSizeGB: 5, GPUKind: nil}
+	case "medium":
+		return &HardwareConfig{CPUKind: "shared", CPUs: 2, MemoryMB: 2048, VolumeSizeGB: 10, GPUKind: nil}
+	case "large":
+		return &HardwareConfig{CPUKind: "shared", CPUs: 4, MemoryMB: 4096, VolumeSizeGB: 20, GPUKind: nil}
+	case "performance":
+		return &HardwareConfig{CPUKind: "performance", CPUs: 2, MemoryMB: 4096, VolumeSizeGB: 20, GPUKind: nil}
+	default:
+		// Default to small
+		return &HardwareConfig{CPUKind: "shared", CPUs: 1, MemoryMB: 1024, VolumeSizeGB: 5, GPUKind: nil}
+	}
+}
+
+// ValidateHardwareConfig validates hardware configuration
+func ValidateHardwareConfig(cpuKind string, cpus, memoryMB, volumeSizeGB int, gpuKind *string) (*HardwareConfig, ValidationErrors) {
+	var errors ValidationErrors
+
+	// Validate CPU kind
+	if !validCPUKinds[cpuKind] {
+		errors = append(errors, ValidationError{
+			Field:   "cpu_kind",
+			Message: "must be 'shared' or 'performance'",
+		})
+	}
+
+	// Validate CPU count based on kind
+	if cpuKind == "shared" {
+		if cpus < 1 || cpus > 8 {
+			errors = append(errors, ValidationError{
+				Field:   "cpus",
+				Message: "shared CPU must be 1, 2, 4, or 8 cores",
+			})
+		}
+	} else if cpuKind == "performance" {
+		if cpus < 1 || cpus > 16 {
+			errors = append(errors, ValidationError{
+				Field:   "cpus",
+				Message: "performance CPU must be 1, 2, 4, 8, or 16 cores",
+			})
+		}
+	}
+
+	// Validate memory range
+	if memoryMB < 256 || memoryMB > 32768 {
+		errors = append(errors, ValidationError{
+			Field:   "memory_mb",
+			Message: "memory must be between 256MB and 32GB",
+		})
+	}
+
+	// Validate CPU/memory combination
+	if validCPUKinds[cpuKind] && memoryMB >= 256 && memoryMB <= 32768 {
+		var validMemory []int
+		if cpuKind == "shared" {
+			validMemory = validSharedConfigs[cpus]
+		} else {
+			validMemory = validPerformanceConfigs[cpus]
+		}
+
+		if len(validMemory) > 0 {
+			found := false
+			for _, m := range validMemory {
+				if m == memoryMB {
+					found = true
+					break
+				}
+			}
+			if !found {
+				errors = append(errors, ValidationError{
+					Field:   "memory_mb",
+					Message: fmt.Sprintf("invalid memory for %s CPU with %d cores; valid options: %v", cpuKind, cpus, validMemory),
+				})
+			}
+		}
+	}
+
+	// Validate volume size
+	if volumeSizeGB < 1 || volumeSizeGB > 500 {
+		errors = append(errors, ValidationError{
+			Field:   "volume_size_gb",
+			Message: "volume size must be between 1GB and 500GB",
+		})
+	}
+
+	// Validate GPU kind (if provided)
+	if gpuKind != nil && *gpuKind != "" && !validGPUKinds[*gpuKind] {
+		errors = append(errors, ValidationError{
+			Field:   "gpu_kind",
+			Message: "must be one of: a10, l40s, a100-40gb, a100-80gb",
+		})
+	}
+
+	if errors.HasErrors() {
+		return nil, errors
+	}
+
+	return &HardwareConfig{
+		CPUKind:      cpuKind,
+		CPUs:         cpus,
+		MemoryMB:     memoryMB,
+		VolumeSizeGB: volumeSizeGB,
+		GPUKind:      gpuKind,
+	}, nil
+}
+
 // CreateProjectInput represents validated create project input
 type CreateProjectInput struct {
 	Name        string
 	Description *string
+	Hardware    *HardwareConfig
 }
 
 // ValidateCreateProject validates create project request
-func ValidateCreateProject(name, description string) (*CreateProjectInput, ValidationErrors) {
+func ValidateCreateProject(name, description string, hw *HardwareConfig) (*CreateProjectInput, ValidationErrors) {
 	var errors ValidationErrors
 
 	if err := ValidateProjectName(name); err != nil {
@@ -141,6 +281,19 @@ func ValidateCreateProject(name, description string) (*CreateProjectInput, Valid
 	if description != "" {
 		if err := ValidateProjectDescription(description); err != nil {
 			errors = append(errors, *err)
+		}
+	}
+
+	// Use default hardware config if not provided
+	if hw == nil {
+		hw = GetPresetConfig("small")
+	} else {
+		// Validate provided hardware config
+		validatedHw, hwErrors := ValidateHardwareConfig(hw.CPUKind, hw.CPUs, hw.MemoryMB, hw.VolumeSizeGB, hw.GPUKind)
+		if hwErrors.HasErrors() {
+			errors = append(errors, hwErrors...)
+		} else {
+			hw = validatedHw
 		}
 	}
 
@@ -156,6 +309,7 @@ func ValidateCreateProject(name, description string) (*CreateProjectInput, Valid
 	return &CreateProjectInput{
 		Name:        name,
 		Description: desc,
+		Hardware:    hw,
 	}, nil
 }
 

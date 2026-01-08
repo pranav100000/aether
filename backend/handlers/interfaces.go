@@ -13,7 +13,7 @@ type ProjectStore interface {
 	ListProjects(ctx context.Context, userID string) ([]db.Project, error)
 	GetProject(ctx context.Context, projectID string) (*db.Project, error)
 	GetProjectByUser(ctx context.Context, projectID, userID string) (*db.Project, error)
-	CreateProject(ctx context.Context, userID, name string, description *string, baseImage string) (*db.Project, error)
+	CreateProject(ctx context.Context, userID, name string, description *string, baseImage string, hw *db.HardwareConfig) (*db.Project, error)
 	UpdateProject(ctx context.Context, projectID, userID string, name, description *string) (*db.Project, error)
 	DeleteProject(ctx context.Context, projectID, userID string) error
 	UpdateProjectStatus(ctx context.Context, projectID, status string, errorMsg *string) error

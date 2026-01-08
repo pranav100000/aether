@@ -21,7 +21,7 @@ import (
 type mockProjectStore struct {
 	projects       map[string]*db.Project
 	listProjectsFn func(ctx context.Context, userID string) ([]db.Project, error)
-	createFn       func(ctx context.Context, userID, name string, description *string, baseImage string) (*db.Project, error)
+	createFn       func(ctx context.Context, userID, name string, description *string, baseImage string, hw *db.HardwareConfig) (*db.Project, error)
 	getFn          func(ctx context.Context, projectID, userID string) (*db.Project, error)
 	updateFn       func(ctx context.Context, projectID, userID string, name, description *string) (*db.Project, error)
 	deleteFn       func(ctx context.Context, projectID, userID string) error
@@ -63,19 +63,34 @@ func (m *mockProjectStore) GetProjectByUser(ctx context.Context, projectID, user
 	return nil, db.ErrNotFound
 }
 
-func (m *mockProjectStore) CreateProject(ctx context.Context, userID, name string, description *string, baseImage string) (*db.Project, error) {
+func (m *mockProjectStore) CreateProject(ctx context.Context, userID, name string, description *string, baseImage string, hw *db.HardwareConfig) (*db.Project, error) {
 	if m.createFn != nil {
-		return m.createFn(ctx, userID, name, description, baseImage)
+		return m.createFn(ctx, userID, name, description, baseImage, hw)
+	}
+	// Default hardware config
+	cpuKind := "shared"
+	cpus := 1
+	memoryMB := 1024
+	volumeSizeGB := 5
+	if hw != nil {
+		cpuKind = hw.CPUKind
+		cpus = hw.CPUs
+		memoryMB = hw.MemoryMB
+		volumeSizeGB = hw.VolumeSizeGB
 	}
 	p := &db.Project{
-		ID:          "test-project-id",
-		UserID:      userID,
-		Name:        name,
-		Description: description,
-		Status:      "stopped",
-		BaseImage:   baseImage,
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
+		ID:           "test-project-id",
+		UserID:       userID,
+		Name:         name,
+		Description:  description,
+		Status:       "stopped",
+		BaseImage:    baseImage,
+		CPUKind:      cpuKind,
+		CPUs:         cpus,
+		MemoryMB:     memoryMB,
+		VolumeSizeGB: volumeSizeGB,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
 	}
 	m.projects[p.ID] = p
 	return p, nil
@@ -138,6 +153,45 @@ func (m *mockProjectStore) UpdateProjectLastAccessed(ctx context.Context, projec
 
 func (m *mockProjectStore) GetIdleRunningProjects(ctx context.Context, timeout time.Duration) ([]db.Project, error) {
 	return nil, nil
+}
+
+func (m *mockProjectStore) UpdateProjectVolume(ctx context.Context, projectID, volumeID string) error {
+	if p, ok := m.projects[projectID]; ok {
+		p.FlyVolumeID = &volumeID
+		return nil
+	}
+	return nil
+}
+
+type mockVolumeManager struct {
+	createFn func(name string, sizeGB int) (*fly.Volume, error)
+	getFn    func(volumeID string) (*fly.Volume, error)
+	deleteFn func(volumeID string) error
+}
+
+func newMockVolumeManager() *mockVolumeManager {
+	return &mockVolumeManager{}
+}
+
+func (m *mockVolumeManager) CreateVolume(name string, sizeGB int) (*fly.Volume, error) {
+	if m.createFn != nil {
+		return m.createFn(name, sizeGB)
+	}
+	return &fly.Volume{ID: "vol-123", Name: name, SizeGB: sizeGB, State: "created"}, nil
+}
+
+func (m *mockVolumeManager) GetVolume(volumeID string) (*fly.Volume, error) {
+	if m.getFn != nil {
+		return m.getFn(volumeID)
+	}
+	return &fly.Volume{ID: volumeID, State: "created"}, nil
+}
+
+func (m *mockVolumeManager) DeleteVolume(volumeID string) error {
+	if m.deleteFn != nil {
+		return m.deleteFn(volumeID)
+	}
+	return nil
 }
 
 type mockMachineManager struct {
@@ -206,23 +260,31 @@ func newAuthenticatedRequest(method, path string, body []byte) *http.Request {
 func TestProjectHandler_List(t *testing.T) {
 	store := newMockStore()
 	store.projects["p1"] = &db.Project{
-		ID:        "p1",
-		UserID:    "test-user-id",
-		Name:      "Project One",
-		Status:    "stopped",
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		ID:           "p1",
+		UserID:       "test-user-id",
+		Name:         "Project One",
+		Status:       "stopped",
+		CPUKind:      "shared",
+		CPUs:         1,
+		MemoryMB:     1024,
+		VolumeSizeGB: 5,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
 	}
 	store.projects["p2"] = &db.Project{
-		ID:        "p2",
-		UserID:    "test-user-id",
-		Name:      "Project Two",
-		Status:    "running",
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		ID:           "p2",
+		UserID:       "test-user-id",
+		Name:         "Project Two",
+		Status:       "running",
+		CPUKind:      "shared",
+		CPUs:         1,
+		MemoryMB:     1024,
+		VolumeSizeGB: 5,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
 	}
 
-	handler := NewProjectHandler(store, newMockMachineManager(), "test-image", 10*time.Minute)
+	handler := NewProjectHandler(store, newMockMachineManager(), newMockVolumeManager(), "test-image", 10*time.Minute)
 
 	req := newAuthenticatedRequest("GET", "/projects", nil)
 	rr := httptest.NewRecorder()
@@ -245,7 +307,7 @@ func TestProjectHandler_List(t *testing.T) {
 
 func TestProjectHandler_Create_Valid(t *testing.T) {
 	store := newMockStore()
-	handler := NewProjectHandler(store, newMockMachineManager(), "test-image", 10*time.Minute)
+	handler := NewProjectHandler(store, newMockMachineManager(), newMockVolumeManager(), "test-image", 10*time.Minute)
 
 	body := []byte(`{"name": "my-project", "description": "A test project"}`)
 	req := newAuthenticatedRequest("POST", "/projects", body)
@@ -285,7 +347,7 @@ func TestProjectHandler_Create_InvalidName(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			store := newMockStore()
-			handler := NewProjectHandler(store, newMockMachineManager(), "test-image", 10*time.Minute)
+			handler := NewProjectHandler(store, newMockMachineManager(), newMockVolumeManager(), "test-image", 10*time.Minute)
 
 			req := newAuthenticatedRequest("POST", "/projects", []byte(tt.body))
 			rr := httptest.NewRecorder()
@@ -303,15 +365,19 @@ func TestProjectHandler_Get_Found(t *testing.T) {
 	store := newMockStore()
 	projectID := "550e8400-e29b-41d4-a716-446655440000"
 	store.projects[projectID] = &db.Project{
-		ID:        projectID,
-		UserID:    "test-user-id",
-		Name:      "My Project",
-		Status:    "stopped",
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		ID:           projectID,
+		UserID:       "test-user-id",
+		Name:         "My Project",
+		Status:       "stopped",
+		CPUKind:      "shared",
+		CPUs:         1,
+		MemoryMB:     1024,
+		VolumeSizeGB: 5,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
 	}
 
-	handler := NewProjectHandler(store, newMockMachineManager(), "test-image", 10*time.Minute)
+	handler := NewProjectHandler(store, newMockMachineManager(), newMockVolumeManager(), "test-image", 10*time.Minute)
 
 	req := newAuthenticatedRequest("GET", "/projects/"+projectID, nil)
 	rr := httptest.NewRecorder()
@@ -328,7 +394,7 @@ func TestProjectHandler_Get_Found(t *testing.T) {
 
 func TestProjectHandler_Get_NotFound(t *testing.T) {
 	store := newMockStore()
-	handler := NewProjectHandler(store, newMockMachineManager(), "test-image", 10*time.Minute)
+	handler := NewProjectHandler(store, newMockMachineManager(), newMockVolumeManager(), "test-image", 10*time.Minute)
 
 	req := newAuthenticatedRequest("GET", "/projects/550e8400-e29b-41d4-a716-446655440000", nil)
 	rr := httptest.NewRecorder()
@@ -344,7 +410,7 @@ func TestProjectHandler_Get_NotFound(t *testing.T) {
 
 func TestProjectHandler_Get_InvalidUUID(t *testing.T) {
 	store := newMockStore()
-	handler := NewProjectHandler(store, newMockMachineManager(), "test-image", 10*time.Minute)
+	handler := NewProjectHandler(store, newMockMachineManager(), newMockVolumeManager(), "test-image", 10*time.Minute)
 
 	req := newAuthenticatedRequest("GET", "/projects/not-a-uuid", nil)
 	rr := httptest.NewRecorder()
@@ -362,15 +428,19 @@ func TestProjectHandler_Update(t *testing.T) {
 	store := newMockStore()
 	projectID := "550e8400-e29b-41d4-a716-446655440000"
 	store.projects[projectID] = &db.Project{
-		ID:        projectID,
-		UserID:    "test-user-id",
-		Name:      "Old Name",
-		Status:    "stopped",
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		ID:           projectID,
+		UserID:       "test-user-id",
+		Name:         "Old Name",
+		Status:       "stopped",
+		CPUKind:      "shared",
+		CPUs:         1,
+		MemoryMB:     1024,
+		VolumeSizeGB: 5,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
 	}
 
-	handler := NewProjectHandler(store, newMockMachineManager(), "test-image", 10*time.Minute)
+	handler := NewProjectHandler(store, newMockMachineManager(), newMockVolumeManager(), "test-image", 10*time.Minute)
 
 	body := []byte(`{"name": "new-name"}`)
 	req := newAuthenticatedRequest("PATCH", "/projects/"+projectID, body)
@@ -398,15 +468,19 @@ func TestProjectHandler_Delete(t *testing.T) {
 	store := newMockStore()
 	projectID := "550e8400-e29b-41d4-a716-446655440000"
 	store.projects[projectID] = &db.Project{
-		ID:        projectID,
-		UserID:    "test-user-id",
-		Name:      "To Delete",
-		Status:    "stopped",
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		ID:           projectID,
+		UserID:       "test-user-id",
+		Name:         "To Delete",
+		Status:       "stopped",
+		CPUKind:      "shared",
+		CPUs:         1,
+		MemoryMB:     1024,
+		VolumeSizeGB: 5,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
 	}
 
-	handler := NewProjectHandler(store, newMockMachineManager(), "test-image", 10*time.Minute)
+	handler := NewProjectHandler(store, newMockMachineManager(), newMockVolumeManager(), "test-image", 10*time.Minute)
 
 	req := newAuthenticatedRequest("DELETE", "/projects/"+projectID, nil)
 	rr := httptest.NewRecorder()
@@ -428,16 +502,21 @@ func TestProjectHandler_Start(t *testing.T) {
 	store := newMockStore()
 	projectID := "550e8400-e29b-41d4-a716-446655440000"
 	store.projects[projectID] = &db.Project{
-		ID:        projectID,
-		UserID:    "test-user-id",
-		Name:      "My Project",
-		Status:    "stopped",
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		ID:           projectID,
+		UserID:       "test-user-id",
+		Name:         "My Project",
+		Status:       "stopped",
+		CPUKind:      "shared",
+		CPUs:         1,
+		MemoryMB:     1024,
+		VolumeSizeGB: 5,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
 	}
 
 	machines := newMockMachineManager()
-	handler := NewProjectHandler(store, machines, "test-image", 10*time.Minute)
+	volumes := newMockVolumeManager()
+	handler := NewProjectHandler(store, machines, volumes, "test-image", 10*time.Minute)
 
 	req := newAuthenticatedRequest("POST", "/projects/"+projectID+"/start", nil)
 	rr := httptest.NewRecorder()
@@ -470,12 +549,17 @@ func TestProjectHandler_Stop(t *testing.T) {
 		Name:         "My Project",
 		Status:       "running",
 		FlyMachineID: &machineID,
+		CPUKind:      "shared",
+		CPUs:         1,
+		MemoryMB:     1024,
+		VolumeSizeGB: 5,
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}
 
 	machines := newMockMachineManager()
-	handler := NewProjectHandler(store, machines, "test-image", 10*time.Minute)
+	volumes := newMockVolumeManager()
+	handler := NewProjectHandler(store, machines, volumes, "test-image", 10*time.Minute)
 
 	req := newAuthenticatedRequest("POST", "/projects/"+projectID+"/stop", nil)
 	rr := httptest.NewRecorder()
@@ -502,15 +586,19 @@ func TestProjectHandler_Stop_NoMachine(t *testing.T) {
 	store := newMockStore()
 	projectID := "550e8400-e29b-41d4-a716-446655440000"
 	store.projects[projectID] = &db.Project{
-		ID:        projectID,
-		UserID:    "test-user-id",
-		Name:      "My Project",
-		Status:    "stopped",
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		ID:           projectID,
+		UserID:       "test-user-id",
+		Name:         "My Project",
+		Status:       "stopped",
+		CPUKind:      "shared",
+		CPUs:         1,
+		MemoryMB:     1024,
+		VolumeSizeGB: 5,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
 	}
 
-	handler := NewProjectHandler(store, newMockMachineManager(), "test-image", 10*time.Minute)
+	handler := NewProjectHandler(store, newMockMachineManager(), newMockVolumeManager(), "test-image", 10*time.Minute)
 
 	req := newAuthenticatedRequest("POST", "/projects/"+projectID+"/stop", nil)
 	rr := httptest.NewRecorder()

@@ -100,11 +100,17 @@ func (h *FilesHandler) ListOrRead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get machine IP
+	// Get machine and check actual state
 	machine, err := h.fly.GetMachine(*project.FlyMachineID)
 	if err != nil {
 		log.Printf("Error getting machine: %v", err)
 		respondError(w, http.StatusInternalServerError, "Failed to get VM")
+		return
+	}
+
+	// Check if machine is actually running (database status might be stale)
+	if machine.State != "started" {
+		respondError(w, http.StatusServiceUnavailable, "VM is not running")
 		return
 	}
 
@@ -217,6 +223,11 @@ func (h *FilesHandler) Write(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if machine.State != "started" {
+		respondError(w, http.StatusServiceUnavailable, "VM is not running")
+		return
+	}
+
 	fileInfo, err := h.sftp.Write(machine.PrivateIP, SSHPort, path, []byte(req.Content))
 	if err != nil {
 		if strings.Contains(err.Error(), "too large") {
@@ -295,6 +306,11 @@ func (h *FilesHandler) Mkdir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if machine.State != "started" {
+		respondError(w, http.StatusServiceUnavailable, "VM is not running")
+		return
+	}
+
 	if err := h.sftp.Mkdir(machine.PrivateIP, SSHPort, req.Path); err != nil {
 		log.Printf("Error creating directory: %v", err)
 		respondError(w, http.StatusInternalServerError, "Failed to create directory")
@@ -359,6 +375,11 @@ func (h *FilesHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("Error getting machine: %v", err)
 		respondError(w, http.StatusInternalServerError, "Failed to get VM")
+		return
+	}
+
+	if machine.State != "started" {
+		respondError(w, http.StatusServiceUnavailable, "VM is not running")
 		return
 	}
 
@@ -441,6 +462,11 @@ func (h *FilesHandler) Rename(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("Error getting machine: %v", err)
 		respondError(w, http.StatusInternalServerError, "Failed to get VM")
+		return
+	}
+
+	if machine.State != "started" {
+		respondError(w, http.StatusServiceUnavailable, "VM is not running")
 		return
 	}
 

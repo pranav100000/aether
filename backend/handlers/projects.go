@@ -36,9 +36,27 @@ func NewProjectHandler(store ProjectStore, machines MachineManager, volumes Volu
 
 // Request/Response types
 
+type HardwareConfigRequest struct {
+	Preset       string  `json:"preset,omitempty"`
+	CPUKind      string  `json:"cpu_kind,omitempty"`
+	CPUs         int     `json:"cpus,omitempty"`
+	MemoryMB     int     `json:"memory_mb,omitempty"`
+	VolumeSizeGB int     `json:"volume_size_gb,omitempty"`
+	GPUKind      *string `json:"gpu_kind,omitempty"`
+}
+
+type HardwareConfigResponse struct {
+	CPUKind      string  `json:"cpu_kind"`
+	CPUs         int     `json:"cpus"`
+	MemoryMB     int     `json:"memory_mb"`
+	VolumeSizeGB int     `json:"volume_size_gb"`
+	GPUKind      *string `json:"gpu_kind,omitempty"`
+}
+
 type CreateProjectRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
+	Name        string                 `json:"name"`
+	Description string                 `json:"description,omitempty"`
+	Hardware    *HardwareConfigRequest `json:"hardware,omitempty"`
 }
 
 type UpdateProjectRequest struct {
@@ -47,14 +65,16 @@ type UpdateProjectRequest struct {
 }
 
 type ProjectResponse struct {
-	ID             string     `json:"id"`
-	Name           string     `json:"name"`
-	Description    *string    `json:"description,omitempty"`
-	Status         string     `json:"status"`
-	FlyMachineID   *string    `json:"fly_machine_id,omitempty"`
-	LastAccessedAt *time.Time `json:"last_accessed_at,omitempty"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
+	ID             string                 `json:"id"`
+	Name           string                 `json:"name"`
+	Description    *string                `json:"description,omitempty"`
+	Status         string                 `json:"status"`
+	Hardware       HardwareConfigResponse `json:"hardware"`
+	FlyMachineID   *string                `json:"fly_machine_id,omitempty"`
+	PrivateIP      *string                `json:"private_ip,omitempty"`
+	LastAccessedAt *time.Time             `json:"last_accessed_at,omitempty"`
+	CreatedAt      time.Time              `json:"created_at"`
+	UpdatedAt      time.Time              `json:"updated_at"`
 }
 
 type ProjectListResponse struct {
@@ -74,10 +94,17 @@ type StopResponse struct {
 
 func projectToResponse(p *db.Project) ProjectResponse {
 	return ProjectResponse{
-		ID:             p.ID,
-		Name:           p.Name,
-		Description:    p.Description,
-		Status:         p.Status,
+		ID:          p.ID,
+		Name:        p.Name,
+		Description: p.Description,
+		Status:      p.Status,
+		Hardware: HardwareConfigResponse{
+			CPUKind:      p.CPUKind,
+			CPUs:         p.CPUs,
+			MemoryMB:     p.MemoryMB,
+			VolumeSizeGB: p.VolumeSizeGB,
+			GPUKind:      p.GPUKind,
+		},
 		FlyMachineID:   p.FlyMachineID,
 		LastAccessedAt: p.LastAccessedAt,
 		CreatedAt:      p.CreatedAt,
@@ -124,7 +151,23 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	input, errs := validation.ValidateCreateProject(req.Name, req.Description)
+	// Handle hardware config - preset takes precedence over custom config
+	var hwConfig *validation.HardwareConfig
+	if req.Hardware != nil {
+		if req.Hardware.Preset != "" {
+			hwConfig = validation.GetPresetConfig(req.Hardware.Preset)
+		} else {
+			hwConfig = &validation.HardwareConfig{
+				CPUKind:      req.Hardware.CPUKind,
+				CPUs:         req.Hardware.CPUs,
+				MemoryMB:     req.Hardware.MemoryMB,
+				VolumeSizeGB: req.Hardware.VolumeSizeGB,
+				GPUKind:      req.Hardware.GPUKind,
+			}
+		}
+	}
+
+	input, errs := validation.ValidateCreateProject(req.Name, req.Description, hwConfig)
 	if errs.HasErrors() {
 		respondJSON(w, http.StatusBadRequest, map[string]any{
 			"error":  "Validation failed",
@@ -133,7 +176,16 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	project, err := h.store.CreateProject(r.Context(), userID, input.Name, input.Description, h.baseImage)
+	// Convert validation.HardwareConfig to db.HardwareConfig
+	dbHwConfig := &db.HardwareConfig{
+		CPUKind:      input.Hardware.CPUKind,
+		CPUs:         input.Hardware.CPUs,
+		MemoryMB:     input.Hardware.MemoryMB,
+		VolumeSizeGB: input.Hardware.VolumeSizeGB,
+		GPUKind:      input.Hardware.GPUKind,
+	}
+
+	project, err := h.store.CreateProject(r.Context(), userID, input.Name, input.Description, h.baseImage, dbHwConfig)
 	if err != nil {
 		log.Printf("Error creating project: %v", err)
 		respondError(w, http.StatusInternalServerError, "Failed to create project")
@@ -166,7 +218,17 @@ func (h *ProjectHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, http.StatusOK, projectToResponse(project))
+	response := projectToResponse(project)
+
+	// Fetch private IP from Fly if machine exists
+	if project.FlyMachineID != nil && *project.FlyMachineID != "" {
+		machine, err := h.machines.GetMachine(*project.FlyMachineID)
+		if err == nil && machine.PrivateIP != "" {
+			response.PrivateIP = &machine.PrivateIP
+		}
+	}
+
+	respondJSON(w, http.StatusOK, response)
 }
 
 func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
@@ -291,7 +353,7 @@ func (h *ProjectHandler) Start(w http.ResponseWriter, r *http.Request) {
 	// Create volume if it doesn't exist
 	if project.FlyVolumeID == nil || *project.FlyVolumeID == "" {
 		volumeName := "vol_" + projectID[:8]
-		volume, err := h.volumes.CreateVolume(volumeName, 1) // 1GB default
+		volume, err := h.volumes.CreateVolume(volumeName, project.VolumeSizeGB)
 		if err != nil {
 			log.Printf("Error creating volume: %v", err)
 			errMsg := "Failed to create storage volume: " + err.Error()
@@ -411,13 +473,20 @@ func (h *ProjectHandler) Stop(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ProjectHandler) createMachine(ctx context.Context, project *db.Project) (*fly.Machine, error) {
+	guestConfig := fly.GuestConfig{
+		CPUKind:  project.CPUKind,
+		CPUs:     project.CPUs,
+		MemoryMB: project.MemoryMB,
+	}
+
+	// Add GPU if specified
+	if project.GPUKind != nil && *project.GPUKind != "" {
+		guestConfig.GPUKind = *project.GPUKind
+	}
+
 	config := fly.MachineConfig{
 		Image: h.baseImage,
-		Guest: fly.GuestConfig{
-			CPUKind:  "shared",
-			CPUs:     1,
-			MemoryMB: 256,
-		},
+		Guest: guestConfig,
 		Env: map[string]string{
 			"PROJECT_ID": project.ID,
 		},

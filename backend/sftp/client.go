@@ -130,7 +130,11 @@ func (c *Client) getOrCreateConnection(host string, port int) (*sftp.Client, err
 		delete(c.pool, key)
 	}
 
-	// Create SSH connection
+	return c.createConnection(host, port, key)
+}
+
+// createConnection creates a new SSH/SFTP connection (caller must hold write lock)
+func (c *Client) createConnection(host string, port int, key string) (*sftp.Client, error) {
 	config := &ssh.ClientConfig{
 		User: c.user,
 		Auth: []ssh.AuthMethod{
@@ -162,21 +166,48 @@ func (c *Client) getOrCreateConnection(host string, port int) (*sftp.Client, err
 	return sftpClient, nil
 }
 
+// invalidateConnection removes a stale connection from the pool and creates a new one
+func (c *Client) invalidateConnection(host string, port int) (*sftp.Client, error) {
+	key := fmt.Sprintf("%s:%d", host, port)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Close and remove stale connection
+	if conn, ok := c.pool[key]; ok {
+		conn.sftpClient.Close()
+		conn.sshConn.Close()
+		delete(c.pool, key)
+	}
+
+	return c.createConnection(host, port, key)
+}
+
+// isConnectionError checks if an error indicates a dead connection
+func isConnectionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	return strings.Contains(errStr, "connection lost") ||
+		strings.Contains(errStr, "broken pipe") ||
+		strings.Contains(errStr, "connection reset") ||
+		strings.Contains(errStr, "EOF")
+}
+
 // resolvePath converts a relative path to absolute path within WorkingDir
 func resolvePath(path string) string {
 	// Clean the path to remove .. and other oddities
 	path = filepath.Clean(path)
 
-	// If path is absolute, check if it's within WorkingDir
-	if filepath.IsAbs(path) {
-		if strings.HasPrefix(path, WorkingDir) {
-			return path
-		}
-		// Otherwise, treat it as relative to WorkingDir
-		return filepath.Join(WorkingDir, filepath.Base(path))
+	// If path is already within WorkingDir, return as-is
+	if strings.HasPrefix(path, WorkingDir) {
+		return path
 	}
 
-	// For relative paths, join with WorkingDir
+	// Strip leading slash and treat as relative to WorkingDir
+	path = strings.TrimPrefix(path, "/")
+
 	return filepath.Join(WorkingDir, path)
 }
 
@@ -191,7 +222,19 @@ func (c *Client) List(host string, port int, path string) (*DirListing, error) {
 
 	entries, err := sftpClient.ReadDir(fullPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read directory: %w", err)
+		// Retry once if connection error
+		if isConnectionError(err) {
+			sftpClient, err = c.invalidateConnection(host, port)
+			if err != nil {
+				return nil, err
+			}
+			entries, err = sftpClient.ReadDir(fullPath)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read directory: %w", err)
+			}
+		} else {
+			return nil, fmt.Errorf("failed to read directory: %w", err)
+		}
 	}
 
 	result := &DirListing{
@@ -233,7 +276,19 @@ func (c *Client) Read(host string, port int, path string) (*FileInfo, error) {
 	// Get file info first to check size
 	stat, err := sftpClient.Stat(fullPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to stat file: %w", err)
+		// Retry once if connection error
+		if isConnectionError(err) {
+			sftpClient, err = c.invalidateConnection(host, port)
+			if err != nil {
+				return nil, err
+			}
+			stat, err = sftpClient.Stat(fullPath)
+			if err != nil {
+				return nil, fmt.Errorf("failed to stat file: %w", err)
+			}
+		} else {
+			return nil, fmt.Errorf("failed to stat file: %w", err)
+		}
 	}
 
 	if stat.IsDir() {
@@ -285,7 +340,18 @@ func (c *Client) Write(host string, port int, path string, content []byte) (*Fil
 	// Ensure parent directory exists
 	parentDir := filepath.Dir(fullPath)
 	if err := sftpClient.MkdirAll(parentDir); err != nil {
-		return nil, fmt.Errorf("failed to create parent directory: %w", err)
+		// Retry once if connection error
+		if isConnectionError(err) {
+			sftpClient, err = c.invalidateConnection(host, port)
+			if err != nil {
+				return nil, err
+			}
+			if err := sftpClient.MkdirAll(parentDir); err != nil {
+				return nil, fmt.Errorf("failed to create parent directory: %w", err)
+			}
+		} else {
+			return nil, fmt.Errorf("failed to create parent directory: %w", err)
+		}
 	}
 
 	// Create/overwrite file
@@ -323,7 +389,18 @@ func (c *Client) Mkdir(host string, port int, path string) error {
 	fullPath := resolvePath(path)
 
 	if err := sftpClient.MkdirAll(fullPath); err != nil {
-		return fmt.Errorf("failed to create directory: %w", err)
+		// Retry once if connection error
+		if isConnectionError(err) {
+			sftpClient, err = c.invalidateConnection(host, port)
+			if err != nil {
+				return err
+			}
+			if err := sftpClient.MkdirAll(fullPath); err != nil {
+				return fmt.Errorf("failed to create directory: %w", err)
+			}
+		} else {
+			return fmt.Errorf("failed to create directory: %w", err)
+		}
 	}
 
 	return nil
@@ -341,7 +418,19 @@ func (c *Client) Delete(host string, port int, path string) error {
 	// Check if it's a directory
 	stat, err := sftpClient.Stat(fullPath)
 	if err != nil {
-		return fmt.Errorf("failed to stat path: %w", err)
+		// Retry once if connection error
+		if isConnectionError(err) {
+			sftpClient, err = c.invalidateConnection(host, port)
+			if err != nil {
+				return err
+			}
+			stat, err = sftpClient.Stat(fullPath)
+			if err != nil {
+				return fmt.Errorf("failed to stat path: %w", err)
+			}
+		} else {
+			return fmt.Errorf("failed to stat path: %w", err)
+		}
 	}
 
 	if stat.IsDir() {
@@ -398,7 +487,18 @@ func (c *Client) Rename(host string, port int, oldPath, newPath string) error {
 	// Ensure parent directory of new path exists
 	parentDir := filepath.Dir(fullNewPath)
 	if err := sftpClient.MkdirAll(parentDir); err != nil {
-		return fmt.Errorf("failed to create parent directory: %w", err)
+		// Retry once if connection error
+		if isConnectionError(err) {
+			sftpClient, err = c.invalidateConnection(host, port)
+			if err != nil {
+				return err
+			}
+			if err := sftpClient.MkdirAll(parentDir); err != nil {
+				return fmt.Errorf("failed to create parent directory: %w", err)
+			}
+		} else {
+			return fmt.Errorf("failed to create parent directory: %w", err)
+		}
 	}
 
 	if err := sftpClient.Rename(fullOldPath, fullNewPath); err != nil {
@@ -419,7 +519,19 @@ func (c *Client) Stat(host string, port int, path string) (*FileInfo, error) {
 
 	stat, err := sftpClient.Stat(fullPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to stat: %w", err)
+		// Retry once if connection error
+		if isConnectionError(err) {
+			sftpClient, err = c.invalidateConnection(host, port)
+			if err != nil {
+				return nil, err
+			}
+			stat, err = sftpClient.Stat(fullPath)
+			if err != nil {
+				return nil, fmt.Errorf("failed to stat: %w", err)
+			}
+		} else {
+			return nil, fmt.Errorf("failed to stat: %w", err)
+		}
 	}
 
 	return &FileInfo{

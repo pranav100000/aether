@@ -62,9 +62,17 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
         <StatusBadge status={project.status} />
       </div>
 
-      <p className="text-xs text-muted-foreground mb-4">
-        Last accessed: {formatDate(project.last_accessed_at)}
-      </p>
+      <div className="text-xs text-muted-foreground mb-4 space-y-1">
+        <p>
+          {project.hardware.cpus} {project.hardware.cpu_kind} CPU{project.hardware.cpus > 1 ? "s" : ""} |{" "}
+          {project.hardware.memory_mb >= 1024
+            ? `${project.hardware.memory_mb / 1024}GB`
+            : `${project.hardware.memory_mb}MB`}{" "}
+          RAM | {project.hardware.volume_size_gb}GB storage
+          {project.hardware.gpu_kind && ` | ${project.hardware.gpu_kind.toUpperCase()} GPU`}
+        </p>
+        <p>Last accessed: {formatDate(project.last_accessed_at)}</p>
+      </div>
 
       <div className="flex items-center gap-2">
         <Button size="sm" onClick={handleOpen}>
