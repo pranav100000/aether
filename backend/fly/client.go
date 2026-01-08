@@ -34,6 +34,12 @@ type MachineConfig struct {
 	Guest    GuestConfig       `json:"guest"`
 	Env      map[string]string `json:"env,omitempty"`
 	Services []Service         `json:"services,omitempty"`
+	Mounts   []Mount           `json:"mounts,omitempty"`
+}
+
+type Mount struct {
+	Volume string `json:"volume"`
+	Path   string `json:"path"`
 }
 
 type GuestConfig struct {
@@ -210,4 +216,84 @@ func (c *Client) GetAppName() string {
 
 func (c *Client) GetRegion() string {
 	return c.region
+}
+
+// Volume types and operations
+
+type Volume struct {
+	ID                 string `json:"id"`
+	Name               string `json:"name"`
+	Region             string `json:"region"`
+	SizeGB             int    `json:"size_gb"`
+	State              string `json:"state"`
+	AttachedMachineID  string `json:"attached_machine_id,omitempty"`
+	AttachedAllocID    string `json:"attached_alloc_id,omitempty"`
+	CreatedAt          string `json:"created_at"`
+	Encrypted          bool   `json:"encrypted"`
+	FSType             string `json:"fstype,omitempty"`
+	SnapshotRetention  int    `json:"snapshot_retention,omitempty"`
+}
+
+type CreateVolumeRequest struct {
+	Name              string `json:"name"`
+	Region            string `json:"region"`
+	SizeGB            int    `json:"size_gb"`
+	Encrypted         bool   `json:"encrypted,omitempty"`
+	RequireUniqueZone bool   `json:"require_unique_zone,omitempty"`
+	FSType            string `json:"fstype,omitempty"`
+}
+
+func (c *Client) CreateVolume(name string, sizeGB int) (*Volume, error) {
+	req := CreateVolumeRequest{
+		Name:      name,
+		Region:    c.region,
+		SizeGB:    sizeGB,
+		Encrypted: true,
+		FSType:    "ext4",
+	}
+
+	respBody, err := c.doRequest("POST", "/volumes", req)
+	if err != nil {
+		return nil, err
+	}
+
+	var volume Volume
+	if err := json.Unmarshal(respBody, &volume); err != nil {
+		return nil, fmt.Errorf("failed to parse volume response: %w", err)
+	}
+
+	return &volume, nil
+}
+
+func (c *Client) GetVolume(volumeID string) (*Volume, error) {
+	respBody, err := c.doRequest("GET", "/volumes/"+volumeID, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var volume Volume
+	if err := json.Unmarshal(respBody, &volume); err != nil {
+		return nil, fmt.Errorf("failed to parse volume response: %w", err)
+	}
+
+	return &volume, nil
+}
+
+func (c *Client) DeleteVolume(volumeID string) error {
+	_, err := c.doRequest("DELETE", "/volumes/"+volumeID, nil)
+	return err
+}
+
+func (c *Client) ListVolumes() ([]Volume, error) {
+	respBody, err := c.doRequest("GET", "/volumes", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var volumes []Volume
+	if err := json.Unmarshal(respBody, &volumes); err != nil {
+		return nil, fmt.Errorf("failed to parse volumes response: %w", err)
+	}
+
+	return volumes, nil
 }

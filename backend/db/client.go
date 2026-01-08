@@ -69,6 +69,11 @@ func (c *Client) Close() {
 	c.pool.Close()
 }
 
+// Ping verifies database connectivity
+func (c *Client) Ping(ctx context.Context) error {
+	return c.pool.Ping(ctx)
+}
+
 // ============================================
 // Profile Methods
 // ============================================
@@ -269,6 +274,16 @@ func (c *Client) UpdateProjectMachine(ctx context.Context, projectID, machineID 
 	`, machineID, projectID)
 	if err != nil {
 		return fmt.Errorf("failed to update project machine: %w", err)
+	}
+	return nil
+}
+
+func (c *Client) UpdateProjectVolume(ctx context.Context, projectID, volumeID string) error {
+	_, err := c.pool.Exec(ctx, `
+		UPDATE projects SET fly_volume_id = $1 WHERE id = $2
+	`, volumeID, projectID)
+	if err != nil {
+		return fmt.Errorf("failed to update project volume: %w", err)
 	}
 	return nil
 }

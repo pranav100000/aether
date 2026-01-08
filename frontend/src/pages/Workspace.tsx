@@ -1,17 +1,34 @@
-import { useState } from "react"
+import { useState, useCallback } from "react"
 import { useParams, useNavigate, Link } from "react-router-dom"
+import { ChevronLeft, Terminal as TerminalIcon } from "lucide-react"
 import { useProject } from "@/hooks/useProject"
+import { useEditor } from "@/hooks/useEditor"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { StatusBadge } from "@/components/projects/StatusBadge"
 import { Terminal } from "@/components/workspace/Terminal"
-import { ChevronLeft } from "lucide-react"
+import { FileTree } from "@/components/workspace/FileTree"
+import { Editor } from "@/components/workspace/Editor"
+import { EditorTabs } from "@/components/workspace/EditorTabs"
+import { WorkspaceLayout, WorkspaceEmptyState } from "@/components/workspace/WorkspaceLayout"
+import { PreviewButton } from "@/components/workspace/PreviewButton"
 
 export function Workspace() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { project, loading, error, start, stop, refresh } = useProject(id!)
+  const {
+    openFiles,
+    activeFile,
+    openFile,
+    closeFile,
+    setActiveFile,
+    updateContent,
+    saveFile,
+    getFile,
+  } = useEditor(id!)
   const [starting, setStarting] = useState(false)
+  const [terminalOpen, setTerminalOpen] = useState(true)
 
   const handleStart = async () => {
     setStarting(true)
@@ -21,6 +38,41 @@ export function Workspace() {
       setStarting(false)
     }
   }
+
+  const handleFileSelect = useCallback(
+    (path: string) => {
+      openFile(path)
+    },
+    [openFile]
+  )
+
+  const handleContentChange = useCallback(
+    (content: string) => {
+      if (activeFile) {
+        updateContent(activeFile, content)
+      }
+    },
+    [activeFile, updateContent]
+  )
+
+  const handleSave = useCallback(() => {
+    if (activeFile) {
+      saveFile(activeFile)
+    }
+  }, [activeFile, saveFile])
+
+  const handleCloseFile = useCallback(
+    (path: string) => {
+      const file = getFile(path)
+      if (file?.dirty) {
+        if (!confirm(`"${path.split("/").pop()}" has unsaved changes. Close anyway?`)) {
+          return
+        }
+      }
+      closeFile(path)
+    },
+    [closeFile, getFile]
+  )
 
   if (loading) {
     return (
@@ -43,8 +95,11 @@ export function Workspace() {
     )
   }
 
+  const activeFileData = activeFile ? getFile(activeFile) : undefined
+
   return (
     <div className="h-screen flex flex-col bg-background">
+      {/* Header */}
       <header className="flex items-center justify-between px-4 py-2 bg-card border-b border-border">
         <div className="flex items-center gap-3">
           <Link to="/" className="text-muted-foreground hover:text-foreground transition-colors">
@@ -55,10 +110,23 @@ export function Workspace() {
         </div>
 
         <div className="flex items-center gap-2">
+          {project.status === "running" && project.fly_machine_id && (
+            <PreviewButton machineId={project.fly_machine_id} />
+          )}
           {project.status === "running" && (
-            <Button size="sm" variant="secondary" onClick={stop}>
-              Stop
-            </Button>
+            <>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setTerminalOpen(!terminalOpen)}
+                title={terminalOpen ? "Hide terminal" : "Show terminal"}
+              >
+                <TerminalIcon className="w-4 h-4" />
+              </Button>
+              <Button size="sm" variant="secondary" onClick={stop}>
+                Stop
+              </Button>
+            </>
           )}
           {project.status === "stopped" && (
             <Button size="sm" onClick={handleStart} loading={starting}>
@@ -73,9 +141,42 @@ export function Workspace() {
         </div>
       </header>
 
+      {/* Main content */}
       <main className="flex-1 overflow-hidden">
         {project.status === "running" ? (
-          <Terminal projectId={project.id} onDisconnect={refresh} />
+          <WorkspaceLayout
+            sidebar={
+              <FileTree
+                projectId={project.id}
+                onFileSelect={handleFileSelect}
+                selectedPath={activeFile || undefined}
+              />
+            }
+            editor={
+              <>
+                <EditorTabs
+                  files={openFiles}
+                  activeFile={activeFile}
+                  onSelect={setActiveFile}
+                  onClose={handleCloseFile}
+                />
+                {activeFileData ? (
+                  <div className="flex-1 overflow-hidden">
+                    <Editor
+                      file={activeFileData}
+                      onContentChange={handleContentChange}
+                      onSave={handleSave}
+                    />
+                  </div>
+                ) : (
+                  <WorkspaceEmptyState />
+                )}
+              </>
+            }
+            terminal={<Terminal projectId={project.id} onDisconnect={refresh} />}
+            terminalOpen={terminalOpen}
+            onToggleTerminal={() => setTerminalOpen(!terminalOpen)}
+          />
         ) : project.status === "starting" ? (
           <div className="h-full flex items-center justify-center">
             <div className="text-center">

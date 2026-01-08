@@ -37,6 +37,26 @@ export interface ApiError {
   error: string
 }
 
+// File system types
+export interface FileEntry {
+  name: string
+  type: "file" | "directory"
+  size?: number
+  modified: string
+}
+
+export interface DirListing {
+  path: string
+  entries: FileEntry[]
+}
+
+export interface FileInfo {
+  path: string
+  content?: string
+  size: number
+  modified: string
+}
+
 async function getAuthHeaders(): Promise<HeadersInit> {
   const {
     data: { session },
@@ -121,5 +141,41 @@ export const api = {
   getTerminalUrl(projectId: string): string {
     const wsUrl = API_URL.replace("http", "ws")
     return `${wsUrl}/projects/${projectId}/terminal`
+  },
+
+  // File system operations
+  async listFiles(projectId: string, path: string = "/"): Promise<DirListing> {
+    return apiRequest(`/projects/${projectId}/files?path=${encodeURIComponent(path)}`)
+  },
+
+  async readFile(projectId: string, path: string): Promise<FileInfo> {
+    return apiRequest(`/projects/${projectId}/files?path=${encodeURIComponent(path)}`)
+  },
+
+  async writeFile(projectId: string, path: string, content: string): Promise<FileInfo> {
+    return apiRequest(`/projects/${projectId}/files?path=${encodeURIComponent(path)}`, {
+      method: "PUT",
+      body: JSON.stringify({ content }),
+    })
+  },
+
+  async mkdir(projectId: string, path: string): Promise<{ path: string }> {
+    return apiRequest(`/projects/${projectId}/files/mkdir`, {
+      method: "POST",
+      body: JSON.stringify({ path }),
+    })
+  },
+
+  async deleteFile(projectId: string, path: string): Promise<void> {
+    return apiRequest(`/projects/${projectId}/files?path=${encodeURIComponent(path)}`, {
+      method: "DELETE",
+    })
+  },
+
+  async renameFile(projectId: string, oldPath: string, newPath: string): Promise<{ path: string }> {
+    return apiRequest(`/projects/${projectId}/files/rename`, {
+      method: "POST",
+      body: JSON.stringify({ old_path: oldPath, new_path: newPath }),
+    })
   },
 }

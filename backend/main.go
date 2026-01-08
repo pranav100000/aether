@@ -12,6 +12,7 @@ import (
 	"aether/fly"
 	"aether/handlers"
 	authmw "aether/middleware"
+	"aether/sftp"
 	"aether/ssh"
 
 	"github.com/go-chi/chi/v5"
@@ -41,6 +42,13 @@ func main() {
 		log.Fatalf("Failed to load SSH client: %v", err)
 	}
 
+	// Initialize SFTP client (uses same SSH key)
+	sftpClient, err := loadSFTPClient()
+	if err != nil {
+		log.Fatalf("Failed to load SFTP client: %v", err)
+	}
+	defer sftpClient.Close()
+
 	// Initialize database client
 	databaseURL := requireEnv("DATABASE_URL")
 	dbClient, err := db.NewClient(databaseURL)
@@ -68,8 +76,10 @@ func main() {
 	legacyTerminalHandler := handlers.NewLegacyTerminalHandler(sshClient, machineHandler)
 
 	// New project-based handlers
-	projectHandler := handlers.NewProjectHandler(dbClient, flyClient, baseImage, idleTimeout)
+	projectHandler := handlers.NewProjectHandler(dbClient, flyClient, flyClient, baseImage, idleTimeout)
 	terminalHandler := handlers.NewTerminalHandler(sshClient, flyClient, dbClient, authMiddleware)
+	healthHandler := handlers.NewHealthHandler(dbClient, getEnv("VERSION", "dev"))
+	filesHandler := handlers.NewFilesHandler(sftpClient, flyClient, dbClient)
 
 	// Start idle project checker
 	projectHandler.StartIdleChecker(1 * time.Minute)
@@ -90,11 +100,10 @@ func main() {
 		MaxAge:           300,
 	}))
 
-	// Public routes
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"status":"ok"}`))
-	})
+	// Health check routes
+	r.Get("/health", healthHandler.Health)
+	r.Get("/healthz", healthHandler.Liveness)
+	r.Get("/ready", healthHandler.Readiness)
 
 	// Legacy machine routes (no auth, for backward compatibility)
 	r.Route("/machines", func(r chi.Router) {
@@ -119,6 +128,15 @@ func main() {
 			r.Delete("/{id}", projectHandler.Delete)
 			r.Post("/{id}/start", projectHandler.Start)
 			r.Post("/{id}/stop", projectHandler.Stop)
+
+			// File operations
+			r.Route("/{id}/files", func(r chi.Router) {
+				r.Get("/", filesHandler.ListOrRead)
+				r.Put("/", filesHandler.Write)
+				r.Delete("/", filesHandler.Delete)
+				r.Post("/mkdir", filesHandler.Mkdir)
+				r.Post("/rename", filesHandler.Rename)
+			})
 		})
 	})
 
@@ -155,6 +173,26 @@ func loadSSHClient() (*ssh.Client, error) {
 		return nil, err
 	}
 	return ssh.NewClient(homeDir+"/.ssh/id_rsa", "coder")
+}
+
+func loadSFTPClient() (*sftp.Client, error) {
+	if keyPath := os.Getenv("SSH_PRIVATE_KEY_PATH"); keyPath != "" {
+		return sftp.NewClient(keyPath, "coder")
+	}
+
+	if keyBase64 := os.Getenv("SSH_PRIVATE_KEY"); keyBase64 != "" {
+		keyBytes, err := base64.StdEncoding.DecodeString(keyBase64)
+		if err != nil {
+			return nil, err
+		}
+		return sftp.NewClientFromKey(keyBytes, "coder")
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+	return sftp.NewClient(homeDir+"/.ssh/id_rsa", "coder")
 }
 
 func getEnv(key, defaultValue string) string {

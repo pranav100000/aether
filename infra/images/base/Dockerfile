@@ -56,7 +56,8 @@ RUN mkdir -p /home/coder/.ssh \
     && echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDO5UBE4ZRa9PY4z+CQ/dizWt53h3yYTwg/gKDXSAsFLfUKBDvpPIRI+WerS7t/wW3rT3TOqAjB5HP3/v51K9GWkXa3cSkhCTVzG6qQ+21wqdnAZG+XtFV/Fens8k2z3wJGaU1ZQMW2pEGUQXo59vO1G3+onq69xOjKveZa2F54UxZv57Zywc0QW1/Y3U5fgsQn/3AmGeFopbZGPEmqTiW/QuQiTQin4ePGQq/pzLmGvdR1z5sqPN+RQkAYatFlS2quq6jleQZ9vLFpd6sctXSA8058kPyY5FWx3yh4DHQT2Fy93ZK8cKCLI2uPHqkyiNj1aYQsPnjB5qxmFzgYQ2iCaNyi3oNR51Uc/hH2Br0qNaXbVxsB97WyGh6y/rpPmMOAxuJaB5u+G2bGsoDPvZs0qQN8DHcKXvvWHZUXYGAayVY5RjPXGzmKfLJNgQBXpaTBHx4A8AS3KimRNwII4GsoCev0FQyZSUORJVxx1ymnjVLoUEfHaZbbFcYzS4JET1pkHcTsV3JKawkHQlhtQjctsSNde6Ug1/8OcL22xvySONi7h2P9nXH3RPrTASi83f5DuyL+4zwURdxafnij30i2JR/zvI4BjJOgXR67A1vZgeJxGHXPQCta4zQ1XOFrPQa0b7ljzWe158CQHtX5tgsfzPxDyJgUeKql7xK3hCv4xQ== aether@local" > /home/coder/.ssh/authorized_keys \
     && chmod 600 /home/coder/.ssh/authorized_keys
 
-RUN mkdir -p /home/coder/go/bin /home/coder/go/src /home/coder/go/pkg
+RUN mkdir -p /home/coder/go/bin /home/coder/go/src /home/coder/go/pkg \
+    && mkdir -p /home/coder/project
 
 COPY --chown=coder:coder bashrc /home/coder/.bashrc
 
