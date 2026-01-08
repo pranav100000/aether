@@ -299,16 +299,18 @@ func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	// Destroy Fly machine if exists
 	if project.FlyMachineID != nil && *project.FlyMachineID != "" {
 		if err := h.machines.DeleteMachine(*project.FlyMachineID); err != nil {
-			log.Printf("Warning: failed to delete Fly machine %s: %v", *project.FlyMachineID, err)
-			// Continue with deletion anyway
+			log.Printf("Error: failed to delete Fly machine %s: %v", *project.FlyMachineID, err)
+			respondError(w, http.StatusInternalServerError, "Failed to delete VM from Fly.io")
+			return
 		}
 	}
 
 	// Destroy Fly volume if exists
 	if project.FlyVolumeID != nil && *project.FlyVolumeID != "" {
 		if err := h.volumes.DeleteVolume(*project.FlyVolumeID); err != nil {
-			log.Printf("Warning: failed to delete Fly volume %s: %v", *project.FlyVolumeID, err)
-			// Continue with deletion anyway
+			log.Printf("Error: failed to delete Fly volume %s: %v", *project.FlyVolumeID, err)
+			respondError(w, http.StatusInternalServerError, "Failed to delete volume from Fly.io")
+			return
 		}
 	}
 

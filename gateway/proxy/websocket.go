@@ -12,8 +12,8 @@ import (
 // proxyWebSocket handles WebSocket upgrade requests
 // This is critical for HMR (Hot Module Replacement) in Vite, webpack, etc.
 func (h *Handler) proxyWebSocket(w http.ResponseWriter, r *http.Request, privateIP string, port int) {
-	// Get the target address
-	targetAddr := fmt.Sprintf("%s:%d", privateIP, port)
+	// Get the target address (net.JoinHostPort handles IPv6 addresses correctly)
+	targetAddr := net.JoinHostPort(privateIP, fmt.Sprintf("%d", port))
 
 	// Connect to the target
 	targetConn, err := net.DialTimeout("tcp", targetAddr, 10*time.Second)

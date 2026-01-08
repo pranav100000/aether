@@ -23,10 +23,10 @@ export function Terminal({ projectId, onDisconnect }: TerminalProps) {
   const terminalRef = useRef<XTerm | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
-  const [status, setStatus] = useState<
+  const [_status, setStatus] = useState<
     "connecting" | "connected" | "disconnected" | "error"
   >("connecting")
-  const [error, setError] = useState<string | null>(null)
+  const [_error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -146,32 +146,6 @@ export function Terminal({ projectId, onDisconnect }: TerminalProps) {
 
   return (
     <div className="h-full flex flex-col bg-[#0a0a0a]">
-      <div className="flex items-center justify-between px-3 py-1 bg-card border-b border-border text-xs">
-        <span className="text-muted-foreground">Terminal</span>
-        <span
-          className={`flex items-center gap-1.5 ${
-            status === "connected"
-              ? "text-green-400"
-              : status === "connecting"
-                ? "text-yellow-400"
-                : "text-red-400"
-          }`}
-        >
-          <span
-            className={`w-2 h-2 rounded-full ${
-              status === "connected"
-                ? "bg-green-500"
-                : status === "connecting"
-                  ? "bg-yellow-500 animate-pulse"
-                  : "bg-red-500"
-            }`}
-          />
-          {status === "connecting" && "Connecting..."}
-          {status === "connected" && "Connected"}
-          {status === "disconnected" && "Disconnected"}
-          {status === "error" && (error || "Error")}
-        </span>
-      </div>
 
       <div
         ref={containerRef}

@@ -1,0 +1,28 @@
+# fly.toml app configuration file generated for aether-webapp on 2026-01-08T02:42:18-08:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'aether-webapp'
+primary_region = 'sjc'
+
+[build]
+  dockerfile = "Dockerfile"
+  [build.args]
+    VITE_SUPABASE_URL = "https://wowmtmtuncmoxorrahxe.supabase.co"
+    VITE_SUPABASE_ANON_KEY = "sb_publishable_qBYR1T0ZZ-bA9dHaYox6kA_Q4EZVYpj"
+    VITE_API_URL = "https://aether-api.fly.dev"
+    VITE_PREVIEW_DOMAIN = "137.66.8.70.nip.io"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[vm]]
+  memory = '256mb'
+  cpu_kind = 'shared'
+  cpus = 1
+  memory_mb = 256

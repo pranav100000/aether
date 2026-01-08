@@ -39,6 +39,13 @@ ENV PATH="/usr/local/go/bin:${PATH}"
 ENV GOPATH="/home/coder/go"
 ENV PATH="${GOPATH}/bin:${PATH}"
 
+# Make dev servers bind to all interfaces by default (required for preview proxy)
+# These are respected by Vite, webpack-dev-server, Next.js, and many other tools
+ENV HOST=0.0.0.0
+ENV HOSTNAME=0.0.0.0
+# Vite specifically uses this
+ENV VITE_HOST=0.0.0.0
+
 RUN useradd -m -s /bin/bash -G sudo coder \
     && echo "coder ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 

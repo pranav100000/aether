@@ -17,8 +17,4 @@ export default defineConfig({
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
   },
-  server: {
-    host: true,
-    allowedHosts: true,
-  },
 })
