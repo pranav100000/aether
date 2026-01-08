@@ -11,4 +11,40 @@ fi
 mkdir -p /home/coder/project
 chown coder:coder /home/coder/project
 
+# Export environment variables for SSH sessions
+# sshd doesn't pass container env vars to login shells, so we write them to a file
+# that gets sourced by .bashrc
+ENV_FILE="/home/coder/.aether_env"
+: > "$ENV_FILE"  # Create/truncate file
+
+# Export API keys and other relevant env vars
+for var in ANTHROPIC_API_KEY OPENAI_API_KEY PROJECT_ID; do
+    if [ -n "${!var}" ]; then
+        echo "export $var=\"${!var}\"" >> "$ENV_FILE"
+    fi
+done
+
+chown coder:coder "$ENV_FILE"
+chmod 600 "$ENV_FILE"
+
+# Pre-approve ANTHROPIC_API_KEY for Claude Code
+# Claude Code requires explicit approval of API keys before using them
+if [ -n "$ANTHROPIC_API_KEY" ]; then
+    # Get last 20 characters of the API key (Claude Code's identifier)
+    KEY_SUFFIX="${ANTHROPIC_API_KEY: -20}"
+
+    CLAUDE_CONFIG="/home/coder/.claude.json"
+    cat > "$CLAUDE_CONFIG" << EOF
+{
+  "customApiKeyResponses": {
+    "approved": ["$KEY_SUFFIX"],
+    "rejected": []
+  },
+  "hasCompletedOnboarding": true
+}
+EOF
+    chown coder:coder "$CLAUDE_CONFIG"
+    chmod 600 "$CLAUDE_CONFIG"
+fi
+
 exec /usr/sbin/sshd -D -e

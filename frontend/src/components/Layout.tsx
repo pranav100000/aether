@@ -1,7 +1,13 @@
 import { Outlet, Link, useNavigate } from "react-router-dom"
 import { useAuth } from "@/hooks/useAuth"
-import { Button } from "@/components/ui/button"
-import { LogOut } from "lucide-react"
+import {
+  Dropdown,
+  DropdownTrigger,
+  DropdownContent,
+  DropdownItem,
+  DropdownSeparator,
+} from "@/components/ui/dropdown"
+import { LogOut, Settings } from "lucide-react"
 
 export function Layout() {
   const { user, signOut } = useAuth()
@@ -21,15 +27,20 @@ export function Layout() {
           </Link>
 
           {user && (
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-muted-foreground">
-                {user.email}
-              </span>
-              <Button variant="ghost" size="sm" onClick={handleSignOut}>
-                <LogOut className="h-4 w-4" />
-                <span className="ml-2">Sign out</span>
-              </Button>
-            </div>
+            <Dropdown>
+              <DropdownTrigger>{user.email}</DropdownTrigger>
+              <DropdownContent>
+                <DropdownItem onClick={() => navigate("/settings")}>
+                  <Settings className="mr-2 h-4 w-4" />
+                  Settings
+                </DropdownItem>
+                <DropdownSeparator />
+                <DropdownItem onClick={handleSignOut} destructive>
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Sign out
+                </DropdownItem>
+              </DropdownContent>
+            </Dropdown>
           )}
         </div>
       </header>

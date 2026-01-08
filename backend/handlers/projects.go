@@ -16,19 +16,26 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// APIKeysGetter interface for fetching decrypted API keys
+type APIKeysGetter interface {
+	GetDecryptedKeys(ctx context.Context, userID string) (map[string]string, error)
+}
+
 type ProjectHandler struct {
 	store       ProjectStore
 	machines    MachineManager
 	volumes     VolumeManager
+	apiKeys     APIKeysGetter
 	baseImage   string
 	idleTimeout time.Duration
 }
 
-func NewProjectHandler(store ProjectStore, machines MachineManager, volumes VolumeManager, baseImage string, idleTimeout time.Duration) *ProjectHandler {
+func NewProjectHandler(store ProjectStore, machines MachineManager, volumes VolumeManager, apiKeys APIKeysGetter, baseImage string, idleTimeout time.Duration) *ProjectHandler {
 	return &ProjectHandler{
 		store:       store,
 		machines:    machines,
 		volumes:     volumes,
+		apiKeys:     apiKeys,
 		baseImage:   baseImage,
 		idleTimeout: idleTimeout,
 	}
@@ -374,7 +381,7 @@ func (h *ProjectHandler) Start(w http.ResponseWriter, r *http.Request) {
 
 	// If no machine exists, create one
 	if project.FlyMachineID == nil || *project.FlyMachineID == "" {
-		machine, err := h.createMachine(r.Context(), project)
+		machine, err := h.createMachine(r.Context(), project, userID)
 		if err != nil {
 			log.Printf("Error creating machine: %v", err)
 			errMsg := err.Error()
@@ -474,7 +481,7 @@ func (h *ProjectHandler) Stop(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, StopResponse{Status: "stopped"})
 }
 
-func (h *ProjectHandler) createMachine(ctx context.Context, project *db.Project) (*fly.Machine, error) {
+func (h *ProjectHandler) createMachine(ctx context.Context, project *db.Project, userID string) (*fly.Machine, error) {
 	guestConfig := fly.GuestConfig{
 		CPUKind:  project.CPUKind,
 		CPUs:     project.CPUs,
@@ -486,12 +493,35 @@ func (h *ProjectHandler) createMachine(ctx context.Context, project *db.Project)
 		guestConfig.GPUKind = *project.GPUKind
 	}
 
+	// Build environment variables
+	machineEnv := map[string]string{
+		"PROJECT_ID": project.ID,
+	}
+
+	// Inject user's API keys if available
+	if h.apiKeys != nil {
+		log.Printf("Fetching API keys for user %s", userID)
+		apiKeys, err := h.apiKeys.GetDecryptedKeys(ctx, userID)
+		if err != nil {
+			log.Printf("Warning: failed to get API keys for user %s: %v", userID, err)
+		} else if apiKeys != nil {
+			log.Printf("Found %d API keys for user %s", len(apiKeys), userID)
+			for envName, key := range apiKeys {
+				log.Printf("Injecting env var %s (key length: %d)", envName, len(key))
+				machineEnv[envName] = key
+			}
+		} else {
+			log.Printf("No API keys found for user %s", userID)
+		}
+	} else {
+		log.Printf("API keys handler not available")
+	}
+
+	log.Printf("Creating machine with %d env vars", len(machineEnv))
 	config := fly.MachineConfig{
 		Image: h.baseImage,
 		Guest: guestConfig,
-		Env: map[string]string{
-			"PROJECT_ID": project.ID,
-		},
+		Env:   machineEnv,
 	}
 
 	// Attach volume if exists

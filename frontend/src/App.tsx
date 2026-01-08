@@ -6,6 +6,7 @@ import { Login } from "@/pages/Login"
 import { Signup } from "@/pages/Signup"
 import { Projects } from "@/pages/Projects"
 import { Workspace } from "@/pages/Workspace"
+import { Settings } from "@/pages/Settings"
 import { Spinner } from "@/components/ui/spinner"
 
 function App() {
@@ -32,6 +33,7 @@ function App() {
         }
       >
         <Route index element={<Projects />} />
+        <Route path="settings" element={<Settings />} />
       </Route>
       <Route
         path="/projects/:id"

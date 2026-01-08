@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"aether/crypto"
 	"aether/db"
 	"aether/fly"
 	"aether/handlers"
@@ -66,6 +67,20 @@ func main() {
 	}
 	log.Println("Auth middleware initialized with JWKS")
 
+	// Initialize encryption service (optional - if key not set, API keys feature is disabled)
+	var encryptor *crypto.Encryptor
+	var apiKeysHandler *handlers.APIKeysHandler
+	if os.Getenv("ENCRYPTION_MASTER_KEY") != "" {
+		encryptor, err = crypto.NewEncryptor()
+		if err != nil {
+			log.Fatalf("Failed to initialize encryptor: %v", err)
+		}
+		apiKeysHandler = handlers.NewAPIKeysHandler(dbClient, encryptor)
+		log.Println("Encryption service initialized")
+	} else {
+		log.Println("Warning: ENCRYPTION_MASTER_KEY not set, API keys feature disabled")
+	}
+
 	idleTimeout := time.Duration(idleTimeoutMin) * time.Minute
 
 	// Legacy machine handler (for backward compatibility)
@@ -76,7 +91,7 @@ func main() {
 	legacyTerminalHandler := handlers.NewLegacyTerminalHandler(sshClient, machineHandler)
 
 	// New project-based handlers
-	projectHandler := handlers.NewProjectHandler(dbClient, flyClient, flyClient, baseImage, idleTimeout)
+	projectHandler := handlers.NewProjectHandler(dbClient, flyClient, flyClient, apiKeysHandler, baseImage, idleTimeout)
 	terminalHandler := handlers.NewTerminalHandler(sshClient, flyClient, dbClient, authMiddleware)
 	healthHandler := handlers.NewHealthHandler(dbClient, getEnv("VERSION", "dev"))
 	filesHandler := handlers.NewFilesHandler(sftpClient, flyClient, dbClient)
@@ -138,6 +153,15 @@ func main() {
 				r.Post("/rename", filesHandler.Rename)
 			})
 		})
+
+		// User API keys routes
+		if apiKeysHandler != nil {
+			r.Route("/user/api-keys", func(r chi.Router) {
+				r.Get("/", apiKeysHandler.List)
+				r.Post("/", apiKeysHandler.Add)
+				r.Delete("/{provider}", apiKeysHandler.Remove)
+			})
+		}
 	})
 
 	// Terminal endpoint handles its own auth (WebSocket subprotocol)

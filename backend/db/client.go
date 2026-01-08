@@ -404,3 +404,40 @@ func (c *Client) GetProjectByIDPrefix(ctx context.Context, prefix string) (*Proj
 
 	return &p, nil
 }
+
+// ============================================
+// API Keys Methods
+// ============================================
+
+// GetUserAPIKeys retrieves the encrypted API keys for a user
+func (c *Client) GetUserAPIKeys(ctx context.Context, userID string) (*string, error) {
+	var encryptedKeys *string
+	err := c.pool.QueryRow(ctx, `
+		SELECT api_keys_encrypted
+		FROM profiles
+		WHERE id = $1
+	`, userID).Scan(&encryptedKeys)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to get user api keys: %w", err)
+	}
+	return encryptedKeys, nil
+}
+
+// SetUserAPIKeys updates the encrypted API keys for a user
+func (c *Client) SetUserAPIKeys(ctx context.Context, userID string, encrypted *string) error {
+	result, err := c.pool.Exec(ctx, `
+		UPDATE profiles
+		SET api_keys_encrypted = $1, updated_at = now()
+		WHERE id = $2
+	`, encrypted, userID)
+	if err != nil {
+		return fmt.Errorf("failed to set user api keys: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}

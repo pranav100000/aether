@@ -17,11 +17,17 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     gnupg \
     inotify-tools \
+    tmux \
+    ripgrep \
+    fd-find \
+    bat \
+    tree \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
     && npm install -g pnpm \
+    && npm install -g @anthropic-ai/claude-code \
     && rm -rf /var/lib/apt/lists/*
 
 RUN apt-get update && apt-get install -y \
@@ -68,6 +74,7 @@ RUN mkdir -p /home/coder/go/bin /home/coder/go/src /home/coder/go/pkg \
     && mkdir -p /home/coder/project
 
 COPY --chown=coder:coder bashrc /home/coder/.bashrc
+COPY --chown=coder:coder tmux.conf /home/coder/.tmux.conf
 
 USER root
 

@@ -1,6 +1,10 @@
 # ~/.bashrc
 
-# If not running interactively, don't do anything
+# Load Aether environment variables (API keys, project config)
+# This runs for all shells (interactive and non-interactive)
+[ -f ~/.aether_env ] && source ~/.aether_env
+
+# If not running interactively, don't do anything else
 case $- in
     *i*) ;;
       *) return;;

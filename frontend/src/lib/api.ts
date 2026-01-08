@@ -110,6 +110,17 @@ export interface FileInfo {
   modified: string
 }
 
+// API Keys types
+export interface ConnectedProvider {
+  provider: string
+  connected: boolean
+  added_at?: string
+}
+
+export interface ListProvidersResponse {
+  providers: ConnectedProvider[]
+}
+
 async function getAuthHeaders(): Promise<HeadersInit> {
   const {
     data: { session },
@@ -229,6 +240,24 @@ export const api = {
     return apiRequest(`/projects/${projectId}/files/rename`, {
       method: "POST",
       body: JSON.stringify({ old_path: oldPath, new_path: newPath }),
+    })
+  },
+
+  // API Keys operations
+  async getApiKeys(): Promise<ListProvidersResponse> {
+    return apiRequest("/user/api-keys")
+  },
+
+  async addApiKey(provider: string, apiKey: string): Promise<ConnectedProvider> {
+    return apiRequest("/user/api-keys", {
+      method: "POST",
+      body: JSON.stringify({ provider, api_key: apiKey }),
+    })
+  },
+
+  async removeApiKey(provider: string): Promise<void> {
+    return apiRequest(`/user/api-keys/${provider}`, {
+      method: "DELETE",
     })
   },
 }
