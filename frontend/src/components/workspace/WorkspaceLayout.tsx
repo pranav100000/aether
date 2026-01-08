@@ -1,4 +1,6 @@
+import { useEffect, useRef } from "react"
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels"
+import type { ImperativePanelHandle } from "react-resizable-panels"
 import { Terminal as TerminalIcon, ChevronDown, ChevronUp } from "lucide-react"
 
 interface WorkspaceLayoutProps {
@@ -16,6 +18,18 @@ export function WorkspaceLayout({
   terminalOpen,
   onToggleTerminal,
 }: WorkspaceLayoutProps) {
+  const terminalPanelRef = useRef<ImperativePanelHandle>(null)
+
+  useEffect(() => {
+    if (terminalPanelRef.current) {
+      if (terminalOpen) {
+        terminalPanelRef.current.expand()
+      } else {
+        terminalPanelRef.current.collapse()
+      }
+    }
+  }, [terminalOpen])
+
   return (
     <div className="h-full flex flex-col bg-[#1a1a1a]">
       <PanelGroup direction="vertical" className="flex-1">
@@ -41,16 +55,17 @@ export function WorkspaceLayout({
           </PanelGroup>
         </Panel>
 
-        {/* Resize handle between editor and terminal */}
+        {/* Resize handle between editor and terminal - only show when terminal is open */}
         {terminalOpen && (
           <PanelResizeHandle className="h-1 bg-border hover:bg-primary/50 transition-colors" />
         )}
 
         {/* Terminal panel */}
         <Panel
+          ref={terminalPanelRef}
           defaultSize={30}
-          minSize={terminalOpen ? 15 : 0}
-          maxSize={terminalOpen ? 60 : 0}
+          minSize={15}
+          maxSize={60}
           collapsible
           collapsedSize={0}
         >
@@ -75,12 +90,10 @@ export function WorkspaceLayout({
               </button>
             </div>
 
-            {/* Terminal content */}
-            {terminalOpen && (
-              <div className="flex-1 overflow-hidden">
-                {terminal}
-              </div>
-            )}
+            {/* Terminal content - always mounted, visibility controlled by CSS */}
+            <div className={`flex-1 overflow-hidden ${terminalOpen ? '' : 'hidden'}`}>
+              {terminal}
+            </div>
           </div>
         </Panel>
       </PanelGroup>

@@ -193,6 +193,10 @@ func (s *Session) Wait() error {
 	return s.session.Wait()
 }
 
+func (s *Session) Start(cmd string) error {
+	return s.session.Start(cmd)
+}
+
 func (s *Session) KeepAlive(interval time.Duration, done <-chan struct{}) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()

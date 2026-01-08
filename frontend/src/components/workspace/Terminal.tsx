@@ -9,24 +9,33 @@ import "@xterm/xterm/css/xterm.css"
 interface TerminalProps {
   projectId: string
   onDisconnect?: () => void
+  onFileChange?: (action: string, path: string) => void
 }
 
 interface WSMessage {
-  type: "input" | "output" | "resize" | "error"
+  type: "input" | "output" | "resize" | "error" | "file_change"
   data?: string
   cols?: number
   rows?: number
+  action?: string
+  path?: string
 }
 
-export function Terminal({ projectId, onDisconnect }: TerminalProps) {
+export function Terminal({ projectId, onDisconnect, onFileChange }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const terminalRef = useRef<XTerm | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
+  const onFileChangeRef = useRef(onFileChange)
   const [_status, setStatus] = useState<
     "connecting" | "connected" | "disconnected" | "error"
   >("connecting")
   const [_error, setError] = useState<string | null>(null)
+
+  // Keep ref updated
+  useEffect(() => {
+    onFileChangeRef.current = onFileChange
+  }, [onFileChange])
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -105,6 +114,8 @@ export function Terminal({ projectId, onDisconnect }: TerminalProps) {
             } else if (message.type === "error" && message.data) {
               terminal.write(`\r\n\x1b[31mError: ${message.data}\x1b[0m\r\n`)
               setError(message.data)
+            } else if (message.type === "file_change" && message.action && message.path) {
+              onFileChangeRef.current?.(message.action, message.path)
             }
           } catch {
             terminal.write(event.data)

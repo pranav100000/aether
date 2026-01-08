@@ -53,10 +53,12 @@ func NewTerminalHandler(sshClient *ssh.Client, fly *fly.Client, db *db.Client, a
 }
 
 type WSMessage struct {
-	Type string `json:"type"`
-	Data string `json:"data,omitempty"`
-	Cols int    `json:"cols,omitempty"`
-	Rows int    `json:"rows,omitempty"`
+	Type   string `json:"type"`
+	Data   string `json:"data,omitempty"`
+	Cols   int    `json:"cols,omitempty"`
+	Rows   int    `json:"rows,omitempty"`
+	Action string `json:"action,omitempty"` // For file_change: create, modify, delete
+	Path   string `json:"path,omitempty"`   // For file_change: the file path
 }
 
 func (h *TerminalHandler) HandleTerminal(w http.ResponseWriter, r *http.Request) {
@@ -157,6 +159,7 @@ func (h *TerminalHandler) HandleTerminal(w http.ResponseWriter, r *http.Request)
 	done := make(chan struct{})
 	var wg sync.WaitGroup
 	var closeOnce sync.Once
+	var wsMu sync.Mutex // Mutex for websocket writes
 
 	closeDone := func() {
 		closeOnce.Do(func() {
@@ -169,13 +172,13 @@ func (h *TerminalHandler) HandleTerminal(w http.ResponseWriter, r *http.Request)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		h.readFromSSH(conn, sshSession, done, closeDone, projectID)
+		h.readFromSSH(conn, sshSession, done, closeDone, projectID, &wsMu)
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		h.readFromSSHStderr(conn, sshSession, done)
+		h.readFromSSHStderr(conn, sshSession, done, &wsMu)
 	}()
 
 	wg.Add(1)
@@ -187,7 +190,14 @@ func (h *TerminalHandler) HandleTerminal(w http.ResponseWriter, r *http.Request)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		h.pingLoop(conn, done)
+		h.pingLoop(conn, done, &wsMu)
+	}()
+
+	// Start file watcher
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		h.startFileWatcher(conn, machine.PrivateIP, done, &wsMu)
 	}()
 
 	<-done
@@ -221,7 +231,7 @@ func extractTokenFromRequest(r *http.Request) string {
 	return ""
 }
 
-func (h *TerminalHandler) readFromSSH(conn *websocket.Conn, session *ssh.Session, done chan struct{}, closeDone func(), projectID string) {
+func (h *TerminalHandler) readFromSSH(conn *websocket.Conn, session *ssh.Session, done chan struct{}, closeDone func(), projectID string, wsMu *sync.Mutex) {
 	buf := make([]byte, 4096)
 
 	for {
@@ -249,8 +259,12 @@ func (h *TerminalHandler) readFromSSH(conn *websocket.Conn, session *ssh.Session
 				Data: string(buf[:n]),
 			}
 
+			wsMu.Lock()
 			conn.SetWriteDeadline(time.Now().Add(writeWait))
-			if err := conn.WriteJSON(msg); err != nil {
+			err := conn.WriteJSON(msg)
+			wsMu.Unlock()
+
+			if err != nil {
 				log.Printf("WebSocket write error: %v", err)
 				closeDone()
 				return
@@ -259,7 +273,7 @@ func (h *TerminalHandler) readFromSSH(conn *websocket.Conn, session *ssh.Session
 	}
 }
 
-func (h *TerminalHandler) readFromSSHStderr(conn *websocket.Conn, session *ssh.Session, done chan struct{}) {
+func (h *TerminalHandler) readFromSSHStderr(conn *websocket.Conn, session *ssh.Session, done chan struct{}, wsMu *sync.Mutex) {
 	buf := make([]byte, 4096)
 	stderr := session.Stderr()
 
@@ -284,8 +298,12 @@ func (h *TerminalHandler) readFromSSHStderr(conn *websocket.Conn, session *ssh.S
 				Data: string(buf[:n]),
 			}
 
+			wsMu.Lock()
 			conn.SetWriteDeadline(time.Now().Add(writeWait))
-			if err := conn.WriteJSON(msg); err != nil {
+			err := conn.WriteJSON(msg)
+			wsMu.Unlock()
+
+			if err != nil {
 				log.Printf("WebSocket write error: %v", err)
 				return
 			}
@@ -338,15 +356,19 @@ func (h *TerminalHandler) readFromWebSocket(conn *websocket.Conn, session *ssh.S
 	}
 }
 
-func (h *TerminalHandler) pingLoop(conn *websocket.Conn, done chan struct{}) {
+func (h *TerminalHandler) pingLoop(conn *websocket.Conn, done chan struct{}, wsMu *sync.Mutex) {
 	ticker := time.NewTicker(pingPeriod)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
+			wsMu.Lock()
 			conn.SetWriteDeadline(time.Now().Add(writeWait))
-			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+			err := conn.WriteMessage(websocket.PingMessage, nil)
+			wsMu.Unlock()
+
+			if err != nil {
 				return
 			}
 		case <-done:
@@ -362,6 +384,95 @@ func sendError(conn *websocket.Conn, message string) {
 	}
 	data, _ := json.Marshal(msg)
 	conn.WriteMessage(websocket.TextMessage, data)
+}
+
+func (h *TerminalHandler) startFileWatcher(conn *websocket.Conn, privateIP string, done chan struct{}, wsMu *sync.Mutex) {
+	// Connect to SSH for file watching
+	watchSession, err := h.sshClient.ConnectWithRetry(privateIP, 2222, 3, 2*time.Second)
+	if err != nil {
+		log.Printf("File watcher SSH connection error: %v", err)
+		return
+	}
+	defer watchSession.Close()
+
+	// Run inotifywait to watch for file changes in /home/coder/project
+	// -m: monitor mode (keep running)
+	// -r: recursive
+	// -e: events to watch
+	// --format: output format (event type and file path)
+	cmd := `inotifywait -m -r -e create,modify,delete,moved_to,moved_from --format '%e %w%f' /home/coder/project 2>/dev/null`
+	if err := watchSession.Start(cmd); err != nil {
+		log.Printf("File watcher start error: %v", err)
+		return
+	}
+
+	go watchSession.KeepAlive(30*time.Second, done)
+
+	buf := make([]byte, 4096)
+	for {
+		select {
+		case <-done:
+			return
+		default:
+		}
+
+		n, err := watchSession.Read(buf)
+		if err != nil {
+			if err != io.EOF {
+				log.Printf("File watcher read error: %v", err)
+			}
+			return
+		}
+
+		if n > 0 {
+			// Parse inotifywait output: "EVENT /path/to/file"
+			lines := strings.Split(string(buf[:n]), "\n")
+			for _, line := range lines {
+				line = strings.TrimSpace(line)
+				if line == "" {
+					continue
+				}
+
+				parts := strings.SplitN(line, " ", 2)
+				if len(parts) != 2 {
+					continue
+				}
+
+				event := parts[0]
+				path := parts[1]
+
+				// Map inotify events to our action types
+				var action string
+				switch {
+				case strings.Contains(event, "CREATE") || strings.Contains(event, "MOVED_TO"):
+					action = "create"
+				case strings.Contains(event, "MODIFY"):
+					action = "modify"
+				case strings.Contains(event, "DELETE") || strings.Contains(event, "MOVED_FROM"):
+					action = "delete"
+				default:
+					continue
+				}
+
+				// Send file change message
+				msg := WSMessage{
+					Type:   "file_change",
+					Action: action,
+					Path:   path,
+				}
+
+				wsMu.Lock()
+				conn.SetWriteDeadline(time.Now().Add(writeWait))
+				err := conn.WriteJSON(msg)
+				wsMu.Unlock()
+
+				if err != nil {
+					log.Printf("File watcher WebSocket write error: %v", err)
+					return
+				}
+			}
+		}
+	}
 }
 
 // Legacy handler for backward compatibility with /machines endpoint

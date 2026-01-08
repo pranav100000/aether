@@ -29,6 +29,11 @@ export function Workspace() {
   } = useEditor(id!)
   const [starting, setStarting] = useState(false)
   const [terminalOpen, setTerminalOpen] = useState(true)
+  const [fileTreeRefreshTrigger, setFileTreeRefreshTrigger] = useState(0)
+
+  const handleFileChange = useCallback(() => {
+    setFileTreeRefreshTrigger((prev) => prev + 1)
+  }, [])
 
   const handleStart = async () => {
     setStarting(true)
@@ -150,6 +155,7 @@ export function Workspace() {
                 projectId={project.id}
                 onFileSelect={handleFileSelect}
                 selectedPath={activeFile || undefined}
+                refreshTrigger={fileTreeRefreshTrigger}
               />
             }
             editor={
@@ -173,7 +179,7 @@ export function Workspace() {
                 )}
               </>
             }
-            terminal={<Terminal projectId={project.id} onDisconnect={refresh} />}
+            terminal={<Terminal projectId={project.id} onDisconnect={refresh} onFileChange={handleFileChange} />}
             terminalOpen={terminalOpen}
             onToggleTerminal={() => setTerminalOpen(!terminalOpen)}
           />

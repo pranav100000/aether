@@ -26,9 +26,10 @@ interface FileTreeProps {
   projectId: string
   onFileSelect: (path: string) => void
   selectedPath?: string
+  refreshTrigger?: number
 }
 
-export function FileTree({ projectId, onFileSelect, selectedPath }: FileTreeProps) {
+export function FileTree({ projectId, onFileSelect, selectedPath, refreshTrigger }: FileTreeProps) {
   const [entries, setEntries] = useState<FileEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -63,6 +64,13 @@ export function FileTree({ projectId, onFileSelect, selectedPath }: FileTreeProp
   useEffect(() => {
     loadRoot()
   }, [loadRoot])
+
+  // Refresh when refreshTrigger changes (from file watcher)
+  useEffect(() => {
+    if (refreshTrigger !== undefined && refreshTrigger > 0) {
+      loadRoot()
+    }
+  }, [refreshTrigger, loadRoot])
 
   const handleCreate = useCallback(async () => {
     if (!createName || !creating) {
