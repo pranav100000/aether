@@ -171,8 +171,8 @@ aether/
 - [x] **Phase 1**: Core Infrastructure (VM orchestration + terminal)
 - [x] **Phase 2a**: Database & Auth Foundation
 - [x] **Phase 2b**: Backend Project API
-- [ ] **Phase 2c**: Frontend Foundation
-- [ ] **Phase 2d**: Frontend Features & Integration
+- [x] **Phase 2c**: Frontend Foundation
+- [x] **Phase 2d**: Frontend Features & Integration
 - [ ] **Phase 3**: File editor (CodeMirror)
 - [ ] **Phase 4**: Agent connections (SSH gateway)
 - [ ] **Phase 5**: Billing (Stripe)

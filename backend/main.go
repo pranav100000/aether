@@ -51,8 +51,12 @@ func main() {
 	log.Println("Connected to database")
 
 	// Initialize auth middleware
-	jwtSecret := requireEnv("SUPABASE_JWT_SECRET")
-	authMiddleware := authmw.NewAuthMiddleware(jwtSecret)
+	supabaseURL := requireEnv("SUPABASE_URL")
+	authMiddleware, err := authmw.NewAuthMiddleware(supabaseURL)
+	if err != nil {
+		log.Fatalf("Failed to initialize auth middleware: %v", err)
+	}
+	log.Println("Auth middleware initialized with JWKS")
 
 	idleTimeout := time.Duration(idleTimeoutMin) * time.Minute
 

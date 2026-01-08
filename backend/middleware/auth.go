@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/MicahParks/keyfunc/v3"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -14,13 +15,22 @@ type contextKey string
 const UserIDKey contextKey = "user_id"
 
 type AuthMiddleware struct {
-	jwtSecret []byte
+	jwks keyfunc.Keyfunc
 }
 
-func NewAuthMiddleware(jwtSecret string) *AuthMiddleware {
-	return &AuthMiddleware{
-		jwtSecret: []byte(jwtSecret),
+func NewAuthMiddleware(supabaseURL string) (*AuthMiddleware, error) {
+	// Supabase JWKS endpoint
+	jwksURL := supabaseURL + "/auth/v1/.well-known/jwks.json"
+
+	// Create JWKS keyfunc
+	jwks, err := keyfunc.NewDefault([]string{jwksURL})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create JWKS keyfunc: %w", err)
 	}
+
+	return &AuthMiddleware{
+		jwks: jwks,
+	}, nil
 }
 
 func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
@@ -41,15 +51,8 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 
 		tokenString := parts[1]
 
-		// Parse and validate token
-		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-			// Validate signing method - Supabase uses HS256
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-			}
-			return m.jwtSecret, nil
-		})
-
+		// Parse and validate token using JWKS
+		token, err := jwt.Parse(tokenString, m.jwks.Keyfunc)
 		if err != nil {
 			writeAuthError(w, "invalid token: "+err.Error())
 			return
@@ -114,13 +117,7 @@ func ExtractTokenFromRequest(r *http.Request) string {
 
 // ValidateToken validates a JWT and returns the user ID
 func (m *AuthMiddleware) ValidateToken(tokenString string) (string, error) {
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-		}
-		return m.jwtSecret, nil
-	})
-
+	token, err := jwt.Parse(tokenString, m.jwks.Keyfunc)
 	if err != nil {
 		return "", fmt.Errorf("invalid token: %w", err)
 	}
