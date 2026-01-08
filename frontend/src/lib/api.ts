@@ -55,6 +55,8 @@ export interface Project {
   status: "stopped" | "starting" | "running" | "stopping" | "error"
   hardware: HardwareConfig
   fly_machine_id?: string
+  private_ip?: string
+  preview_token?: string
   error_message?: string
   last_accessed_at?: string
   created_at: string

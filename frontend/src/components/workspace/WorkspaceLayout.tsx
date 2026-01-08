@@ -1,6 +1,5 @@
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels"
 import { Terminal as TerminalIcon, ChevronDown, ChevronUp } from "lucide-react"
-import { cn } from "@/lib/utils"
 
 interface WorkspaceLayoutProps {
   sidebar: React.ReactNode

@@ -64,7 +64,7 @@ function getLanguageExtension(path: string): Extension | null {
 export function Editor({ file, onContentChange, onSave }: EditorProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<EditorView | null>(null)
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const contentRef = useRef(file.content)
 
   // Use refs for callbacks to avoid stale closures in CodeMirror extensions

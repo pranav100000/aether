@@ -26,6 +26,7 @@ type ProjectStore interface {
 // MachineManager defines the Fly.io operations needed by ProjectHandler
 type MachineManager interface {
 	CreateMachine(name string, config fly.MachineConfig) (*fly.Machine, error)
+	GetMachine(machineID string) (*fly.Machine, error)
 	StartMachine(machineID string) error
 	StopMachine(machineID string) error
 	DeleteMachine(machineID string) error

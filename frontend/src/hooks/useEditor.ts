@@ -27,7 +27,7 @@ interface UseEditorReturn {
 export function useEditor(projectId: string): UseEditorReturn {
   const [openFiles, setOpenFiles] = useState<OpenFile[]>([])
   const [activeFile, setActiveFile] = useState<string | null>(null)
-  const saveTimeouts = useRef<Map<string, NodeJS.Timeout>>(new Map())
+  const saveTimeouts = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
   const getFile = useCallback(
     (path: string): OpenFile | undefined => {

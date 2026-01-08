@@ -110,8 +110,8 @@ export function Workspace() {
         </div>
 
         <div className="flex items-center gap-2">
-          {project.status === "running" && project.fly_machine_id && (
-            <PreviewButton machineId={project.fly_machine_id} />
+          {project.status === "running" && (
+            <PreviewButton projectId={project.id} previewToken={project.preview_token} />
           )}
           {project.status === "running" && (
             <>

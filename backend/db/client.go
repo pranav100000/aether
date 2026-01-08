@@ -40,6 +40,7 @@ type Project struct {
 	MemoryMB       int        `json:"memory_mb"`
 	VolumeSizeGB   int        `json:"volume_size_gb"`
 	GPUKind        *string    `json:"gpu_kind,omitempty"`
+	PreviewToken   *string    `json:"preview_token,omitempty"`
 	LastAccessedAt *time.Time `json:"last_accessed_at,omitempty"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
@@ -127,7 +128,7 @@ func (c *Client) ListProjects(ctx context.Context, userID string) ([]Project, er
 		SELECT id, user_id, name, description, fly_machine_id, fly_volume_id,
 		       status, error_message, base_image, env_vars,
 		       cpu_kind, cpus, memory_mb, volume_size_gb, gpu_kind,
-		       last_accessed_at, created_at, updated_at
+		       preview_token, last_accessed_at, created_at, updated_at
 		FROM projects
 		WHERE user_id = $1
 		ORDER BY updated_at DESC
@@ -145,7 +146,7 @@ func (c *Client) ListProjects(ctx context.Context, userID string) ([]Project, er
 			&p.FlyMachineID, &p.FlyVolumeID, &p.Status, &p.ErrorMessage,
 			&p.BaseImage, &p.EnvVars,
 			&p.CPUKind, &p.CPUs, &p.MemoryMB, &p.VolumeSizeGB, &p.GPUKind,
-			&p.LastAccessedAt, &p.CreatedAt, &p.UpdatedAt,
+			&p.PreviewToken, &p.LastAccessedAt, &p.CreatedAt, &p.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan project: %w", err)
@@ -165,7 +166,7 @@ func (c *Client) GetProject(ctx context.Context, projectID string) (*Project, er
 		SELECT id, user_id, name, description, fly_machine_id, fly_volume_id,
 		       status, error_message, base_image, env_vars,
 		       cpu_kind, cpus, memory_mb, volume_size_gb, gpu_kind,
-		       last_accessed_at, created_at, updated_at
+		       preview_token, last_accessed_at, created_at, updated_at
 		FROM projects
 		WHERE id = $1
 	`, projectID)
@@ -176,7 +177,7 @@ func (c *Client) GetProject(ctx context.Context, projectID string) (*Project, er
 		&p.FlyMachineID, &p.FlyVolumeID, &p.Status, &p.ErrorMessage,
 		&p.BaseImage, &p.EnvVars,
 		&p.CPUKind, &p.CPUs, &p.MemoryMB, &p.VolumeSizeGB, &p.GPUKind,
-		&p.LastAccessedAt, &p.CreatedAt, &p.UpdatedAt,
+		&p.PreviewToken, &p.LastAccessedAt, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -193,7 +194,7 @@ func (c *Client) GetProjectByUser(ctx context.Context, projectID, userID string)
 		SELECT id, user_id, name, description, fly_machine_id, fly_volume_id,
 		       status, error_message, base_image, env_vars,
 		       cpu_kind, cpus, memory_mb, volume_size_gb, gpu_kind,
-		       last_accessed_at, created_at, updated_at
+		       preview_token, last_accessed_at, created_at, updated_at
 		FROM projects
 		WHERE id = $1 AND user_id = $2
 	`, projectID, userID)
@@ -204,7 +205,7 @@ func (c *Client) GetProjectByUser(ctx context.Context, projectID, userID string)
 		&p.FlyMachineID, &p.FlyVolumeID, &p.Status, &p.ErrorMessage,
 		&p.BaseImage, &p.EnvVars,
 		&p.CPUKind, &p.CPUs, &p.MemoryMB, &p.VolumeSizeGB, &p.GPUKind,
-		&p.LastAccessedAt, &p.CreatedAt, &p.UpdatedAt,
+		&p.PreviewToken, &p.LastAccessedAt, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -240,13 +241,13 @@ func (c *Client) CreateProject(ctx context.Context, userID, name string, descrip
 		RETURNING id, user_id, name, description, fly_machine_id, fly_volume_id,
 		          status, error_message, base_image, env_vars,
 		          cpu_kind, cpus, memory_mb, volume_size_gb, gpu_kind,
-		          last_accessed_at, created_at, updated_at
+		          preview_token, last_accessed_at, created_at, updated_at
 	`, userID, name, description, baseImage, cpuKind, cpus, memoryMB, volumeSizeGB, gpuKind).Scan(
 		&p.ID, &p.UserID, &p.Name, &p.Description,
 		&p.FlyMachineID, &p.FlyVolumeID, &p.Status, &p.ErrorMessage,
 		&p.BaseImage, &p.EnvVars,
 		&p.CPUKind, &p.CPUs, &p.MemoryMB, &p.VolumeSizeGB, &p.GPUKind,
-		&p.LastAccessedAt, &p.CreatedAt, &p.UpdatedAt,
+		&p.PreviewToken, &p.LastAccessedAt, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create project: %w", err)
@@ -265,13 +266,13 @@ func (c *Client) UpdateProject(ctx context.Context, projectID, userID string, na
 		RETURNING id, user_id, name, description, fly_machine_id, fly_volume_id,
 		          status, error_message, base_image, env_vars,
 		          cpu_kind, cpus, memory_mb, volume_size_gb, gpu_kind,
-		          last_accessed_at, created_at, updated_at
+		          preview_token, last_accessed_at, created_at, updated_at
 	`, projectID, userID, name, description).Scan(
 		&p.ID, &p.UserID, &p.Name, &p.Description,
 		&p.FlyMachineID, &p.FlyVolumeID, &p.Status, &p.ErrorMessage,
 		&p.BaseImage, &p.EnvVars,
 		&p.CPUKind, &p.CPUs, &p.MemoryMB, &p.VolumeSizeGB, &p.GPUKind,
-		&p.LastAccessedAt, &p.CreatedAt, &p.UpdatedAt,
+		&p.PreviewToken, &p.LastAccessedAt, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -343,7 +344,7 @@ func (c *Client) GetIdleRunningProjects(ctx context.Context, timeout time.Durati
 		SELECT id, user_id, name, description, fly_machine_id, fly_volume_id,
 		       status, error_message, base_image, env_vars,
 		       cpu_kind, cpus, memory_mb, volume_size_gb, gpu_kind,
-		       last_accessed_at, created_at, updated_at
+		       preview_token, last_accessed_at, created_at, updated_at
 		FROM projects
 		WHERE status = 'running'
 		  AND last_accessed_at < now() - $1::interval
@@ -361,7 +362,7 @@ func (c *Client) GetIdleRunningProjects(ctx context.Context, timeout time.Durati
 			&p.FlyMachineID, &p.FlyVolumeID, &p.Status, &p.ErrorMessage,
 			&p.BaseImage, &p.EnvVars,
 			&p.CPUKind, &p.CPUs, &p.MemoryMB, &p.VolumeSizeGB, &p.GPUKind,
-			&p.LastAccessedAt, &p.CreatedAt, &p.UpdatedAt,
+			&p.PreviewToken, &p.LastAccessedAt, &p.CreatedAt, &p.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan project: %w", err)
@@ -370,4 +371,36 @@ func (c *Client) GetIdleRunningProjects(ctx context.Context, timeout time.Durati
 	}
 
 	return projects, nil
+}
+
+// GetProjectByIDPrefix finds a running project by ID prefix (first 8 chars)
+// Used by the gateway proxy to resolve subdomain to full project
+func (c *Client) GetProjectByIDPrefix(ctx context.Context, prefix string) (*Project, error) {
+	row := c.pool.QueryRow(ctx, `
+		SELECT id, user_id, name, description, fly_machine_id, fly_volume_id,
+		       status, error_message, base_image, env_vars,
+		       cpu_kind, cpus, memory_mb, volume_size_gb, gpu_kind,
+		       preview_token, last_accessed_at, created_at, updated_at
+		FROM projects
+		WHERE id::text LIKE $1 || '%'
+		  AND status = 'running'
+		LIMIT 1
+	`, prefix)
+
+	var p Project
+	err := row.Scan(
+		&p.ID, &p.UserID, &p.Name, &p.Description,
+		&p.FlyMachineID, &p.FlyVolumeID, &p.Status, &p.ErrorMessage,
+		&p.BaseImage, &p.EnvVars,
+		&p.CPUKind, &p.CPUs, &p.MemoryMB, &p.VolumeSizeGB, &p.GPUKind,
+		&p.PreviewToken, &p.LastAccessedAt, &p.CreatedAt, &p.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to get project by prefix: %w", err)
+	}
+
+	return &p, nil
 }

@@ -3,7 +3,8 @@ import { ExternalLink, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface PreviewButtonProps {
-  machineId: string
+  projectId: string
+  previewToken?: string
 }
 
 const COMMON_PORTS = [
@@ -15,19 +16,22 @@ const COMMON_PORTS = [
   { port: 5000, label: "5000 (Flask)" },
 ]
 
-export function PreviewButton({ machineId }: PreviewButtonProps) {
+// Preview domain from env (e.g., "149.248.213.170.nip.io" for dev or "preview.aether.dev" for prod)
+const PREVIEW_DOMAIN = import.meta.env.VITE_PREVIEW_DOMAIN || "localhost:8081"
+
+function getPreviewUrl(projectId: string, port: number, token?: string): string {
+  const prefix = projectId.substring(0, 8)
+  // Format: {port}-{prefix}[-{token}].{domain}
+  const subdomain = token ? `${port}-${prefix}-${token}` : `${port}-${prefix}`
+  // TODO: Use https once we have a custom domain with wildcard SSL cert
+  return `http://${subdomain}.${PREVIEW_DOMAIN}`
+}
+
+export function PreviewButton({ projectId, previewToken }: PreviewButtonProps) {
   const [showDropdown, setShowDropdown] = useState(false)
 
-  const getPreviewUrl = (port: number): string => {
-    // Fly.io machines are accessible via their app name and machine ID
-    // The URL format is: https://{app-name}.fly.dev
-    // For specific ports, Fly uses: https://{machine-id}.vm.{app-name}.internal:{port}
-    // But for external access, we use the Fly proxy which routes based on port
-    return `https://${machineId}.fly.dev:${port}`
-  }
-
   const handlePreview = (port: number) => {
-    const url = getPreviewUrl(port)
+    const url = getPreviewUrl(projectId, port, previewToken)
     window.open(url, "_blank")
     setShowDropdown(false)
   }
@@ -42,6 +46,7 @@ export function PreviewButton({ machineId }: PreviewButtonProps) {
             "bg-primary text-primary-foreground hover:bg-primary/90",
             "rounded-l transition-colors"
           )}
+          title="Open preview in new tab"
         >
           <ExternalLink className="w-4 h-4" />
           Preview
@@ -64,7 +69,10 @@ export function PreviewButton({ machineId }: PreviewButtonProps) {
             className="fixed inset-0 z-40"
             onClick={() => setShowDropdown(false)}
           />
-          <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded shadow-lg py-1 min-w-[160px]">
+          <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded shadow-lg py-1 min-w-[180px]">
+            <div className="px-3 py-1.5 text-xs text-muted-foreground border-b border-border mb-1">
+              Select port
+            </div>
             {COMMON_PORTS.map(({ port, label }) => (
               <button
                 key={port}

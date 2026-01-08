@@ -1,4 +1,4 @@
-/// <reference types="vitest" />
+/// <reference types="vitest/config" />
 import path from "path"
 import { defineConfig } from "vite"
 import react from "@vitejs/plugin-react"
@@ -16,5 +16,9 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
+  },
+  server: {
+    host: true,
+    allowedHosts: true,
   },
 })
