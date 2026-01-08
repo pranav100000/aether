@@ -1,0 +1,149 @@
+package middleware
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"strings"
+
+	"github.com/golang-jwt/jwt/v5"
+)
+
+type contextKey string
+
+const UserIDKey contextKey = "user_id"
+
+type AuthMiddleware struct {
+	jwtSecret []byte
+}
+
+func NewAuthMiddleware(jwtSecret string) *AuthMiddleware {
+	return &AuthMiddleware{
+		jwtSecret: []byte(jwtSecret),
+	}
+}
+
+func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Extract token from Authorization header
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			writeAuthError(w, "missing authorization header")
+			return
+		}
+
+		// Expect "Bearer <token>"
+		parts := strings.Split(authHeader, " ")
+		if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
+			writeAuthError(w, "invalid authorization header format")
+			return
+		}
+
+		tokenString := parts[1]
+
+		// Parse and validate token
+		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+			// Validate signing method - Supabase uses HS256
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+			}
+			return m.jwtSecret, nil
+		})
+
+		if err != nil {
+			writeAuthError(w, "invalid token: "+err.Error())
+			return
+		}
+
+		if !token.Valid {
+			writeAuthError(w, "invalid token")
+			return
+		}
+
+		// Extract user ID from claims
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if !ok {
+			writeAuthError(w, "invalid token claims")
+			return
+		}
+
+		// Supabase puts user ID in "sub" claim
+		userID, ok := claims["sub"].(string)
+		if !ok || userID == "" {
+			writeAuthError(w, "invalid user id in token")
+			return
+		}
+
+		// Add user ID to context
+		ctx := context.WithValue(r.Context(), UserIDKey, userID)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// GetUserID extracts the user ID from the request context
+func GetUserID(ctx context.Context) string {
+	userID, _ := ctx.Value(UserIDKey).(string)
+	return userID
+}
+
+// ExtractTokenFromRequest extracts JWT from either Authorization header or WebSocket subprotocol
+func ExtractTokenFromRequest(r *http.Request) string {
+	// Try Authorization header first
+	authHeader := r.Header.Get("Authorization")
+	if authHeader != "" {
+		parts := strings.Split(authHeader, " ")
+		if len(parts) == 2 && strings.ToLower(parts[0]) == "bearer" {
+			return parts[1]
+		}
+	}
+
+	// Try WebSocket subprotocol (for terminal connections)
+	// Client sends: Sec-WebSocket-Protocol: bearer, <token>
+	protocols := r.Header.Get("Sec-WebSocket-Protocol")
+	if protocols != "" {
+		parts := strings.Split(protocols, ", ")
+		for i, p := range parts {
+			if p == "bearer" && i+1 < len(parts) {
+				return parts[i+1]
+			}
+		}
+	}
+
+	return ""
+}
+
+// ValidateToken validates a JWT and returns the user ID
+func (m *AuthMiddleware) ValidateToken(tokenString string) (string, error) {
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return m.jwtSecret, nil
+	})
+
+	if err != nil {
+		return "", fmt.Errorf("invalid token: %w", err)
+	}
+
+	if !token.Valid {
+		return "", fmt.Errorf("invalid token")
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return "", fmt.Errorf("invalid token claims")
+	}
+
+	userID, ok := claims["sub"].(string)
+	if !ok || userID == "" {
+		return "", fmt.Errorf("invalid user id in token")
+	}
+
+	return userID, nil
+}
+
+func writeAuthError(w http.ResponseWriter, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusUnauthorized)
+	w.Write([]byte(fmt.Sprintf(`{"error":"%s"}`, message)))
+}
