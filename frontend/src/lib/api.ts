@@ -207,6 +207,11 @@ export const api = {
     return `${wsUrl}/projects/${projectId}/terminal`
   },
 
+  getAgentUrl(projectId: string, agent: "claude" | "codex" | "opencode"): string {
+    const wsUrl = API_URL.replace("http", "ws")
+    return `${wsUrl}/projects/${projectId}/agent/${agent}`
+  },
+
   // File system operations
   async listFiles(projectId: string, path: string = "/"): Promise<DirListing> {
     return apiRequest(`/projects/${projectId}/files?path=${encodeURIComponent(path)}`)

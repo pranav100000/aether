@@ -6,19 +6,24 @@ interface WorkspaceLayoutProps {
   sidebar: React.ReactNode
   editor: React.ReactNode
   terminal: React.ReactNode
+  rightPanel?: React.ReactNode
   leftSidebarOpen: boolean
   terminalOpen: boolean
+  rightPanelOpen?: boolean
 }
 
 export function WorkspaceLayout({
   sidebar,
   editor,
   terminal,
+  rightPanel,
   leftSidebarOpen,
   terminalOpen,
+  rightPanelOpen = false,
 }: WorkspaceLayoutProps) {
   const sidebarPanelRef = useRef<ImperativePanelHandle>(null)
   const terminalPanelRef = useRef<ImperativePanelHandle>(null)
+  const rightPanelRef = useRef<ImperativePanelHandle>(null)
 
   useEffect(() => {
     if (sidebarPanelRef.current) {
@@ -39,6 +44,16 @@ export function WorkspaceLayout({
       }
     }
   }, [terminalOpen])
+
+  useEffect(() => {
+    if (rightPanelRef.current) {
+      if (rightPanelOpen) {
+        rightPanelRef.current.expand()
+      } else {
+        rightPanelRef.current.collapse()
+      }
+    }
+  }, [rightPanelOpen])
 
   return (
     <div className="h-full flex flex-col bg-[#1a1a1a]">
@@ -66,11 +81,32 @@ export function WorkspaceLayout({
             )}
 
             {/* Editor area */}
-            <Panel defaultSize={80} minSize={40}>
+            <Panel defaultSize={rightPanelOpen ? 55 : 80} minSize={30}>
               <div className="h-full flex flex-col overflow-hidden">
                 {editor}
               </div>
             </Panel>
+
+            {/* Resize handle between editor and right panel */}
+            {rightPanelOpen && rightPanel && (
+              <PanelResizeHandle className="w-1 bg-border hover:bg-primary/50 transition-colors" />
+            )}
+
+            {/* Right panel (Agent Chat) */}
+            {rightPanel && (
+              <Panel
+                ref={rightPanelRef}
+                defaultSize={25}
+                minSize={15}
+                maxSize={50}
+                collapsible
+                collapsedSize={0}
+              >
+                <div className={`h-full bg-[#1e1e1e] border-l border-border overflow-hidden ${rightPanelOpen ? '' : 'hidden'}`}>
+                  {rightPanel}
+                </div>
+              </Panel>
+            )}
           </PanelGroup>
         </Panel>
 

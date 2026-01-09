@@ -93,6 +93,7 @@ func main() {
 	// New project-based handlers
 	projectHandler := handlers.NewProjectHandler(dbClient, flyClient, flyClient, apiKeysHandler, baseImage, idleTimeout)
 	terminalHandler := handlers.NewTerminalHandler(sshClient, flyClient, dbClient, authMiddleware)
+	agentHandler := handlers.NewAgentHandler(sshClient, flyClient, dbClient, authMiddleware)
 	healthHandler := handlers.NewHealthHandler(dbClient, getEnv("VERSION", "dev"))
 	filesHandler := handlers.NewFilesHandler(sftpClient, flyClient, dbClient)
 
@@ -166,6 +167,9 @@ func main() {
 
 	// Terminal endpoint handles its own auth (WebSocket subprotocol)
 	r.Get("/projects/{id}/terminal", terminalHandler.HandleTerminal)
+
+	// Agent endpoint handles its own auth (WebSocket subprotocol)
+	r.Get("/projects/{id}/agent/{agent}", agentHandler.HandleAgent)
 
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("../frontend"))))
 

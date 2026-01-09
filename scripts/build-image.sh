@@ -13,7 +13,17 @@ echo "Image: ${IMAGE_NAME}"
 
 cd "${PROJECT_ROOT}/infra/images/base"
 
+# Copy agent-service to build context
+echo "Copying agent-service..."
+rm -rf agent-service
+cp -r "${PROJECT_ROOT}/agent-service" agent-service
+# Remove dev dependencies and node_modules (will be installed fresh in Docker)
+rm -rf agent-service/node_modules agent-service/bun.lockb
+
 docker build -t "${IMAGE_NAME}" .
+
+# Clean up
+rm -rf agent-service
 
 echo ""
 echo "Build complete!"

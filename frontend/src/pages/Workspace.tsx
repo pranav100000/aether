@@ -12,6 +12,7 @@ import { Editor } from "@/components/workspace/Editor"
 import { EditorTabs } from "@/components/workspace/EditorTabs"
 import { WorkspaceLayout, WorkspaceEmptyState } from "@/components/workspace/WorkspaceLayout"
 import { PreviewButton } from "@/components/workspace/PreviewButton"
+import { AgentChat } from "@/components/workspace/AgentChat"
 
 export function Workspace() {
   const { id } = useParams<{ id: string }>()
@@ -200,8 +201,10 @@ export function Workspace() {
               </>
             }
             terminal={<MultiTerminal projectId={project.id} onDisconnect={refresh} onFileChange={handleFileChange} />}
+            rightPanel={<AgentChat projectId={project.id} agent="claude" />}
             leftSidebarOpen={leftSidebarOpen}
             terminalOpen={terminalOpen}
+            rightPanelOpen={rightSidebarOpen}
           />
         ) : project.status === "starting" ? (
           <div className="h-full flex items-center justify-center">

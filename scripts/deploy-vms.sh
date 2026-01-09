@@ -16,8 +16,18 @@ echo ""
 
 cd infra/images/base
 
+# Copy agent-service to build context
+echo "Copying agent-service..."
+rm -rf agent-service
+cp -r "${PROJECT_ROOT}/agent-service" agent-service
+# Remove node_modules (will be installed fresh in Docker), keep lockfile for reproducibility
+rm -rf agent-service/node_modules
+
 # Build for amd64 (Fly.io runs on amd64)
 docker build --platform linux/amd64 -t "$FULL_IMAGE" .
+
+# Clean up
+rm -rf agent-service
 
 echo ""
 echo "Pushing image to Docker Hub..."

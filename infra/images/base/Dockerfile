@@ -33,6 +33,10 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && npm install -g opencode-ai \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Bun system-wide
+RUN curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local bash \
+    && ln -sf /usr/local/bin/bun /usr/local/bin/bunx
+
 RUN apt-get update && apt-get install -y \
     python3.11 \
     python3.11-venv \
@@ -73,6 +77,12 @@ COPY --chown=coder:coder bashrc /home/coder/.bashrc
 COPY --chown=coder:coder tmux.conf /home/coder/.tmux.conf
 
 USER root
+
+# Copy and install agent-service
+COPY agent-service /opt/agent-service
+WORKDIR /opt/agent-service
+RUN bun install --frozen-lockfile --production
+WORKDIR /home/coder
 
 # Port forwarding script for IPv6 → localhost
 COPY port-forward.sh /usr/local/bin/port-forward.sh
