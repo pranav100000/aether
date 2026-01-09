@@ -49,12 +49,16 @@ fi
 
 # Pre-authenticate Codex CLI with API key
 if [ -n "$OPENAI_API_KEY" ]; then
-    # Create .codex directory
     mkdir -p /home/coder/.codex
-    chown coder:coder /home/coder/.codex
 
-    # Login with API key (run as coder user)
-    su - coder -c "echo '$OPENAI_API_KEY' | codex login --with-api-key" 2>/dev/null || true
+    # Write auth.json directly instead of running codex login (faster startup)
+    cat > /home/coder/.codex/auth.json << EOF
+{
+  "api_key": "$OPENAI_API_KEY"
+}
+EOF
+    chown -R coder:coder /home/coder/.codex
+    chmod 600 /home/coder/.codex/auth.json
 fi
 
 exec /usr/sbin/sshd -D -e

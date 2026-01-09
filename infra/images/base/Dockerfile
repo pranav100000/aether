@@ -29,6 +29,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && npm install -g pnpm \
     && npm install -g @anthropic-ai/claude-code \
     && npm install -g @openai/codex \
+    && npm install -g opencode-ai \
     && rm -rf /var/lib/apt/lists/*
 
 RUN apt-get update && apt-get install -y \

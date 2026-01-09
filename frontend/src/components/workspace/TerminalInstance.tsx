@@ -194,7 +194,7 @@ export const TerminalInstance = forwardRef<TerminalInstanceHandle, TerminalInsta
     }, [sessionId, projectId, onDisconnect])
 
     return (
-      <div className="h-full flex flex-col bg-[#0a0a0a]">
+      <div className="h-full flex flex-col justify-end bg-[#0a0a0a]">
         <div
           ref={containerRef}
           className="flex-1 p-2"

@@ -50,7 +50,7 @@ export function WorkspaceLayout({
             <Panel
               ref={sidebarPanelRef}
               defaultSize={20}
-              minSize={15}
+              minSize={5}
               maxSize={40}
               collapsible
               collapsedSize={0}
@@ -83,7 +83,7 @@ export function WorkspaceLayout({
         <Panel
           ref={terminalPanelRef}
           defaultSize={30}
-          minSize={15}
+          minSize={5}
           maxSize={60}
           collapsible
           collapsedSize={0}
