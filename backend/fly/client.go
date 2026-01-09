@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"time"
 )
@@ -43,9 +44,9 @@ type Mount struct {
 }
 
 type GuestConfig struct {
-	CPUKind  string `json:"cpu_kind"`
-	CPUs     int    `json:"cpus"`
-	MemoryMB int    `json:"memory_mb"`
+	CPUKind  string `json:"cpu_kind,omitempty"`
+	CPUs     int    `json:"cpus,omitempty"`
+	MemoryMB int    `json:"memory_mb,omitempty"`
 	GPUKind  string `json:"gpu_kind,omitempty"`
 }
 
@@ -87,11 +88,13 @@ func (c *Client) doRequest(method, path string, body interface{}) ([]byte, error
 	url := fmt.Sprintf("%s/apps/%s%s", baseURL, c.appName, path)
 
 	var reqBody io.Reader
+	var jsonBodyStr string
 	if body != nil {
 		jsonBody, err := json.Marshal(body)
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal request body: %w", err)
 		}
+		jsonBodyStr = string(jsonBody)
 		reqBody = bytes.NewReader(jsonBody)
 	}
 
@@ -115,6 +118,7 @@ func (c *Client) doRequest(method, path string, body interface{}) ([]byte, error
 	}
 
 	if resp.StatusCode >= 400 {
+		log.Printf("Fly API error: %s %s status=%d body=%s response=%s", method, path, resp.StatusCode, jsonBodyStr, string(respBody))
 		var apiErr APIError
 		if json.Unmarshal(respBody, &apiErr) == nil && apiErr.Error != "" {
 			return nil, fmt.Errorf("API error (%d): %s - %s", resp.StatusCode, apiErr.Error, apiErr.Message)

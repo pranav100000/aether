@@ -35,18 +35,56 @@ import {
 } from "@/components/ai-elements/reasoning"
 import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion"
 import { cn } from "@/lib/utils"
-import { RefreshCwIcon, TerminalIcon } from "lucide-react"
+import { RefreshCwIcon, TerminalIcon, SettingsIcon, BrainIcon, ShieldCheckIcon, FileEditIcon } from "lucide-react"
 import type { ToolUIPart } from "ai"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+
+type PermissionMode = "default" | "acceptEdits" | "plan" | "bypassPermissions"
+
+interface AgentSettings {
+  model: string
+  permissionMode: PermissionMode
+  extendedThinking: boolean
+}
 
 interface AgentChatProps {
   projectId: string
   agent?: "claude" | "codex" | "opencode"
 }
 
+interface HistoryMessage {
+  id: string
+  timestamp: number
+  role: "user" | "assistant" | "system"
+  content: string
+  tool?: {
+    id: string
+    name: string
+    input: Record<string, unknown>
+    status: string
+    result?: string
+    error?: string
+  }
+}
+
 interface AgentMessage {
-  type: "init" | "text" | "tool_use" | "tool_result" | "error" | "done" | "thinking"
+  type: "init" | "history" | "text" | "tool_use" | "tool_result" | "error" | "done" | "thinking"
   agent?: string
   sessionId?: string
+  history?: HistoryMessage[]
   content?: string
   streaming?: boolean
   tool?: {
@@ -97,6 +135,11 @@ export function AgentChat({ projectId, agent = "claude" }: AgentChatProps) {
   const [isConnected, setIsConnected] = useState(false)
   const [status, setStatus] = useState<ChatStatus>("ready")
   const [error, setError] = useState<string | null>(null)
+  const [settings, setSettings] = useState<AgentSettings>({
+    model: "sonnet",
+    permissionMode: "bypassPermissions",
+    extendedThinking: true,
+  })
   const wsRef = useRef<WebSocket | null>(null)
   const messageIdRef = useRef(0)
   const thinkingStartRef = useRef<number | null>(null)
@@ -128,6 +171,34 @@ export function AgentChat({ projectId, agent = "claude" }: AgentChatProps) {
 
           if (msg.type === "init") {
             // Silent init, no system message
+          } else if (msg.type === "history" && msg.history) {
+            // Restore messages from history
+            const restoredMessages: ChatMessage[] = msg.history.map((histMsg) => {
+              const chatMsg: ChatMessage = {
+                id: histMsg.id,
+                role: histMsg.role,
+                content: histMsg.content,
+                timestamp: new Date(histMsg.timestamp),
+              }
+              if (histMsg.tool) {
+                chatMsg.tool = {
+                  id: histMsg.tool.id,
+                  name: histMsg.tool.name,
+                  input: histMsg.tool.input,
+                  status: histMsg.tool.result ? "output-available" : histMsg.tool.error ? "output-error" : "input-available",
+                  result: histMsg.tool.result,
+                  error: histMsg.tool.error,
+                }
+              }
+              return chatMsg
+            })
+            setMessages(restoredMessages)
+            // Update message ID counter to avoid collisions
+            const maxId = restoredMessages.reduce((max, m) => {
+              const num = parseInt(m.id.replace("msg-", ""), 10)
+              return isNaN(num) ? max : Math.max(max, num)
+            }, 0)
+            messageIdRef.current = maxId
           } else if (msg.type === "thinking" && msg.content) {
             thinkingStartRef.current = thinkingStartRef.current ?? Date.now()
             setMessages(prev => {
@@ -198,11 +269,14 @@ export function AgentChat({ projectId, agent = "claude" }: AgentChatProps) {
             }])
           } else if (msg.type === "tool_result" && msg.toolId) {
             setMessages(prev => prev.map(m => {
-              if (m.tool?.id === msg.toolId) {
+              const tool = m.tool
+              if (tool && tool.id === msg.toolId) {
                 return {
                   ...m,
                   tool: {
-                    ...m.tool,
+                    id: tool.id,
+                    name: tool.name,
+                    input: tool.input,
                     status: msg.error ? "output-error" : "output-available",
                     result: msg.result,
                     error: msg.error
@@ -266,9 +340,14 @@ export function AgentChat({ projectId, agent = "claude" }: AgentChatProps) {
 
     wsRef.current.send(JSON.stringify({
       type: "prompt",
-      prompt: userMessage
+      prompt: userMessage,
+      settings: {
+        model: settings.model,
+        permissionMode: settings.permissionMode,
+        extendedThinking: settings.extendedThinking,
+      }
     }))
-  }, [generateId])
+  }, [generateId, settings])
 
   const handleSubmit = useCallback(({ text }: { text: string }) => {
     sendMessage(text)
@@ -292,15 +371,88 @@ export function AgentChat({ projectId, agent = "claude" }: AgentChatProps) {
             isConnected ? "bg-green-500" : "bg-red-500"
           )} />
         </div>
-        {!isConnected && (
-          <button
-            onClick={connect}
-            className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200"
-          >
-            <RefreshCwIcon className="size-3" />
-            Reconnect
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {!isConnected && (
+            <button
+              onClick={connect}
+              className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200"
+            >
+              <RefreshCwIcon className="size-3" />
+              Reconnect
+            </button>
+          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="flex items-center gap-1 rounded px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200">
+                <SettingsIcon className="size-3" />
+                Settings
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuLabel>Model</DropdownMenuLabel>
+              <div className="px-2 pb-2">
+                <Select value={settings.model} onValueChange={(v) => setSettings(s => ({ ...s, model: v }))}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="sonnet">Sonnet (Fast)</SelectItem>
+                    <SelectItem value="opus">Opus (Powerful)</SelectItem>
+                    <SelectItem value="haiku">Haiku (Quick)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Permission Mode</DropdownMenuLabel>
+              <div className="px-2 pb-2">
+                <Select value={settings.permissionMode} onValueChange={(v) => setSettings(s => ({ ...s, permissionMode: v as PermissionMode }))}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="bypassPermissions">
+                      <div className="flex items-center gap-2">
+                        <ShieldCheckIcon className="size-3" />
+                        Auto-approve all
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="acceptEdits">
+                      <div className="flex items-center gap-2">
+                        <FileEditIcon className="size-3" />
+                        Auto-approve edits
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="plan">
+                      <div className="flex items-center gap-2">
+                        <BrainIcon className="size-3" />
+                        Plan mode
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="default">Ask for everything</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <DropdownMenuSeparator />
+              <div className="flex items-center justify-between px-2 py-2">
+                <span className="text-xs text-zinc-400">Extended thinking</span>
+                <button
+                  onClick={() => setSettings(s => ({ ...s, extendedThinking: !s.extendedThinking }))}
+                  className={cn(
+                    "relative h-5 w-9 rounded-full transition-colors",
+                    settings.extendedThinking ? "bg-blue-600" : "bg-zinc-700"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "absolute top-0.5 left-0.5 size-4 rounded-full bg-white transition-transform",
+                      settings.extendedThinking && "translate-x-4"
+                    )}
+                  />
+                </button>
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
       {/* Messages */}

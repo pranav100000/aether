@@ -1,14 +1,20 @@
 export type AgentType = "claude" | "codex" | "opencode";
 
+export type PermissionMode = "default" | "acceptEdits" | "plan" | "bypassPermissions";
+
 export interface AgentConfig {
   cwd: string;
   autoApprove: boolean;
   model?: string;
+  permissionMode?: PermissionMode;
+  extendedThinking?: boolean;
+  conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>;
 }
 
 export interface AgentMessage {
   type:
     | "init"
+    | "history"
     | "text"
     | "tool_use"
     | "tool_result"
@@ -16,6 +22,20 @@ export interface AgentMessage {
     | "done"
     | "error";
   sessionId?: string;
+  history?: Array<{
+    id: string;
+    timestamp: number;
+    role: "user" | "assistant" | "system";
+    content: string;
+    tool?: {
+      id: string;
+      name: string;
+      input: Record<string, unknown>;
+      status: string;
+      result?: string;
+      error?: string;
+    };
+  }>;
   content?: string;
   streaming?: boolean;
   tool?: {
@@ -34,10 +54,17 @@ export interface AgentMessage {
   error?: string;
 }
 
+export interface AgentSettings {
+  model?: string;
+  permissionMode?: PermissionMode;
+  extendedThinking?: boolean;
+}
+
 export interface ClientMessage {
-  type: "prompt" | "abort" | "approve" | "reject";
+  type: "prompt" | "abort" | "approve" | "reject" | "settings";
   prompt?: string;
   toolId?: string;
+  settings?: AgentSettings;
 }
 
 export interface AgentProvider {

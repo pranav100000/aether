@@ -21,12 +21,29 @@ export class ClaudeProvider implements AgentProvider {
       "--include-partial-messages", // Stream individual text tokens
     ];
 
-    if (config.autoApprove) {
+    // Model selection
+    if (config.model) {
+      args.push("--model", config.model);
+    }
+
+    // Permission mode
+    if (config.permissionMode) {
+      args.push("--permission-mode", config.permissionMode);
+    } else if (config.autoApprove) {
       args.push("--dangerously-skip-permissions");
     }
 
+    // Build prompt with conversation history if available
+    let fullPrompt = prompt;
+    if (config.conversationHistory && config.conversationHistory.length > 0) {
+      const historyText = config.conversationHistory
+        .map((msg) => `${msg.role === "user" ? "Human" : "Assistant"}: ${msg.content}`)
+        .join("\n\n");
+      fullPrompt = `<conversation_history>\n${historyText}\n</conversation_history>\n\nHuman: ${prompt}`;
+    }
+
     // Add the prompt
-    args.push(prompt);
+    args.push(fullPrompt);
 
     const proc = Bun.spawn(args, {
       cwd: config.cwd,
@@ -51,6 +68,9 @@ export class ClaudeProvider implements AgentProvider {
       input: "",
     };
 
+    // Track if we're in a thinking block
+    let inThinkingBlock = false;
+
     try {
       while (true) {
         const { done, value } = await reader.read();
@@ -67,9 +87,12 @@ export class ClaudeProvider implements AgentProvider {
 
           try {
             const msg = JSON.parse(line);
-            const mapped = this.mapStreamMessage(msg, config, toolState);
-            if (mapped) {
-              yield mapped;
+            const result = this.mapStreamMessage(msg, config, toolState, inThinkingBlock);
+            if (result) {
+              inThinkingBlock = result.inThinkingBlock;
+              if (result.message) {
+                yield result.message;
+              }
             }
           } catch {
             // If not JSON, treat as plain text output
@@ -82,9 +105,9 @@ export class ClaudeProvider implements AgentProvider {
       if (buffer.trim()) {
         try {
           const msg = JSON.parse(buffer);
-          const mapped = this.mapStreamMessage(msg, config, toolState);
-          if (mapped) {
-            yield mapped;
+          const result = this.mapStreamMessage(msg, config, toolState, inThinkingBlock);
+          if (result?.message) {
+            yield result.message;
           }
         } catch {
           yield { type: "text", content: buffer, streaming: true };
@@ -123,18 +146,19 @@ export class ClaudeProvider implements AgentProvider {
       id: string | null;
       name: string | null;
       input: string;
-    }
-  ): AgentMessage | null {
+    },
+    inThinkingBlock: boolean
+  ): { message: AgentMessage | null; inThinkingBlock: boolean } | null {
     const type = msg.type as string;
 
     // Handle stream_event messages (from --include-partial-messages)
     if (type === "stream_event") {
       const event = msg.event as Record<string, unknown> | undefined;
-      if (!event) return null;
+      if (!event) return { message: null, inThinkingBlock };
 
       const eventType = event.type as string;
 
-      // content_block_start - start of a text or tool_use block
+      // content_block_start - start of a text, thinking, or tool_use block
       if (eventType === "content_block_start") {
         const contentBlock = event.content_block as Record<string, unknown> | undefined;
         if (contentBlock?.type === "tool_use") {
@@ -142,25 +166,43 @@ export class ClaudeProvider implements AgentProvider {
           toolState.id = contentBlock.id as string;
           toolState.name = contentBlock.name as string;
           toolState.input = "";
+          return { message: null, inThinkingBlock: false };
         }
-        return null;
+        if (contentBlock?.type === "thinking") {
+          // Start of thinking block
+          return { message: null, inThinkingBlock: true };
+        }
+        return { message: null, inThinkingBlock };
       }
 
-      // content_block_delta - streaming content (text or tool input)
+      // content_block_delta - streaming content (text, thinking, or tool input)
       if (eventType === "content_block_delta") {
         const delta = event.delta as Record<string, unknown> | undefined;
         if (delta?.type === "text_delta" && delta.text) {
           return {
-            type: "text",
-            content: delta.text as string,
-            streaming: true,
+            message: {
+              type: "text",
+              content: delta.text as string,
+              streaming: true,
+            },
+            inThinkingBlock: false,
+          };
+        }
+        if (delta?.type === "thinking_delta" && delta.thinking) {
+          return {
+            message: {
+              type: "thinking",
+              content: delta.thinking as string,
+              streaming: true,
+            },
+            inThinkingBlock: true,
           };
         }
         if (delta?.type === "input_json_delta" && delta.partial_json) {
           // Accumulate tool input JSON
           toolState.input += delta.partial_json as string;
         }
-        return null;
+        return { message: null, inThinkingBlock };
       }
 
       // content_block_stop - end of content block, emit complete tool if we have one
@@ -191,9 +233,13 @@ export class ClaudeProvider implements AgentProvider {
           toolState.name = null;
           toolState.input = "";
 
-          return result;
+          return { message: result, inThinkingBlock: false };
         }
-        return null;
+        // End of thinking block
+        if (inThinkingBlock) {
+          return { message: null, inThinkingBlock: false };
+        }
+        return { message: null, inThinkingBlock: false };
       }
 
       // message_stop - end of message
@@ -202,10 +248,10 @@ export class ClaudeProvider implements AgentProvider {
         toolState.id = null;
         toolState.name = null;
         toolState.input = "";
-        return null;
+        return { message: null, inThinkingBlock: false };
       }
 
-      return null;
+      return { message: null, inThinkingBlock };
     }
 
     // Handle direct content_block types (fallback for non-stream_event format)
@@ -216,22 +262,30 @@ export class ClaudeProvider implements AgentProvider {
         toolState.name = contentBlock.name as string;
         toolState.input = "";
       }
-      return null;
+      if (contentBlock?.type === "thinking") {
+        return { message: null, inThinkingBlock: true };
+      }
+      return { message: null, inThinkingBlock };
     }
 
     if (type === "content_block_delta") {
       const delta = msg.delta as Record<string, unknown> | undefined;
       if (delta?.type === "text_delta" && delta.text) {
         return {
-          type: "text",
-          content: delta.text as string,
-          streaming: true,
+          message: { type: "text", content: delta.text as string, streaming: true },
+          inThinkingBlock: false,
+        };
+      }
+      if (delta?.type === "thinking_delta" && delta.thinking) {
+        return {
+          message: { type: "thinking", content: delta.thinking as string, streaming: true },
+          inThinkingBlock: true,
         };
       }
       if (delta?.type === "input_json_delta" && delta.partial_json) {
         toolState.input += delta.partial_json as string;
       }
-      return null;
+      return { message: null, inThinkingBlock };
     }
 
     if (type === "content_block_stop") {
@@ -259,79 +313,87 @@ export class ClaudeProvider implements AgentProvider {
         toolState.name = null;
         toolState.input = "";
 
-        return result;
+        return { message: result, inThinkingBlock: false };
       }
-      return null;
+      return { message: null, inThinkingBlock: false };
     }
 
     if (type === "message_stop") {
       toolState.id = null;
       toolState.name = null;
       toolState.input = "";
-      return null;
+      return { message: null, inThinkingBlock: false };
     }
 
     // Skip system init messages
     if (type === "system") {
-      return null;
+      return { message: null, inThinkingBlock };
     }
 
     // Skip user messages (tool results echoed back)
     if (type === "user") {
-      return null;
+      return { message: null, inThinkingBlock };
     }
 
     // Handle legacy/fallback message types
     if (type === "text" || type === "message") {
       return {
-        type: "text",
-        content: (msg.content || msg.text) as string,
-        streaming: true,
+        message: { type: "text", content: (msg.content || msg.text) as string, streaming: true },
+        inThinkingBlock: false,
       };
     }
 
     // Handle assistant messages - skip since we get content via stream_event
     if (type === "assistant") {
-      return null;
+      return { message: null, inThinkingBlock };
     }
 
     // Direct tool_use message (non-streaming fallback)
     if (type === "tool_use") {
       return {
-        type: "tool_use",
-        tool: {
-          id: msg.id as string,
-          name: msg.name as string,
-          input: msg.input as Record<string, unknown>,
-          status: config.autoApprove ? "running" : "pending",
+        message: {
+          type: "tool_use",
+          tool: {
+            id: msg.id as string,
+            name: msg.name as string,
+            input: msg.input as Record<string, unknown>,
+            status: config.autoApprove ? "running" : "pending",
+          },
         },
+        inThinkingBlock: false,
       };
     }
 
     if (type === "tool_result") {
       return {
-        type: "tool_result",
-        toolId: msg.tool_use_id as string,
-        result: String(msg.content),
+        message: {
+          type: "tool_result",
+          toolId: msg.tool_use_id as string,
+          result: String(msg.content),
+        },
+        inThinkingBlock: false,
       };
     }
 
     // Final result message - skip since we already streamed the content
     if (type === "result") {
-      return null;
+      return { message: null, inThinkingBlock };
     }
 
     if (type === "error") {
       return {
-        type: "error",
-        error:
-          (msg.error as { message?: string })?.message ||
-          (msg.message as string) ||
-          String(msg.error || msg),
+        message: {
+          type: "error",
+          error:
+            (msg.error as { message?: string })?.message ||
+            (msg.message as string) ||
+            String(msg.error || msg),
+        },
+        inThinkingBlock: false,
       };
     }
 
-    return null;
+    return { message: null, inThinkingBlock };
   }
 
   abort(): void {

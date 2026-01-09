@@ -154,9 +154,12 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	var req CreateProjectRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("Error decoding create project request: %v", err)
 		respondError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
+
+	log.Printf("Create project request: user=%s name=%q hardware=%+v", userID, req.Name, req.Hardware)
 
 	// Handle hardware config - preset takes precedence over custom config
 	var hwConfig *validation.HardwareConfig
@@ -176,6 +179,7 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	input, errs := validation.ValidateCreateProject(req.Name, req.Description, hwConfig)
 	if errs.HasErrors() {
+		log.Printf("Validation failed for create project: %v", errs)
 		respondJSON(w, http.StatusBadRequest, map[string]any{
 			"error":  "Validation failed",
 			"errors": errs,
@@ -482,15 +486,24 @@ func (h *ProjectHandler) Stop(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ProjectHandler) createMachine(ctx context.Context, project *db.Project, userID string) (*fly.Machine, error) {
-	guestConfig := fly.GuestConfig{
-		CPUKind:  project.CPUKind,
-		CPUs:     project.CPUs,
-		MemoryMB: project.MemoryMB,
-	}
+	var guestConfig fly.GuestConfig
 
-	// Add GPU if specified
+	// GPU machines require cpu_kind and cpus, but Fly.io determines actual compute from gpu_kind
 	if project.GPUKind != nil && *project.GPUKind != "" {
-		guestConfig.GPUKind = *project.GPUKind
+		guestConfig = fly.GuestConfig{
+			CPUKind:  "performance",
+			CPUs:     8,
+			MemoryMB: 16384,
+			GPUKind:  *project.GPUKind,
+		}
+		log.Printf("Creating GPU machine with gpu_kind=%s", *project.GPUKind)
+	} else {
+		guestConfig = fly.GuestConfig{
+			CPUKind:  project.CPUKind,
+			CPUs:     project.CPUs,
+			MemoryMB: project.MemoryMB,
+		}
+		log.Printf("Creating CPU machine with cpu_kind=%s, cpus=%d, memory_mb=%d", project.CPUKind, project.CPUs, project.MemoryMB)
 	}
 
 	// Build environment variables

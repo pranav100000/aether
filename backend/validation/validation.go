@@ -175,78 +175,83 @@ func GetPresetConfig(preset string) *HardwareConfig {
 func ValidateHardwareConfig(cpuKind string, cpus, memoryMB, volumeSizeGB int, gpuKind *string) (*HardwareConfig, ValidationErrors) {
 	var errors ValidationErrors
 
-	// Validate CPU kind
-	if !validCPUKinds[cpuKind] {
-		errors = append(errors, ValidationError{
-			Field:   "cpu_kind",
-			Message: "must be 'shared' or 'performance'",
-		})
-	}
+	// GPU machines have fixed compute from Fly.io - skip CPU/memory validation
+	hasGPU := gpuKind != nil && *gpuKind != ""
 
-	// Validate CPU count based on kind
-	if cpuKind == "shared" {
-		if cpus < 1 || cpus > 8 {
+	if hasGPU {
+		// Validate GPU kind
+		if !validGPUKinds[*gpuKind] {
 			errors = append(errors, ValidationError{
-				Field:   "cpus",
-				Message: "shared CPU must be 1, 2, 4, or 8 cores",
+				Field:   "gpu_kind",
+				Message: "must be one of: a10, l40s, a100-40gb, a100-80gb",
 			})
 		}
-	} else if cpuKind == "performance" {
-		if cpus < 1 || cpus > 16 {
+	} else {
+		// Validate CPU config only for non-GPU machines
+		if !validCPUKinds[cpuKind] {
 			errors = append(errors, ValidationError{
-				Field:   "cpus",
-				Message: "performance CPU must be 1, 2, 4, 8, or 16 cores",
+				Field:   "cpu_kind",
+				Message: "must be 'shared' or 'performance'",
 			})
 		}
-	}
 
-	// Validate memory range
-	if memoryMB < 256 || memoryMB > 32768 {
-		errors = append(errors, ValidationError{
-			Field:   "memory_mb",
-			Message: "memory must be between 256MB and 32GB",
-		})
-	}
-
-	// Validate CPU/memory combination
-	if validCPUKinds[cpuKind] && memoryMB >= 256 && memoryMB <= 32768 {
-		var validMemory []int
+		// Validate CPU count based on kind
 		if cpuKind == "shared" {
-			validMemory = validSharedConfigs[cpus]
-		} else {
-			validMemory = validPerformanceConfigs[cpus]
-		}
-
-		if len(validMemory) > 0 {
-			found := false
-			for _, m := range validMemory {
-				if m == memoryMB {
-					found = true
-					break
-				}
-			}
-			if !found {
+			if cpus < 1 || cpus > 8 {
 				errors = append(errors, ValidationError{
-					Field:   "memory_mb",
-					Message: fmt.Sprintf("invalid memory for %s CPU with %d cores; valid options: %v", cpuKind, cpus, validMemory),
+					Field:   "cpus",
+					Message: "shared CPU must be 1, 2, 4, or 8 cores",
+				})
+			}
+		} else if cpuKind == "performance" {
+			if cpus < 1 || cpus > 16 {
+				errors = append(errors, ValidationError{
+					Field:   "cpus",
+					Message: "performance CPU must be 1, 2, 4, 8, or 16 cores",
 				})
 			}
 		}
+
+		// Validate memory range
+		if memoryMB < 256 || memoryMB > 32768 {
+			errors = append(errors, ValidationError{
+				Field:   "memory_mb",
+				Message: "memory must be between 256MB and 32GB",
+			})
+		}
+
+		// Validate CPU/memory combination
+		if validCPUKinds[cpuKind] && memoryMB >= 256 && memoryMB <= 32768 {
+			var validMemory []int
+			if cpuKind == "shared" {
+				validMemory = validSharedConfigs[cpus]
+			} else {
+				validMemory = validPerformanceConfigs[cpus]
+			}
+
+			if len(validMemory) > 0 {
+				found := false
+				for _, m := range validMemory {
+					if m == memoryMB {
+						found = true
+						break
+					}
+				}
+				if !found {
+					errors = append(errors, ValidationError{
+						Field:   "memory_mb",
+						Message: fmt.Sprintf("invalid memory for %s CPU with %d cores; valid options: %v", cpuKind, cpus, validMemory),
+					})
+				}
+			}
+		}
 	}
 
-	// Validate volume size
+	// Validate volume size (always required)
 	if volumeSizeGB < 1 || volumeSizeGB > 500 {
 		errors = append(errors, ValidationError{
 			Field:   "volume_size_gb",
 			Message: "volume size must be between 1GB and 500GB",
-		})
-	}
-
-	// Validate GPU kind (if provided)
-	if gpuKind != nil && *gpuKind != "" && !validGPUKinds[*gpuKind] {
-		errors = append(errors, ValidationError{
-			Field:   "gpu_kind",
-			Message: "must be one of: a10, l40s, a100-40gb, a100-80gb",
 		})
 	}
 

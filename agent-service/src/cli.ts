@@ -1,5 +1,14 @@
 import { getProvider } from "./agents";
-import type { AgentType, ClientMessage, AgentMessage } from "./types";
+import type { AgentType, ClientMessage, AgentMessage, AgentSettings } from "./types";
+import {
+  loadHistory,
+  saveHistory,
+  createHistory,
+  addUserMessage,
+  addAssistantMessage,
+  updateToolResult,
+  type ChatHistory,
+} from "./storage";
 
 const agent = process.argv[2] as AgentType;
 
@@ -17,9 +26,29 @@ try {
   process.exit(1);
 }
 
-// Send init message
-const sessionId = crypto.randomUUID();
-send({ type: "init", sessionId });
+// Current session settings (can be updated via "settings" messages)
+let currentSettings: AgentSettings = {
+  permissionMode: "bypassPermissions", // Default to auto-approve for now
+  extendedThinking: true,
+};
+
+// Load or create chat history
+let history: ChatHistory;
+const existingHistory = await loadHistory(agent);
+
+if (existingHistory) {
+  history = existingHistory;
+} else {
+  history = createHistory(agent, crypto.randomUUID());
+}
+
+// Send init message with session info
+send({ type: "init", sessionId: history.sessionId });
+
+// Send history if we have messages
+if (history.messages.length > 0) {
+  send({ type: "history", history: history.messages });
+}
 
 // Handle uncaught errors
 process.on("uncaughtException", (err) => {
@@ -57,18 +86,83 @@ for await (const chunk of Bun.stdin.stream()) {
 
 async function handleMessage(msg: ClientMessage) {
   switch (msg.type) {
+    case "settings":
+      // Update session settings
+      if (msg.settings) {
+        currentSettings = { ...currentSettings, ...msg.settings };
+      }
+      break;
+
     case "prompt":
       if (!msg.prompt) {
         send({ type: "error", error: "Missing prompt" });
         return;
       }
 
+      // Allow inline settings with prompt
+      if (msg.settings) {
+        currentSettings = { ...currentSettings, ...msg.settings };
+      }
+
+      // Build conversation history from saved messages BEFORE adding the new message
+      // (to avoid duplicating the current prompt in history)
+      const conversationHistory = history.messages
+        .filter((m) => m.content && m.role !== "system")
+        .map((m) => ({
+          role: m.role as "user" | "assistant",
+          content: m.content,
+        }));
+
+      // Save user message to history
+      addUserMessage(history, msg.prompt);
+      await saveHistory(history);
+
       try {
+        let currentAssistantContent = "";
+
         for await (const agentMsg of provider.query(msg.prompt, {
-          cwd: "/home/coder/project",
-          autoApprove: true, // For now, auto-approve all tools
+          cwd: process.env.PROJECT_CWD || process.cwd(),
+          autoApprove: currentSettings.permissionMode === "bypassPermissions",
+          model: currentSettings.model,
+          permissionMode: currentSettings.permissionMode,
+          extendedThinking: currentSettings.extendedThinking,
+          conversationHistory,
         })) {
           send(agentMsg);
+
+          // Track content for history
+          if (agentMsg.type === "text" && agentMsg.content) {
+            currentAssistantContent += agentMsg.content;
+          }
+
+          // Track tool use
+          if (agentMsg.type === "tool_use" && agentMsg.tool) {
+            // Save previous content if any
+            if (currentAssistantContent) {
+              addAssistantMessage(history, currentAssistantContent);
+              currentAssistantContent = "";
+            }
+            // Save tool message
+            addAssistantMessage(history, "", {
+              id: agentMsg.tool.id,
+              name: agentMsg.tool.name,
+              input: agentMsg.tool.input,
+              status: agentMsg.tool.status,
+            });
+          }
+
+          // Track tool results
+          if (agentMsg.type === "tool_result" && agentMsg.toolId) {
+            updateToolResult(history, agentMsg.toolId, agentMsg.result, agentMsg.error);
+          }
+
+          // On done, save final content
+          if (agentMsg.type === "done") {
+            if (currentAssistantContent) {
+              addAssistantMessage(history, currentAssistantContent);
+            }
+            await saveHistory(history);
+          }
         }
       } catch (err) {
         send({ type: "error", error: String(err) });

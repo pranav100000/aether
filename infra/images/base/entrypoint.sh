@@ -24,6 +24,10 @@ for var in ANTHROPIC_API_KEY OPENAI_API_KEY PROJECT_ID; do
     fi
 done
 
+# Agent service configuration
+echo "export STORAGE_DIR=\"/home/coder/project/.aether\"" >> "$ENV_FILE"
+echo "export PROJECT_CWD=\"/home/coder/project\"" >> "$ENV_FILE"
+
 chown coder:coder "$ENV_FILE"
 chmod 600 "$ENV_FILE"
 
