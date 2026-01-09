@@ -25,7 +25,7 @@ export function CreateProjectModal({ onClose, onCreate }: CreateProjectModalProp
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [hardware, setHardware] = useState<HardwareConfig>(HARDWARE_PRESETS[0].config)
-  const [idleTimeout, setIdleTimeout] = useState<IdleTimeoutMinutes>(null)
+  const [idleTimeout, setIdleTimeout] = useState<0 | 5 | 10 | 30 | 60>(10)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -33,7 +33,7 @@ export function CreateProjectModal({ onClose, onCreate }: CreateProjectModalProp
   useEffect(() => {
     if (settings) {
       setHardware(settings.default_hardware)
-      setIdleTimeout(settings.default_idle_timeout_minutes)
+      setIdleTimeout(settings.default_idle_timeout_minutes ?? 10)
     }
   }, [settings])
 
@@ -49,13 +49,6 @@ export function CreateProjectModal({ onClose, onCreate }: CreateProjectModalProp
       setError(err instanceof Error ? err.message : "Failed to create project")
       setLoading(false)
     }
-  }
-
-  const getDefaultIdleTimeoutLabel = () => {
-    const defaultMin = settings?.default_idle_timeout_minutes
-    if (defaultMin === 0) return "Never"
-    if (defaultMin) return `${defaultMin} min`
-    return "10 min (system)"
   }
 
   return (
@@ -109,15 +102,9 @@ export function CreateProjectModal({ onClose, onCreate }: CreateProjectModalProp
             <label className="text-sm font-medium block mb-2">Idle Timeout</label>
             <select
               className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              value={idleTimeout ?? ""}
-              onChange={(e) => {
-                const val = e.target.value
-                setIdleTimeout(val === "" ? null : parseInt(val) as IdleTimeoutMinutes)
-              }}
+              value={idleTimeout}
+              onChange={(e) => setIdleTimeout(parseInt(e.target.value) as 0 | 5 | 10 | 30 | 60)}
             >
-              <option value="">
-                Default ({getDefaultIdleTimeoutLabel()})
-              </option>
               {IDLE_TIMEOUT_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}

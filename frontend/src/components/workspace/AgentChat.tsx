@@ -96,9 +96,13 @@ const agentConfig: Record<AgentType, AgentConfigItem> = {
     icon: CodeIcon,
     color: "text-blue-400",
     models: [
-      { value: "default", label: "Default" },
+      { value: "openrouter:anthropic/claude-sonnet-4", label: "Claude Sonnet 4 (OpenRouter)" },
+      { value: "openrouter:anthropic/claude-opus-4", label: "Claude Opus 4 (OpenRouter)" },
+      { value: "openrouter:openai/gpt-5.2", label: "GPT-5.2 (OpenRouter)" },
+      { value: "openrouter:google/gemini-3-pro", label: "Gemini 3 Pro (OpenRouter)" },
+      { value: "openrouter:deepseek/deepseek-r1", label: "DeepSeek R1 (OpenRouter)" },
     ],
-    defaultModel: "default",
+    defaultModel: "openrouter:anthropic/claude-sonnet-4",
   },
 }
 

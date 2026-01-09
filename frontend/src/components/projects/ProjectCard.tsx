@@ -48,6 +48,12 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
     return `${Math.floor(diff / 86400000)} days ago`
   }
 
+  const formatIdleTimeout = (minutes: number | null | undefined) => {
+    if (minutes === 0 || minutes === null || minutes === undefined) return "Never"
+    if (minutes >= 60) return `${minutes / 60}h`
+    return `${minutes} min`
+  }
+
   return (
     <div className="bg-card border border-border rounded-lg p-4 hover:border-muted-foreground/50 transition-colors">
       <div className="flex items-start justify-between mb-3">
@@ -72,6 +78,7 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
           {project.hardware.gpu_kind && ` | ${project.hardware.gpu_kind.toUpperCase()} GPU`}
         </p>
         <p>Last accessed: {formatDate(project.last_accessed_at)}</p>
+        <p>Idle timeout: {formatIdleTimeout(project.idle_timeout_minutes)}</p>
       </div>
 
       <div className="flex items-center gap-2">

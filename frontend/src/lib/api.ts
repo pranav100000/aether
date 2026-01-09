@@ -97,7 +97,6 @@ export interface CreateProjectInput {
     volume_size_gb?: number
     gpu_kind?: string | null
   }
-  use_default_hardware?: boolean
   idle_timeout_minutes?: IdleTimeoutMinutes
 }
 

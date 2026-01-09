@@ -37,18 +37,38 @@ var upgrader = websocket.Upgrader{
 }
 
 type TerminalHandler struct {
-	sshClient      *ssh.Client
-	fly            *fly.Client
-	db             *db.Client
-	authMiddleware *authmw.AuthMiddleware
+	sshClient        *ssh.Client
+	fly              *fly.Client
+	db               *db.Client
+	authMiddleware   *authmw.AuthMiddleware
+	lastAccessedMu   sync.Mutex
+	lastAccessedTime map[string]time.Time
 }
 
 func NewTerminalHandler(sshClient *ssh.Client, fly *fly.Client, db *db.Client, authMiddleware *authmw.AuthMiddleware) *TerminalHandler {
 	return &TerminalHandler{
-		sshClient:      sshClient,
-		fly:            fly,
-		db:             db,
+		sshClient:        sshClient,
+		fly:              fly,
+		db:               db,
+		lastAccessedTime: make(map[string]time.Time),
 		authMiddleware: authMiddleware,
+	}
+}
+
+// updateLastAccessedDebounced updates last_accessed_at at most once per 30 seconds per project
+func (h *TerminalHandler) updateLastAccessedDebounced(projectID string) {
+	h.lastAccessedMu.Lock()
+	lastUpdate, exists := h.lastAccessedTime[projectID]
+	now := time.Now()
+	if exists && now.Sub(lastUpdate) < 30*time.Second {
+		h.lastAccessedMu.Unlock()
+		return
+	}
+	h.lastAccessedTime[projectID] = now
+	h.lastAccessedMu.Unlock()
+
+	if err := h.db.UpdateProjectLastAccessed(context.Background(), projectID); err != nil {
+		log.Printf("Error updating last accessed for project %s: %v", projectID, err)
 	}
 }
 
@@ -252,7 +272,7 @@ func (h *TerminalHandler) readFromSSH(conn *websocket.Conn, session *ssh.Session
 
 		if n > 0 {
 			// Update last accessed (fire and forget)
-			go h.db.UpdateProjectLastAccessed(context.Background(), projectID)
+			go h.updateLastAccessedDebounced(projectID)
 
 			msg := WSMessage{
 				Type: "output",
@@ -336,7 +356,7 @@ func (h *TerminalHandler) readFromWebSocket(conn *websocket.Conn, session *ssh.S
 		}
 
 		// Update last accessed (fire and forget)
-		go h.db.UpdateProjectLastAccessed(context.Background(), projectID)
+		go h.updateLastAccessedDebounced(projectID)
 
 		switch msg.Type {
 		case "input":

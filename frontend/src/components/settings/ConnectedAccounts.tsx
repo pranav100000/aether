@@ -18,6 +18,12 @@ const PROVIDER_INFO: Record<string, { name: string; description: string; placeho
     placeholder: "sk-...",
     helpUrl: "https://platform.openai.com/api-keys",
   },
+  openrouter: {
+    name: "OpenRouter",
+    description: "Access multiple AI models through a unified API",
+    placeholder: "sk-or-...",
+    helpUrl: "https://openrouter.ai/keys",
+  },
 }
 
 interface ProviderCardProps {

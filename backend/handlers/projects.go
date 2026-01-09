@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -64,7 +65,6 @@ type CreateProjectRequest struct {
 	Name               string                 `json:"name"`
 	Description        string                 `json:"description,omitempty"`
 	Hardware           *HardwareConfigRequest `json:"hardware,omitempty"`
-	UseDefaultHardware bool                   `json:"use_default_hardware,omitempty"`
 	IdleTimeoutMinutes *int                   `json:"idle_timeout_minutes,omitempty"`
 }
 
@@ -163,34 +163,17 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Create project request: user=%s name=%q hardware=%+v useDefault=%v", userID, req.Name, req.Hardware, req.UseDefaultHardware)
+	var idleTimeoutLog string
+	if req.IdleTimeoutMinutes != nil {
+		idleTimeoutLog = fmt.Sprintf("%d", *req.IdleTimeoutMinutes)
+	} else {
+		idleTimeoutLog = "nil"
+	}
+	log.Printf("Create project request: user=%s name=%q hardware=%+v idleTimeout=%s", userID, req.Name, req.Hardware, idleTimeoutLog)
 
-	// Handle hardware config
+	// Handle hardware config - frontend always sends the actual values
 	var hwConfig *validation.HardwareConfig
-	var idleTimeoutMinutes *int
-
-	// If UseDefaultHardware is true, fetch user settings
-	if req.UseDefaultHardware {
-		userSettings, err := h.store.GetUserSettings(r.Context(), userID)
-		if err != nil {
-			log.Printf("Error getting user settings: %v", err)
-			// Fall back to preset if user settings not found
-			hwConfig = validation.GetPresetConfig("small")
-		} else {
-			hwConfig = &validation.HardwareConfig{
-				CPUKind:      userSettings.DefaultCPUKind,
-				CPUs:         userSettings.DefaultCPUs,
-				MemoryMB:     userSettings.DefaultMemoryMB,
-				VolumeSizeGB: userSettings.DefaultVolumeSizeGB,
-				GPUKind:      userSettings.DefaultGPUKind,
-			}
-			// Use user's default idle timeout if not explicitly provided
-			if req.IdleTimeoutMinutes == nil {
-				idleTimeoutMinutes = userSettings.DefaultIdleTimeoutMinutes
-			}
-		}
-	} else if req.Hardware != nil {
-		// Preset takes precedence over custom config
+	if req.Hardware != nil {
 		if req.Hardware.Preset != "" {
 			hwConfig = validation.GetPresetConfig(req.Hardware.Preset)
 		} else {
@@ -204,10 +187,8 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// If idle timeout was explicitly provided, use it
-	if req.IdleTimeoutMinutes != nil {
-		idleTimeoutMinutes = req.IdleTimeoutMinutes
-	}
+	// Idle timeout - frontend always sends the actual value
+	idleTimeoutMinutes := req.IdleTimeoutMinutes
 
 	// Validate idle timeout
 	if err := validation.ValidateIdleTimeout(idleTimeoutMinutes); err != nil {
@@ -610,28 +591,31 @@ func (h *ProjectHandler) checkIdleProjects() {
 	}
 
 	for _, p := range projects {
-		// Determine timeout for this project
-		var timeout time.Duration
-		if p.IdleTimeoutMinutes != nil {
-			if *p.IdleTimeoutMinutes == 0 {
-				// 0 means never auto-stop
-				continue
-			}
-			timeout = time.Duration(*p.IdleTimeoutMinutes) * time.Minute
-		} else {
-			// Use global default
-			timeout = h.idleTimeout
+		// Only check projects that have an explicit idle timeout set
+		if p.IdleTimeoutMinutes == nil {
+			// No idle timeout set - never auto-stop
+			continue
 		}
 
-		// Check if project is idle based on its specific timeout
+		if *p.IdleTimeoutMinutes == 0 {
+			// 0 means never auto-stop
+			continue
+		}
+
+		timeout := time.Duration(*p.IdleTimeoutMinutes) * time.Minute
+
 		if p.LastAccessedAt == nil {
 			continue
 		}
-		if time.Since(*p.LastAccessedAt) <= timeout {
+
+		idleFor := time.Since(*p.LastAccessedAt)
+		log.Printf("Idle check: project %s idle for %v, timeout %v", p.ID, idleFor.Round(time.Second), timeout)
+
+		if idleFor <= timeout {
 			continue
 		}
 
-		log.Printf("Stopping idle project: %s (idle for %v, timeout: %v)", p.ID, time.Since(*p.LastAccessedAt), timeout)
+		log.Printf("Stopping idle project: %s (idle for %v, timeout: %v)", p.ID, idleFor, timeout)
 		if p.FlyMachineID != nil && *p.FlyMachineID != "" {
 			if err := h.machines.StopMachine(*p.FlyMachineID); err != nil {
 				log.Printf("Error stopping idle machine: %v", err)

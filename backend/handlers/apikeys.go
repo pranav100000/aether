@@ -13,8 +13,9 @@ import (
 
 // Supported providers
 var supportedProviders = map[string]string{
-	"anthropic": "ANTHROPIC_API_KEY",
-	"openai":    "OPENAI_API_KEY",
+	"anthropic":  "ANTHROPIC_API_KEY",
+	"openai":     "OPENAI_API_KEY",
+	"openrouter": "OPENROUTER_API_KEY",
 }
 
 // APIKeysStore interface for database operations

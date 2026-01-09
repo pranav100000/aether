@@ -3,12 +3,12 @@ import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { HardwareSelector } from "@/components/projects/HardwareSelector"
 import { useUserSettings } from "@/hooks/useUserSettings"
-import { IDLE_TIMEOUT_OPTIONS, type HardwareConfig, type IdleTimeoutMinutes } from "@/lib/api"
+import { IDLE_TIMEOUT_OPTIONS, type HardwareConfig } from "@/lib/api"
 
 export function DefaultSettings() {
   const { settings, loading, error, update } = useUserSettings()
   const [hardware, setHardware] = useState<HardwareConfig | null>(null)
-  const [idleTimeout, setIdleTimeout] = useState<IdleTimeoutMinutes>(null)
+  const [idleTimeout, setIdleTimeout] = useState<0 | 5 | 10 | 30 | 60>(10)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveSuccess, setSaveSuccess] = useState(false)
@@ -17,7 +17,7 @@ export function DefaultSettings() {
   useEffect(() => {
     if (settings) {
       setHardware(settings.default_hardware)
-      setIdleTimeout(settings.default_idle_timeout_minutes)
+      setIdleTimeout(settings.default_idle_timeout_minutes ?? 10)
     }
   }, [settings])
 
@@ -89,13 +89,9 @@ export function DefaultSettings() {
         </div>
         <select
           className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          value={idleTimeout ?? ""}
-          onChange={(e) => {
-            const val = e.target.value
-            setIdleTimeout(val === "" ? null : parseInt(val) as IdleTimeoutMinutes)
-          }}
+          value={idleTimeout}
+          onChange={(e) => setIdleTimeout(parseInt(e.target.value) as 0 | 5 | 10 | 30 | 60)}
         >
-          <option value="">Use system default (10 minutes)</option>
           {IDLE_TIMEOUT_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>{opt.label}</option>
           ))}
