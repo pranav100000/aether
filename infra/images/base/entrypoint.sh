@@ -24,6 +24,11 @@ for var in ANTHROPIC_API_KEY OPENAI_API_KEY PROJECT_ID; do
     fi
 done
 
+# Codex SDK uses CODEX_API_KEY instead of OPENAI_API_KEY
+if [ -n "$OPENAI_API_KEY" ]; then
+    echo "export CODEX_API_KEY=\"$OPENAI_API_KEY\"" >> "$ENV_FILE"
+fi
+
 # Agent service configuration
 echo "export STORAGE_DIR=\"/home/coder/project/.aether\"" >> "$ENV_FILE"
 echo "export PROJECT_CWD=\"/home/coder/project\"" >> "$ENV_FILE"

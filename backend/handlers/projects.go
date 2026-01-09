@@ -61,9 +61,11 @@ type HardwareConfigResponse struct {
 }
 
 type CreateProjectRequest struct {
-	Name        string                 `json:"name"`
-	Description string                 `json:"description,omitempty"`
-	Hardware    *HardwareConfigRequest `json:"hardware,omitempty"`
+	Name               string                 `json:"name"`
+	Description        string                 `json:"description,omitempty"`
+	Hardware           *HardwareConfigRequest `json:"hardware,omitempty"`
+	UseDefaultHardware bool                   `json:"use_default_hardware,omitempty"`
+	IdleTimeoutMinutes *int                   `json:"idle_timeout_minutes,omitempty"`
 }
 
 type UpdateProjectRequest struct {
@@ -72,16 +74,17 @@ type UpdateProjectRequest struct {
 }
 
 type ProjectResponse struct {
-	ID             string                 `json:"id"`
-	Name           string                 `json:"name"`
-	Description    *string                `json:"description,omitempty"`
-	Status         string                 `json:"status"`
-	Hardware       HardwareConfigResponse `json:"hardware"`
-	FlyMachineID   *string                `json:"fly_machine_id,omitempty"`
-	PrivateIP      *string                `json:"private_ip,omitempty"`
-	LastAccessedAt *time.Time             `json:"last_accessed_at,omitempty"`
-	CreatedAt      time.Time              `json:"created_at"`
-	UpdatedAt      time.Time              `json:"updated_at"`
+	ID                 string                 `json:"id"`
+	Name               string                 `json:"name"`
+	Description        *string                `json:"description,omitempty"`
+	Status             string                 `json:"status"`
+	Hardware           HardwareConfigResponse `json:"hardware"`
+	IdleTimeoutMinutes *int                   `json:"idle_timeout_minutes,omitempty"`
+	FlyMachineID       *string                `json:"fly_machine_id,omitempty"`
+	PrivateIP          *string                `json:"private_ip,omitempty"`
+	LastAccessedAt     *time.Time             `json:"last_accessed_at,omitempty"`
+	CreatedAt          time.Time              `json:"created_at"`
+	UpdatedAt          time.Time              `json:"updated_at"`
 }
 
 type ProjectListResponse struct {
@@ -112,10 +115,11 @@ func projectToResponse(p *db.Project) ProjectResponse {
 			VolumeSizeGB: p.VolumeSizeGB,
 			GPUKind:      p.GPUKind,
 		},
-		FlyMachineID:   p.FlyMachineID,
-		LastAccessedAt: p.LastAccessedAt,
-		CreatedAt:      p.CreatedAt,
-		UpdatedAt:      p.UpdatedAt,
+		IdleTimeoutMinutes: p.IdleTimeoutMinutes,
+		FlyMachineID:       p.FlyMachineID,
+		LastAccessedAt:     p.LastAccessedAt,
+		CreatedAt:          p.CreatedAt,
+		UpdatedAt:          p.UpdatedAt,
 	}
 }
 
@@ -159,11 +163,34 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Create project request: user=%s name=%q hardware=%+v", userID, req.Name, req.Hardware)
+	log.Printf("Create project request: user=%s name=%q hardware=%+v useDefault=%v", userID, req.Name, req.Hardware, req.UseDefaultHardware)
 
-	// Handle hardware config - preset takes precedence over custom config
+	// Handle hardware config
 	var hwConfig *validation.HardwareConfig
-	if req.Hardware != nil {
+	var idleTimeoutMinutes *int
+
+	// If UseDefaultHardware is true, fetch user settings
+	if req.UseDefaultHardware {
+		userSettings, err := h.store.GetUserSettings(r.Context(), userID)
+		if err != nil {
+			log.Printf("Error getting user settings: %v", err)
+			// Fall back to preset if user settings not found
+			hwConfig = validation.GetPresetConfig("small")
+		} else {
+			hwConfig = &validation.HardwareConfig{
+				CPUKind:      userSettings.DefaultCPUKind,
+				CPUs:         userSettings.DefaultCPUs,
+				MemoryMB:     userSettings.DefaultMemoryMB,
+				VolumeSizeGB: userSettings.DefaultVolumeSizeGB,
+				GPUKind:      userSettings.DefaultGPUKind,
+			}
+			// Use user's default idle timeout if not explicitly provided
+			if req.IdleTimeoutMinutes == nil {
+				idleTimeoutMinutes = userSettings.DefaultIdleTimeoutMinutes
+			}
+		}
+	} else if req.Hardware != nil {
+		// Preset takes precedence over custom config
 		if req.Hardware.Preset != "" {
 			hwConfig = validation.GetPresetConfig(req.Hardware.Preset)
 		} else {
@@ -175,6 +202,20 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 				GPUKind:      req.Hardware.GPUKind,
 			}
 		}
+	}
+
+	// If idle timeout was explicitly provided, use it
+	if req.IdleTimeoutMinutes != nil {
+		idleTimeoutMinutes = req.IdleTimeoutMinutes
+	}
+
+	// Validate idle timeout
+	if err := validation.ValidateIdleTimeout(idleTimeoutMinutes); err != nil {
+		respondJSON(w, http.StatusBadRequest, map[string]any{
+			"error":  "Validation failed",
+			"errors": []validation.ValidationError{*err},
+		})
+		return
 	}
 
 	input, errs := validation.ValidateCreateProject(req.Name, req.Description, hwConfig)
@@ -196,7 +237,7 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 		GPUKind:      input.Hardware.GPUKind,
 	}
 
-	project, err := h.store.CreateProject(r.Context(), userID, input.Name, input.Description, h.baseImage, dbHwConfig)
+	project, err := h.store.CreateProject(r.Context(), userID, input.Name, input.Description, h.baseImage, dbHwConfig, idleTimeoutMinutes)
 	if err != nil {
 		log.Printf("Error creating project: %v", err)
 		respondError(w, http.StatusInternalServerError, "Failed to create project")
@@ -562,14 +603,35 @@ func (h *ProjectHandler) StartIdleChecker(interval time.Duration) {
 func (h *ProjectHandler) checkIdleProjects() {
 	ctx := context.Background()
 
-	projects, err := h.store.GetIdleRunningProjects(ctx, h.idleTimeout)
+	projects, err := h.store.GetRunningProjects(ctx)
 	if err != nil {
 		log.Printf("Error checking idle projects: %v", err)
 		return
 	}
 
 	for _, p := range projects {
-		log.Printf("Stopping idle project: %s", p.ID)
+		// Determine timeout for this project
+		var timeout time.Duration
+		if p.IdleTimeoutMinutes != nil {
+			if *p.IdleTimeoutMinutes == 0 {
+				// 0 means never auto-stop
+				continue
+			}
+			timeout = time.Duration(*p.IdleTimeoutMinutes) * time.Minute
+		} else {
+			// Use global default
+			timeout = h.idleTimeout
+		}
+
+		// Check if project is idle based on its specific timeout
+		if p.LastAccessedAt == nil {
+			continue
+		}
+		if time.Since(*p.LastAccessedAt) <= timeout {
+			continue
+		}
+
+		log.Printf("Stopping idle project: %s (idle for %v, timeout: %v)", p.ID, time.Since(*p.LastAccessedAt), timeout)
 		if p.FlyMachineID != nil && *p.FlyMachineID != "" {
 			if err := h.machines.StopMachine(*p.FlyMachineID); err != nil {
 				log.Printf("Error stopping idle machine: %v", err)

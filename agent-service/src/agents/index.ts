@@ -1,9 +1,12 @@
 import type { AgentProvider, AgentType } from "../types";
 import { ClaudeProvider } from "./claude";
+import { CodexProvider } from "./codex";
+import { OpenCodeProvider } from "./opencode";
 
-const providers: Partial<Record<AgentType, AgentProvider>> = {
+const providers: Record<AgentType, AgentProvider> = {
   claude: new ClaudeProvider(),
-  // codex and opencode will be added in Phase 3
+  codex: new CodexProvider(),
+  opencode: new OpenCodeProvider(),
 };
 
 export function getProvider(agent: AgentType): AgentProvider {

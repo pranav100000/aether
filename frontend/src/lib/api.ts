@@ -48,12 +48,35 @@ export const HARDWARE_PRESETS: HardwarePreset[] = [
   },
 ]
 
+// Idle timeout options
+export const IDLE_TIMEOUT_OPTIONS = [
+  { value: 5, label: "5 minutes" },
+  { value: 10, label: "10 minutes" },
+  { value: 30, label: "30 minutes" },
+  { value: 60, label: "1 hour" },
+  { value: 0, label: "Never (manual stop only)" },
+] as const
+
+export type IdleTimeoutMinutes = 0 | 5 | 10 | 30 | 60 | null
+
+// User Settings types
+export interface UserSettings {
+  default_hardware: HardwareConfig
+  default_idle_timeout_minutes: IdleTimeoutMinutes
+}
+
+export interface UpdateUserSettingsInput {
+  default_hardware?: HardwareConfig
+  default_idle_timeout_minutes?: IdleTimeoutMinutes
+}
+
 export interface Project {
   id: string
   name: string
   description?: string
   status: "stopped" | "starting" | "running" | "stopping" | "error"
   hardware: HardwareConfig
+  idle_timeout_minutes?: IdleTimeoutMinutes
   fly_machine_id?: string
   private_ip?: string
   preview_token?: string
@@ -74,6 +97,8 @@ export interface CreateProjectInput {
     volume_size_gb?: number
     gpu_kind?: string | null
   }
+  use_default_hardware?: boolean
+  idle_timeout_minutes?: IdleTimeoutMinutes
 }
 
 export interface UpdateProjectInput {
@@ -263,6 +288,18 @@ export const api = {
   async removeApiKey(provider: string): Promise<void> {
     return apiRequest(`/user/api-keys/${provider}`, {
       method: "DELETE",
+    })
+  },
+
+  // User Settings operations
+  async getUserSettings(): Promise<UserSettings> {
+    return apiRequest("/user/settings")
+  },
+
+  async updateUserSettings(input: UpdateUserSettingsInput): Promise<UserSettings> {
+    return apiRequest("/user/settings", {
+      method: "PUT",
+      body: JSON.stringify(input),
     })
   },
 }

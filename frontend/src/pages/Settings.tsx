@@ -1,13 +1,13 @@
 import { useState } from "react"
 import { cn } from "@/lib/utils"
 import { ConnectedAccounts } from "@/components/settings/ConnectedAccounts"
+import { DefaultSettings } from "@/components/settings/DefaultSettings"
 
-type Tab = "accounts"
+type Tab = "accounts" | "defaults"
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "accounts", label: "Connected Accounts" },
-  // Future tabs: { id: "profile", label: "Profile" },
-  // Future tabs: { id: "billing", label: "Billing" },
+  { id: "defaults", label: "Default Settings" },
 ]
 
 export function Settings() {
@@ -44,6 +44,7 @@ export function Settings() {
         {/* Content area */}
         <div className="flex-1 min-w-0">
           {activeTab === "accounts" && <ConnectedAccounts />}
+          {activeTab === "defaults" && <DefaultSettings />}
         </div>
       </div>
     </div>

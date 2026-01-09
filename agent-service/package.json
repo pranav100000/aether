@@ -5,7 +5,10 @@
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@openai/codex-sdk": "^0.79.0",
+    "@opencode-ai/sdk": "^1.1.8"
+  },
   "devDependencies": {
     "@types/bun": "^1.1.14",
     "typescript": "^5.7.2"

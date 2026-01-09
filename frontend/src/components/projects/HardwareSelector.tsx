@@ -1,20 +1,44 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { HARDWARE_PRESETS, type HardwareConfig } from "@/lib/api"
 
 interface HardwareSelectorProps {
   value: HardwareConfig
   onChange: (config: HardwareConfig) => void
+  defaultConfig?: HardwareConfig | null
 }
 
-export function HardwareSelector({ value, onChange }: HardwareSelectorProps) {
+function formatHardwareDescription(config: HardwareConfig): string {
+  const cpuDesc = `${config.cpus} ${config.cpu_kind} CPU${config.cpus > 1 ? "s" : ""}`
+  const memDesc = config.memory_mb >= 1024 ? `${config.memory_mb / 1024}GB RAM` : `${config.memory_mb}MB RAM`
+  const storageDesc = `${config.volume_size_gb}GB storage`
+  const parts = [cpuDesc, memDesc, storageDesc]
+  if (config.gpu_kind) {
+    parts.push(config.gpu_kind.toUpperCase())
+  }
+  return parts.join(", ")
+}
+
+export function HardwareSelector({ value, onChange, defaultConfig }: HardwareSelectorProps) {
   const [mode, setMode] = useState<"preset" | "custom">("preset")
-  const [selectedPreset, setSelectedPreset] = useState("small")
+  const [selectedPreset, setSelectedPreset] = useState(defaultConfig ? "default" : "small")
+
+  // Update selected preset when defaultConfig becomes available
+  useEffect(() => {
+    if (defaultConfig && selectedPreset === "small") {
+      setSelectedPreset("default")
+      onChange(defaultConfig)
+    }
+  }, [defaultConfig])
 
   const handlePresetChange = (presetId: string) => {
     setSelectedPreset(presetId)
-    const preset = HARDWARE_PRESETS.find((p) => p.id === presetId)
-    if (preset) {
-      onChange(preset.config)
+    if (presetId === "default" && defaultConfig) {
+      onChange(defaultConfig)
+    } else {
+      const preset = HARDWARE_PRESETS.find((p) => p.id === presetId)
+      if (preset) {
+        onChange(preset.config)
+      }
     }
   }
 
@@ -39,6 +63,23 @@ export function HardwareSelector({ value, onChange }: HardwareSelectorProps) {
 
       {mode === "preset" ? (
         <div className="grid grid-cols-2 gap-3">
+          {/* Default preset - shown first when user has default settings */}
+          {defaultConfig && (
+            <button
+              type="button"
+              className={`p-3 border rounded-lg text-left transition-colors ${
+                selectedPreset === "default"
+                  ? "border-primary bg-primary/10"
+                  : "border-border hover:border-primary/50"
+              }`}
+              onClick={() => handlePresetChange("default")}
+            >
+              <div className="font-medium text-sm">Default</div>
+              <div className="text-xs text-muted-foreground mt-1">
+                {formatHardwareDescription(defaultConfig)}
+              </div>
+            </button>
+          )}
           {HARDWARE_PRESETS.map((preset) => (
             <button
               key={preset.id}

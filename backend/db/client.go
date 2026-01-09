@@ -25,25 +25,26 @@ type Profile struct {
 }
 
 type Project struct {
-	ID             string     `json:"id"`
-	UserID         string     `json:"user_id"`
-	Name           string     `json:"name"`
-	Description    *string    `json:"description,omitempty"`
-	FlyMachineID   *string    `json:"fly_machine_id,omitempty"`
-	FlyVolumeID    *string    `json:"fly_volume_id,omitempty"`
-	Status         string     `json:"status"`
-	ErrorMessage   *string    `json:"error_message,omitempty"`
-	BaseImage      string     `json:"base_image"`
-	EnvVars        any        `json:"env_vars"`
-	CPUKind        string     `json:"cpu_kind"`
-	CPUs           int        `json:"cpus"`
-	MemoryMB       int        `json:"memory_mb"`
-	VolumeSizeGB   int        `json:"volume_size_gb"`
-	GPUKind        *string    `json:"gpu_kind,omitempty"`
-	PreviewToken   *string    `json:"preview_token,omitempty"`
-	LastAccessedAt *time.Time `json:"last_accessed_at,omitempty"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
+	ID                 string     `json:"id"`
+	UserID             string     `json:"user_id"`
+	Name               string     `json:"name"`
+	Description        *string    `json:"description,omitempty"`
+	FlyMachineID       *string    `json:"fly_machine_id,omitempty"`
+	FlyVolumeID        *string    `json:"fly_volume_id,omitempty"`
+	Status             string     `json:"status"`
+	ErrorMessage       *string    `json:"error_message,omitempty"`
+	BaseImage          string     `json:"base_image"`
+	EnvVars            any        `json:"env_vars"`
+	CPUKind            string     `json:"cpu_kind"`
+	CPUs               int        `json:"cpus"`
+	MemoryMB           int        `json:"memory_mb"`
+	VolumeSizeGB       int        `json:"volume_size_gb"`
+	GPUKind            *string    `json:"gpu_kind,omitempty"`
+	IdleTimeoutMinutes *int       `json:"idle_timeout_minutes,omitempty"`
+	PreviewToken       *string    `json:"preview_token,omitempty"`
+	LastAccessedAt     *time.Time `json:"last_accessed_at,omitempty"`
+	CreatedAt          time.Time  `json:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at"`
 }
 
 // HardwareConfig represents VM hardware configuration
@@ -53,6 +54,19 @@ type HardwareConfig struct {
 	MemoryMB     int
 	VolumeSizeGB int
 	GPUKind      *string
+}
+
+// UserSettings represents user default preferences
+type UserSettings struct {
+	UserID                    string    `json:"user_id"`
+	DefaultCPUKind            string    `json:"default_cpu_kind"`
+	DefaultCPUs               int       `json:"default_cpus"`
+	DefaultMemoryMB           int       `json:"default_memory_mb"`
+	DefaultVolumeSizeGB       int       `json:"default_volume_size_gb"`
+	DefaultGPUKind            *string   `json:"default_gpu_kind,omitempty"`
+	DefaultIdleTimeoutMinutes *int      `json:"default_idle_timeout_minutes,omitempty"`
+	CreatedAt                 time.Time `json:"created_at"`
+	UpdatedAt                 time.Time `json:"updated_at"`
 }
 
 func NewClient(databaseURL string) (*Client, error) {
@@ -128,7 +142,7 @@ func (c *Client) ListProjects(ctx context.Context, userID string) ([]Project, er
 		SELECT id, user_id, name, description, fly_machine_id, fly_volume_id,
 		       status, error_message, base_image, env_vars,
 		       cpu_kind, cpus, memory_mb, volume_size_gb, gpu_kind,
-		       preview_token, last_accessed_at, created_at, updated_at
+		       idle_timeout_minutes, preview_token, last_accessed_at, created_at, updated_at
 		FROM projects
 		WHERE user_id = $1
 		ORDER BY updated_at DESC
@@ -146,7 +160,7 @@ func (c *Client) ListProjects(ctx context.Context, userID string) ([]Project, er
 			&p.FlyMachineID, &p.FlyVolumeID, &p.Status, &p.ErrorMessage,
 			&p.BaseImage, &p.EnvVars,
 			&p.CPUKind, &p.CPUs, &p.MemoryMB, &p.VolumeSizeGB, &p.GPUKind,
-			&p.PreviewToken, &p.LastAccessedAt, &p.CreatedAt, &p.UpdatedAt,
+			&p.IdleTimeoutMinutes, &p.PreviewToken, &p.LastAccessedAt, &p.CreatedAt, &p.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan project: %w", err)
@@ -166,7 +180,7 @@ func (c *Client) GetProject(ctx context.Context, projectID string) (*Project, er
 		SELECT id, user_id, name, description, fly_machine_id, fly_volume_id,
 		       status, error_message, base_image, env_vars,
 		       cpu_kind, cpus, memory_mb, volume_size_gb, gpu_kind,
-		       preview_token, last_accessed_at, created_at, updated_at
+		       idle_timeout_minutes, preview_token, last_accessed_at, created_at, updated_at
 		FROM projects
 		WHERE id = $1
 	`, projectID)
@@ -177,7 +191,7 @@ func (c *Client) GetProject(ctx context.Context, projectID string) (*Project, er
 		&p.FlyMachineID, &p.FlyVolumeID, &p.Status, &p.ErrorMessage,
 		&p.BaseImage, &p.EnvVars,
 		&p.CPUKind, &p.CPUs, &p.MemoryMB, &p.VolumeSizeGB, &p.GPUKind,
-		&p.PreviewToken, &p.LastAccessedAt, &p.CreatedAt, &p.UpdatedAt,
+		&p.IdleTimeoutMinutes, &p.PreviewToken, &p.LastAccessedAt, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -194,7 +208,7 @@ func (c *Client) GetProjectByUser(ctx context.Context, projectID, userID string)
 		SELECT id, user_id, name, description, fly_machine_id, fly_volume_id,
 		       status, error_message, base_image, env_vars,
 		       cpu_kind, cpus, memory_mb, volume_size_gb, gpu_kind,
-		       preview_token, last_accessed_at, created_at, updated_at
+		       idle_timeout_minutes, preview_token, last_accessed_at, created_at, updated_at
 		FROM projects
 		WHERE id = $1 AND user_id = $2
 	`, projectID, userID)
@@ -205,7 +219,7 @@ func (c *Client) GetProjectByUser(ctx context.Context, projectID, userID string)
 		&p.FlyMachineID, &p.FlyVolumeID, &p.Status, &p.ErrorMessage,
 		&p.BaseImage, &p.EnvVars,
 		&p.CPUKind, &p.CPUs, &p.MemoryMB, &p.VolumeSizeGB, &p.GPUKind,
-		&p.PreviewToken, &p.LastAccessedAt, &p.CreatedAt, &p.UpdatedAt,
+		&p.IdleTimeoutMinutes, &p.PreviewToken, &p.LastAccessedAt, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -217,7 +231,7 @@ func (c *Client) GetProjectByUser(ctx context.Context, projectID, userID string)
 	return &p, nil
 }
 
-func (c *Client) CreateProject(ctx context.Context, userID, name string, description *string, baseImage string, hw *HardwareConfig) (*Project, error) {
+func (c *Client) CreateProject(ctx context.Context, userID, name string, description *string, baseImage string, hw *HardwareConfig, idleTimeoutMinutes *int) (*Project, error) {
 	// Use defaults if hardware config is nil
 	cpuKind := "shared"
 	cpus := 1
@@ -236,18 +250,18 @@ func (c *Client) CreateProject(ctx context.Context, userID, name string, descrip
 	var p Project
 	err := c.pool.QueryRow(ctx, `
 		INSERT INTO projects (user_id, name, description, base_image, status,
-		                      cpu_kind, cpus, memory_mb, volume_size_gb, gpu_kind)
-		VALUES ($1, $2, $3, $4, 'stopped', $5, $6, $7, $8, $9)
+		                      cpu_kind, cpus, memory_mb, volume_size_gb, gpu_kind, idle_timeout_minutes)
+		VALUES ($1, $2, $3, $4, 'stopped', $5, $6, $7, $8, $9, $10)
 		RETURNING id, user_id, name, description, fly_machine_id, fly_volume_id,
 		          status, error_message, base_image, env_vars,
 		          cpu_kind, cpus, memory_mb, volume_size_gb, gpu_kind,
-		          preview_token, last_accessed_at, created_at, updated_at
-	`, userID, name, description, baseImage, cpuKind, cpus, memoryMB, volumeSizeGB, gpuKind).Scan(
+		          idle_timeout_minutes, preview_token, last_accessed_at, created_at, updated_at
+	`, userID, name, description, baseImage, cpuKind, cpus, memoryMB, volumeSizeGB, gpuKind, idleTimeoutMinutes).Scan(
 		&p.ID, &p.UserID, &p.Name, &p.Description,
 		&p.FlyMachineID, &p.FlyVolumeID, &p.Status, &p.ErrorMessage,
 		&p.BaseImage, &p.EnvVars,
 		&p.CPUKind, &p.CPUs, &p.MemoryMB, &p.VolumeSizeGB, &p.GPUKind,
-		&p.PreviewToken, &p.LastAccessedAt, &p.CreatedAt, &p.UpdatedAt,
+		&p.IdleTimeoutMinutes, &p.PreviewToken, &p.LastAccessedAt, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create project: %w", err)
@@ -266,13 +280,13 @@ func (c *Client) UpdateProject(ctx context.Context, projectID, userID string, na
 		RETURNING id, user_id, name, description, fly_machine_id, fly_volume_id,
 		          status, error_message, base_image, env_vars,
 		          cpu_kind, cpus, memory_mb, volume_size_gb, gpu_kind,
-		          preview_token, last_accessed_at, created_at, updated_at
+		          idle_timeout_minutes, preview_token, last_accessed_at, created_at, updated_at
 	`, projectID, userID, name, description).Scan(
 		&p.ID, &p.UserID, &p.Name, &p.Description,
 		&p.FlyMachineID, &p.FlyVolumeID, &p.Status, &p.ErrorMessage,
 		&p.BaseImage, &p.EnvVars,
 		&p.CPUKind, &p.CPUs, &p.MemoryMB, &p.VolumeSizeGB, &p.GPUKind,
-		&p.PreviewToken, &p.LastAccessedAt, &p.CreatedAt, &p.UpdatedAt,
+		&p.IdleTimeoutMinutes, &p.PreviewToken, &p.LastAccessedAt, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -339,18 +353,20 @@ func (c *Client) UpdateProjectLastAccessed(ctx context.Context, projectID string
 	return nil
 }
 
-func (c *Client) GetIdleRunningProjects(ctx context.Context, timeout time.Duration) ([]Project, error) {
+// GetRunningProjects returns all running projects for idle checking
+// The caller handles per-project timeout logic
+func (c *Client) GetRunningProjects(ctx context.Context) ([]Project, error) {
 	rows, err := c.pool.Query(ctx, `
 		SELECT id, user_id, name, description, fly_machine_id, fly_volume_id,
 		       status, error_message, base_image, env_vars,
 		       cpu_kind, cpus, memory_mb, volume_size_gb, gpu_kind,
-		       preview_token, last_accessed_at, created_at, updated_at
+		       idle_timeout_minutes, preview_token, last_accessed_at, created_at, updated_at
 		FROM projects
 		WHERE status = 'running'
-		  AND last_accessed_at < now() - $1::interval
-	`, timeout.String())
+		  AND last_accessed_at IS NOT NULL
+	`)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get idle projects: %w", err)
+		return nil, fmt.Errorf("failed to get running projects: %w", err)
 	}
 	defer rows.Close()
 
@@ -362,7 +378,7 @@ func (c *Client) GetIdleRunningProjects(ctx context.Context, timeout time.Durati
 			&p.FlyMachineID, &p.FlyVolumeID, &p.Status, &p.ErrorMessage,
 			&p.BaseImage, &p.EnvVars,
 			&p.CPUKind, &p.CPUs, &p.MemoryMB, &p.VolumeSizeGB, &p.GPUKind,
-			&p.PreviewToken, &p.LastAccessedAt, &p.CreatedAt, &p.UpdatedAt,
+			&p.IdleTimeoutMinutes, &p.PreviewToken, &p.LastAccessedAt, &p.CreatedAt, &p.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan project: %w", err)
@@ -380,7 +396,7 @@ func (c *Client) GetProjectByIDPrefix(ctx context.Context, prefix string) (*Proj
 		SELECT id, user_id, name, description, fly_machine_id, fly_volume_id,
 		       status, error_message, base_image, env_vars,
 		       cpu_kind, cpus, memory_mb, volume_size_gb, gpu_kind,
-		       preview_token, last_accessed_at, created_at, updated_at
+		       idle_timeout_minutes, preview_token, last_accessed_at, created_at, updated_at
 		FROM projects
 		WHERE id::text LIKE $1 || '%'
 		  AND status = 'running'
@@ -393,7 +409,7 @@ func (c *Client) GetProjectByIDPrefix(ctx context.Context, prefix string) (*Proj
 		&p.FlyMachineID, &p.FlyVolumeID, &p.Status, &p.ErrorMessage,
 		&p.BaseImage, &p.EnvVars,
 		&p.CPUKind, &p.CPUs, &p.MemoryMB, &p.VolumeSizeGB, &p.GPUKind,
-		&p.PreviewToken, &p.LastAccessedAt, &p.CreatedAt, &p.UpdatedAt,
+		&p.IdleTimeoutMinutes, &p.PreviewToken, &p.LastAccessedAt, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -440,4 +456,65 @@ func (c *Client) SetUserAPIKeys(ctx context.Context, userID string, encrypted *s
 		return ErrNotFound
 	}
 	return nil
+}
+
+// ============================================
+// User Settings Methods
+// ============================================
+
+// GetUserSettings retrieves user settings (creates with defaults if not exists)
+func (c *Client) GetUserSettings(ctx context.Context, userID string) (*UserSettings, error) {
+	row := c.pool.QueryRow(ctx, `
+		SELECT user_id, default_cpu_kind, default_cpus, default_memory_mb,
+		       default_volume_size_gb, default_gpu_kind, default_idle_timeout_minutes,
+		       created_at, updated_at
+		FROM user_settings
+		WHERE user_id = $1
+	`, userID)
+
+	var s UserSettings
+	err := row.Scan(
+		&s.UserID, &s.DefaultCPUKind, &s.DefaultCPUs, &s.DefaultMemoryMB,
+		&s.DefaultVolumeSizeGB, &s.DefaultGPUKind, &s.DefaultIdleTimeoutMinutes,
+		&s.CreatedAt, &s.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to get user settings: %w", err)
+	}
+
+	return &s, nil
+}
+
+// UpdateUserSettings updates user default settings
+func (c *Client) UpdateUserSettings(ctx context.Context, userID string, settings *UserSettings) (*UserSettings, error) {
+	var s UserSettings
+	err := c.pool.QueryRow(ctx, `
+		UPDATE user_settings
+		SET default_cpu_kind = $2,
+		    default_cpus = $3,
+		    default_memory_mb = $4,
+		    default_volume_size_gb = $5,
+		    default_gpu_kind = $6,
+		    default_idle_timeout_minutes = $7
+		WHERE user_id = $1
+		RETURNING user_id, default_cpu_kind, default_cpus, default_memory_mb,
+		          default_volume_size_gb, default_gpu_kind, default_idle_timeout_minutes,
+		          created_at, updated_at
+	`, userID, settings.DefaultCPUKind, settings.DefaultCPUs, settings.DefaultMemoryMB,
+		settings.DefaultVolumeSizeGB, settings.DefaultGPUKind, settings.DefaultIdleTimeoutMinutes).Scan(
+		&s.UserID, &s.DefaultCPUKind, &s.DefaultCPUs, &s.DefaultMemoryMB,
+		&s.DefaultVolumeSizeGB, &s.DefaultGPUKind, &s.DefaultIdleTimeoutMinutes,
+		&s.CreatedAt, &s.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to update user settings: %w", err)
+	}
+
+	return &s, nil
 }

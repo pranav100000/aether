@@ -4,15 +4,20 @@ import { Spinner } from "@/components/ui/spinner"
 import { ProjectCard } from "@/components/projects/ProjectCard"
 import { CreateProjectModal } from "@/components/projects/CreateProjectModal"
 import { useProjects } from "@/hooks/useProjects"
-import type { HardwareConfig } from "@/lib/api"
+import type { HardwareConfig, IdleTimeoutMinutes } from "@/lib/api"
 
 export function Projects() {
   const { projects, loading, error, createProject, deleteProject, refresh } =
     useProjects()
   const [showCreate, setShowCreate] = useState(false)
 
-  const handleCreate = async (name: string, description?: string, hardware?: HardwareConfig) => {
-    await createProject({ name, description, hardware })
+  const handleCreate = async (
+    name: string,
+    description?: string,
+    hardware?: HardwareConfig,
+    idleTimeoutMinutes?: IdleTimeoutMinutes
+  ) => {
+    await createProject({ name, description, hardware, idle_timeout_minutes: idleTimeoutMinutes })
   }
 
   return (

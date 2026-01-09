@@ -163,6 +163,13 @@ func main() {
 				r.Delete("/{provider}", apiKeysHandler.Remove)
 			})
 		}
+
+		// User settings routes
+		userSettingsHandler := handlers.NewUserSettingsHandler(dbClient)
+		r.Route("/user/settings", func(r chi.Router) {
+			r.Get("/", userSettingsHandler.Get)
+			r.Put("/", userSettingsHandler.Update)
+		})
 	})
 
 	// Terminal endpoint handles its own auth (WebSocket subprotocol)

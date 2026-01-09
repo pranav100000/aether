@@ -63,44 +63,33 @@ A Bun CLI for running AI coding agents (Claude Code, Codex, OpenCode) inside pro
 
 ### Claude Code
 
-**SDK**: `@anthropic-ai/claude-agent-sdk`
+**Integration**: Claude CLI with streaming JSON output
 
-```typescript
-import { query } from "@anthropic-ai/claude-agent-sdk";
-
-for await (const message of query({
-  prompt: "Fix the bug in auth.ts",
-  options: {
-    allowedTools: ["Read", "Edit", "Bash", "Glob", "Grep"],
-    permissionMode: "default"
-  }
-})) {
-  console.log(JSON.stringify(message));  // Structured output
-}
+```bash
+claude --print --output-format stream-json --verbose --include-partial-messages "<prompt>"
 ```
 
-**Built-in Tools**: Read, Write, Edit, Bash, Glob, Grep, WebSearch, WebFetch
+The CLI outputs newline-delimited JSON messages that we parse and forward to the frontend. Conversation history is managed by our service (not Claude's session management) by prepending previous messages to each prompt.
+
+**Built-in Tools**: Read, Write, Edit, Bash, Glob, Grep, WebSearch, WebFetch, Task, TodoWrite
+
+**Permission Modes**: `default`, `acceptEdits`, `plan`, `bypassPermissions`
 
 ### Codex (OpenAI)
 
-**SDK**: `openai` (Responses API with code execution)
+**Integration**: Codex CLI with streaming JSON output
 
-```typescript
-import OpenAI from "openai";
-
-const openai = new OpenAI();
-const response = await openai.responses.create({
-  model: "codex",
-  input: prompt,
-  tools: [{ type: "code_interpreter" }, { type: "file_search" }],
-});
+```bash
+codex --json --non-interactive "<prompt>"
 ```
 
-**Built-in Tools**: Code Interpreter, File Search
+Similar CLI-based approach to Claude. The Codex CLI handles tool execution internally.
+
+**Built-in Tools**: Code execution, File operations, Shell commands
 
 ### OpenCode
 
-**Integration**: CLI wrapper or direct API (TBD based on their SDK availability)
+**Integration**: CLI wrapper (TBD based on their CLI availability)
 
 ---
 
@@ -132,19 +121,23 @@ Go Backend                    Agent CLI
 
 ```typescript
 interface ClientMessage {
-  type: 'prompt' | 'approve' | 'reject' | 'abort' | 'config'
+  type: 'prompt' | 'approve' | 'reject' | 'abort' | 'settings'
 
   // For 'prompt'
   prompt?: string
+  settings?: AgentSettings     // Optional inline settings with prompt
 
   // For 'approve' / 'reject'
   toolId?: string
 
-  // For 'config' - runtime settings
-  config?: {
-    autoApprove?: boolean      // Auto-approve tool calls
-    model?: string             // Model override
-  }
+  // For 'settings' - runtime settings
+  settings?: AgentSettings
+}
+
+interface AgentSettings {
+  model?: string                          // Model override (e.g., 'sonnet', 'opus')
+  permissionMode?: PermissionMode         // default | acceptEdits | plan | bypassPermissions
+  extendedThinking?: boolean              // Enable extended thinking mode
 }
 ```
 
@@ -152,7 +145,7 @@ interface ClientMessage {
 
 ```typescript
 interface AgentMessage {
-  type: 'init' | 'text' | 'tool_use' | 'tool_result' | 'thinking' | 'error' | 'done'
+  type: 'init' | 'history' | 'text' | 'tool_use' | 'tool_result' | 'thinking' | 'error' | 'done'
 
   // Which agent is responding
   agent: 'claude' | 'codex' | 'opencode'
@@ -160,7 +153,10 @@ interface AgentMessage {
   // Session info (type: 'init')
   sessionId?: string
 
-  // Text content (type: 'text')
+  // Previous messages (type: 'history') - sent on reconnect
+  history?: StoredMessage[]
+
+  // Text content (type: 'text' | 'thinking')
   content?: string
   streaming?: boolean
 
@@ -169,25 +165,37 @@ interface AgentMessage {
     id: string
     name: string
     input: Record<string, unknown>
-    status: 'pending' | 'approved' | 'rejected' | 'running' | 'complete'
+    status: 'pending' | 'running' | 'complete'
   }
 
   // Tool result (type: 'tool_result')
   toolId?: string
   result?: string
-
-  // Thinking indicator (type: 'thinking')
-  thinking?: boolean
+  error?: string
 
   // Error (type: 'error')
   error?: string
-  code?: string  // 'rate_limit' | 'auth' | 'tool_error' | 'unknown'
 
   // Usage stats (type: 'done')
   usage?: {
     inputTokens: number
     outputTokens: number
     cost: number
+  }
+}
+
+interface StoredMessage {
+  id: string
+  timestamp: number
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  tool?: {
+    id: string
+    name: string
+    input: Record<string, unknown>
+    status: string
+    result?: string
+    error?: string
   }
 }
 ```
@@ -199,13 +207,18 @@ interface AgentMessage {
 Unified interface for all agents:
 
 ```typescript
-// src/agents/base.ts
+// src/types.ts
 export type AgentType = 'claude' | 'codex' | 'opencode'
+
+export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions'
 
 export interface AgentConfig {
   cwd: string
   autoApprove: boolean
   model?: string
+  permissionMode?: PermissionMode
+  extendedThinking?: boolean
+  conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>
 }
 
 export interface AgentProvider {
@@ -226,6 +239,8 @@ export interface AgentProvider {
 }
 ```
 
+**Conversation History**: Each provider receives the full conversation history and is responsible for providing context to the underlying agent. For CLI-based agents (Claude, Codex), this is done by prepending the history to the prompt.
+
 ---
 
 ## File Structure
@@ -234,20 +249,37 @@ export interface AgentProvider {
 agent-service/
 ├── src/
 │   ├── cli.ts                # Main CLI entry point (stdin/stdout)
-│   ├── types.ts              # Shared types
+│   ├── types.ts              # Shared types (AgentConfig, AgentMessage, etc.)
+│   ├── storage.ts            # Session persistence (filesystem-based)
 │   │
-│   ├── agents/
-│   │   ├── base.ts           # AgentProvider interface
-│   │   ├── claude.ts         # Claude Agent SDK integration
-│   │   ├── codex.ts          # OpenAI Codex integration
-│   │   └── opencode.ts       # OpenCode integration
-│   │
-│   └── utils/
-│       └── readline.ts       # JSON line reader for stdin
+│   └── agents/
+│       ├── index.ts          # Provider registry + getProvider()
+│       ├── claude.ts         # Claude CLI integration
+│       ├── codex.ts          # Codex CLI integration
+│       └── opencode.ts       # OpenCode integration
 │
 ├── package.json
 └── tsconfig.json
 ```
+
+### Session Storage
+
+Sessions are persisted to the filesystem at `{STORAGE_DIR}/{agent}/`:
+
+```
+/home/coder/project/.aether/
+├── claude/
+│   ├── current              # Current session ID
+│   └── {sessionId}.json     # Session history
+├── codex/
+│   └── ...
+└── opencode/
+    └── ...
+```
+
+Environment variables:
+- `STORAGE_DIR`: Base directory for session storage (default: `/home/coder/project/.aether`)
+- `PROJECT_CWD`: Working directory for agent operations (default: `/home/coder/project`)
 
 ---
 
@@ -360,28 +392,28 @@ function useAgentConnection(options: UseAgentConnectionOptions) {
 
 ## Implementation Phases
 
-### [Phase 1: Claude MVP](./agent-service/phase-1-claude-mvp.md)
-Get Claude Code working end-to-end with the Agent SDK.
+### [Phase 1: Claude MVP](./agent-service/phase-1-claude-mvp.md) ✅
+Get Claude Code working end-to-end.
 - Agent CLI with stdin/stdout JSON protocol
-- ClaudeProvider using Agent SDK
+- ClaudeProvider using Claude CLI (`--print --output-format stream-json`)
+- Session persistence with conversation history
 - Go backend agent handler (SSH proxy)
 - Bundle into VM image
 
-### [Phase 2: Frontend Integration](./agent-service/phase-2-frontend.md)
+### [Phase 2: Frontend Integration](./agent-service/phase-2-frontend.md) ✅
 Connect frontend to agent via Go backend.
 - Implement `useAgentConnection` hook
 - Update `AgentWidget` component
-- Tool approval UI
+- Settings UI (model, permission mode, extended thinking)
 
-### [Phase 3: Multi-Agent](./agent-service/phase-3-multi-agent.md)
+### [Phase 3: Multi-Agent](./agent-service/phase-3-multi-agent.md) 🔄
 Add Codex and OpenCode support.
-- CodexProvider (OpenAI API)
+- CodexProvider using Codex CLI
 - OpenCodeProvider
 - Agent selector UI
 
 ### [Phase 4: Production](./agent-service/phase-4-production.md)
 Production hardening.
-- Session persistence (optional)
 - Reconnection handling
 - Rate limiting
 - Usage tracking

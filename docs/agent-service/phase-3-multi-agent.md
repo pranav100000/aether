@@ -2,21 +2,19 @@
 
 ## Goal
 
-Add Codex and OpenCode support alongside Claude. Create a unified agent abstraction.
+Add Codex and OpenCode support alongside Claude.
 
 ## Prerequisites
 
-- Phase 1 complete (Claude working)
-- Phase 2 complete (Frontend integrated)
+- Phase 1 complete (Claude working) ✅
+- Phase 2 complete (Frontend integrated) ✅
 
 ## Scope
 
-- Codex provider implementation (OpenAI API)
-- OpenCode provider implementation
-- Agent selection via CLI argument
+- Codex provider implementation using `@openai/codex-sdk`
+- OpenCode provider implementation (TBD)
+- Agent selection via CLI argument (already implemented)
 - Per-agent settings
-
-Note: The `AgentProvider` interface is already defined in Phase 1. This phase implements the additional providers.
 
 ---
 
@@ -42,36 +40,22 @@ Project VM
 
 ## Agent Provider Interface
 
+Already implemented in types.ts:
+
 ```typescript
-// src/agents/base.ts
+// src/types.ts
 
 export type AgentType = 'claude' | 'codex' | 'opencode'
+
+export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions'
 
 export interface AgentConfig {
   cwd: string
   autoApprove: boolean
   model?: string
-}
-
-export interface AgentMessage {
-  type: 'init' | 'text' | 'tool_use' | 'tool_result' | 'thinking' | 'done' | 'error'
-  sessionId?: string
-  content?: string
-  streaming?: boolean
-  tool?: {
-    id: string
-    name: string
-    input: Record<string, unknown>
-    status: 'pending' | 'running' | 'complete'
-  }
-  toolId?: string
-  result?: string
-  usage?: {
-    inputTokens: number
-    outputTokens: number
-    cost: number
-  }
-  error?: string
+  permissionMode?: PermissionMode
+  extendedThinking?: boolean
+  conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>
 }
 
 export interface AgentProvider {
@@ -94,431 +78,258 @@ export interface AgentProvider {
 
 ---
 
-## Claude Provider
+## Claude Provider (Implemented ✅)
 
-Already implemented in Phase 1. See [phase-1-claude-mvp.md](./phase-1-claude-mvp.md) for the full implementation.
+Uses the Claude CLI with streaming JSON output:
 
 ```typescript
-// src/agents/claude.ts (summary)
-
-import { query } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentProvider, AgentConfig, AgentMessage } from "./base";
+// src/agents/claude.ts
 
 export class ClaudeProvider implements AgentProvider {
   readonly name = "claude" as const;
-  private abortController?: AbortController;
+  private currentProc?: ReturnType<typeof Bun.spawn>;
 
   isConfigured(): boolean {
     return !!process.env.ANTHROPIC_API_KEY;
   }
 
   async *query(prompt: string, config: AgentConfig): AsyncIterable<AgentMessage> {
-    this.abortController = new AbortController();
+    const args = [
+      "claude",
+      "--print",
+      "--output-format", "stream-json",
+      "--verbose",
+      "--include-partial-messages",
+    ];
 
-    for await (const msg of query({
-      prompt,
-      options: {
-        allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
-        permissionMode: config.autoApprove ? "bypassPermissions" : "default",
-      },
-      cwd: config.cwd,
-      signal: this.abortController.signal,
-    })) {
-      yield this.mapMessage(msg, config);
+    if (config.model) {
+      args.push("--model", config.model);
     }
+
+    if (config.permissionMode) {
+      args.push("--permission-mode", config.permissionMode);
+    }
+
+    // Prepend conversation history to prompt
+    let fullPrompt = prompt;
+    if (config.conversationHistory?.length) {
+      const historyText = config.conversationHistory
+        .map((msg) => `${msg.role === "user" ? "Human" : "Assistant"}: ${msg.content}`)
+        .join("\n\n");
+      fullPrompt = `<conversation_history>\n${historyText}\n</conversation_history>\n\nHuman: ${prompt}`;
+    }
+
+    args.push(fullPrompt);
+
+    const proc = Bun.spawn(args, { cwd: config.cwd, stdout: "pipe", stderr: "pipe" });
+    this.currentProc = proc;
+
+    // Parse streaming JSON output...
+    // (see actual implementation for full message mapping)
   }
 
   abort(): void {
-    this.abortController?.abort();
+    this.currentProc?.kill();
   }
 }
 ```
 
 ---
 
-## Codex Provider
+## Codex Provider (To Implement)
+
+Uses the `@openai/codex-sdk` TypeScript library with streaming events:
 
 ```typescript
 // src/agents/codex.ts
 
-import OpenAI from 'openai'
-import type { AgentProvider, AgentConfig, AgentMessage } from './base'
+import { Codex } from "@openai/codex-sdk";
+import type { AgentProvider, AgentConfig, AgentMessage } from "../types";
 
 export class CodexProvider implements AgentProvider {
-  readonly name = 'codex' as const
-  private client: OpenAI | null = null
-  private abortController?: AbortController
-  private currentRunId?: string
-  private currentThreadId?: string
+  readonly name = "codex" as const;
+  private codex: Codex | null = null;
+  private currentThread: ReturnType<Codex["startThread"]> | null = null;
 
   isConfigured(): boolean {
-    return !!process.env.OPENAI_API_KEY
+    return !!process.env.OPENAI_API_KEY;
   }
 
-  private getClient(): OpenAI {
-    if (!this.client) {
-      this.client = new OpenAI({
-        apiKey: process.env.OPENAI_API_KEY,
-      })
+  private getCodex(): Codex {
+    if (!this.codex) {
+      this.codex = new Codex();
     }
-    return this.client
+    return this.codex;
   }
 
   async *query(prompt: string, config: AgentConfig): AsyncIterable<AgentMessage> {
-    const client = this.getClient()
-    this.abortController = new AbortController()
+    const codex = this.getCodex();
 
-    // Create a thread for this conversation
-    const thread = await client.beta.threads.create()
-    this.currentThreadId = thread.id
+    // Start or resume thread
+    const thread = codex.startThread({
+      workingDirectory: config.cwd,
+    });
+    this.currentThread = thread;
 
-    // Add message to thread
-    await client.beta.threads.messages.create(thread.id, {
-      role: 'user',
-      content: prompt,
-    })
+    // Build prompt with conversation history if available
+    let fullPrompt = prompt;
+    if (config.conversationHistory?.length) {
+      const historyText = config.conversationHistory
+        .map((msg) => `${msg.role === "user" ? "Human" : "Assistant"}: ${msg.content}`)
+        .join("\n\n");
+      fullPrompt = `<conversation_history>\n${historyText}\n</conversation_history>\n\nHuman: ${prompt}`;
+    }
 
-    // Create and stream run
-    const run = await client.beta.threads.runs.create(thread.id, {
-      model: config.model || 'gpt-4o',
-      tools: [
-        { type: 'code_interpreter' },
-        { type: 'file_search' },
-      ],
-    })
-    this.currentRunId = run.id
+    // Use runStreamed for real-time events
+    const { events } = await thread.runStreamed(fullPrompt);
 
-    // Poll for completion
-    let status = run.status
-    while (status === 'queued' || status === 'in_progress') {
-      if (this.abortController.signal.aborted) {
-        await client.beta.threads.runs.cancel(thread.id, run.id)
-        return
+    for await (const event of events) {
+      const mapped = this.mapEvent(event, config);
+      if (mapped) {
+        yield mapped;
       }
+    }
 
-      yield { type: 'thinking' }
+    yield { type: "done" };
+  }
 
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      const updatedRun = await client.beta.threads.runs.retrieve(thread.id, run.id)
-      status = updatedRun.status
+  private mapEvent(
+    event: { type: string; item?: unknown; usage?: unknown },
+    config: AgentConfig
+  ): AgentMessage | null {
+    switch (event.type) {
+      case "item.completed": {
+        const item = event.item as Record<string, unknown>;
 
-      // Handle tool calls that need action
-      if (status === 'requires_action' && updatedRun.required_action) {
-        const toolCalls = updatedRun.required_action.submit_tool_outputs.tool_calls
+        // Handle text output
+        if (item.type === "message" && item.role === "assistant") {
+          const content = item.content as Array<{ type: string; text?: string }>;
+          for (const block of content) {
+            if (block.type === "text" && block.text) {
+              return { type: "text", content: block.text, streaming: false };
+            }
+          }
+        }
 
-        for (const tc of toolCalls) {
-          yield {
-            type: 'tool_use',
+        // Handle tool use
+        if (item.type === "function_call") {
+          return {
+            type: "tool_use",
             tool: {
-              id: tc.id,
-              name: tc.function.name,
-              input: JSON.parse(tc.function.arguments),
-              status: 'running', // Codex auto-approves
+              id: item.call_id as string,
+              name: item.name as string,
+              input: JSON.parse(item.arguments as string),
+              status: config.autoApprove ? "running" : "pending",
             },
-          }
+          };
         }
-      }
-    }
 
-    if (status === 'completed') {
-      const messages = await client.beta.threads.messages.list(thread.id, {
-        order: 'desc',
-        limit: 1,
-      })
-
-      const lastMessage = messages.data[0]
-      if (lastMessage?.role === 'assistant') {
-        for (const content of lastMessage.content) {
-          if (content.type === 'text') {
-            yield { type: 'text', content: content.text.value }
-          }
+        // Handle tool result
+        if (item.type === "function_call_output") {
+          return {
+            type: "tool_result",
+            toolId: item.call_id as string,
+            result: item.output as string,
+          };
         }
+
+        return null;
       }
 
-      yield { type: 'done' }
-    } else if (status === 'failed') {
-      yield { type: 'error', error: 'Codex run failed' }
-    }
+      case "turn.completed": {
+        const usage = event.usage as { input_tokens?: number; output_tokens?: number } | undefined;
+        if (usage) {
+          return {
+            type: "done",
+            usage: {
+              inputTokens: usage.input_tokens || 0,
+              outputTokens: usage.output_tokens || 0,
+              cost: 0, // Calculate based on model pricing
+            },
+          };
+        }
+        return null;
+      }
 
-    // Clean up thread
-    await client.beta.threads.del(thread.id).catch(() => {})
+      default:
+        return null;
+    }
   }
 
   abort(): void {
-    this.abortController?.abort()
-    // Also cancel the run if in progress
-    if (this.currentThreadId && this.currentRunId) {
-      this.getClient().beta.threads.runs
-        .cancel(this.currentThreadId, this.currentRunId)
-        .catch(() => {})
-    }
+    // The SDK doesn't expose a direct abort method
+    // Thread will be cleaned up on next run
+    this.currentThread = null;
   }
 }
 ```
 
+### Codex SDK Installation
+
+```bash
+npm install @openai/codex-sdk
+```
+
+### Codex SDK Event Types
+
+The SDK uses `runStreamed()` which yields events:
+
+- `item.completed` - A message, tool call, or tool result is complete
+- `turn.completed` - The entire turn is done, includes usage stats
+
 ---
 
-## OpenCode Provider
+## OpenCode Provider (TBD)
+
+OpenCode integration will be determined based on their CLI/SDK availability.
 
 ```typescript
-// src/agents/opencode.ts
-
-import type { AgentProvider, AgentConfig, AgentMessage } from './base'
+// src/agents/opencode.ts (placeholder)
 
 export class OpenCodeProvider implements AgentProvider {
-  readonly name = 'opencode' as const
-  private abortController?: AbortController
-  private currentProc?: ReturnType<typeof Bun.spawn>
+  readonly name = "opencode" as const;
 
   isConfigured(): boolean {
-    // Check if opencode CLI is available or API key is set
-    return !!process.env.OPENCODE_API_KEY
+    return !!process.env.OPENCODE_API_KEY;
   }
 
   async *query(prompt: string, config: AgentConfig): AsyncIterable<AgentMessage> {
-    this.abortController = new AbortController()
-
-    // Use CLI with JSON output
-    const proc = Bun.spawn(['opencode', '--json', '--non-interactive'], {
-      cwd: config.cwd,
-      stdin: 'pipe',
-      stdout: 'pipe',
-      stderr: 'pipe',
-    })
-    this.currentProc = proc
-
-    // Send prompt
-    proc.stdin.write(prompt + '\n')
-    proc.stdin.end()
-
-    // Stream output
-    const reader = proc.stdout.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-
-    try {
-      while (true) {
-        if (this.abortController.signal.aborted) {
-          proc.kill()
-          return
-        }
-
-        const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-
-        // Parse JSON lines
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
-
-        for (const line of lines) {
-          if (!line.trim()) continue
-
-          try {
-            const msg = JSON.parse(line)
-            yield this.mapMessage(msg)
-          } catch {
-            // Plain text output
-            yield { type: 'text', content: line }
-          }
-        }
-      }
-
-      // Handle remaining buffer
-      if (buffer.trim()) {
-        yield { type: 'text', content: buffer }
-      }
-
-      yield { type: 'done' }
-    } finally {
-      reader.releaseLock()
-    }
+    yield { type: "error", error: "OpenCode provider not yet implemented" };
   }
 
-  private mapMessage(msg: Record<string, unknown>): AgentMessage {
-    // Map OpenCode JSON format to our format
-    if (msg.type === 'text') {
-      return { type: 'text', content: msg.content as string }
-    }
-
-    if (msg.type === 'tool') {
-      return {
-        type: 'tool_use',
-        tool: {
-          id: msg.id as string,
-          name: msg.name as string,
-          input: msg.input as Record<string, unknown>,
-          status: 'running',
-        },
-      }
-    }
-
-    return { type: 'text', content: JSON.stringify(msg) }
-  }
-
-  abort(): void {
-    this.abortController?.abort()
-    this.currentProc?.kill()
-  }
+  abort(): void {}
 }
 ```
 
 ---
 
-## Provider Registry
+## Provider Registry (Already Implemented)
 
 ```typescript
 // src/agents/index.ts
 
-import type { AgentProvider, AgentType } from './base'
-import { ClaudeProvider } from './claude'
-import { CodexProvider } from './codex'
-import { OpenCodeProvider } from './opencode'
+import type { AgentProvider, AgentType } from "../types";
+import { ClaudeProvider } from "./claude";
+import { CodexProvider } from "./codex";
+import { OpenCodeProvider } from "./opencode";
 
-const providers: Partial<Record<AgentType, AgentProvider>> = {
+const providers: Record<AgentType, AgentProvider> = {
   claude: new ClaudeProvider(),
   codex: new CodexProvider(),
   opencode: new OpenCodeProvider(),
-}
+};
 
 export function getProvider(agent: AgentType): AgentProvider {
-  const provider = providers[agent]
+  const provider = providers[agent];
   if (!provider) {
-    throw new Error(`Unknown agent: ${agent}`)
+    throw new Error(`Unknown agent: ${agent}`);
   }
   if (!provider.isConfigured()) {
-    throw new Error(`Agent ${agent} is not configured (missing API key)`)
+    throw new Error(`Agent ${agent} is not configured (missing API key)`);
   }
-  return provider
-}
-
-export * from './base'
-```
-
----
-
-## Updated CLI
-
-The CLI entry point handles all agents via the same interface:
-
-```typescript
-// src/cli.ts
-
-import { getProvider } from "./agents";
-import type { AgentType, ClientMessage, AgentMessage } from "./types";
-
-const agent = process.argv[2] as AgentType;
-
-if (!agent) {
-  console.error("Usage: bun cli.ts <agent>");
-  process.exit(1);
-}
-
-const provider = getProvider(agent);  // Works for claude, codex, or opencode
-
-// Send init message
-const sessionId = crypto.randomUUID();
-send({ type: "init", agent, sessionId });
-
-// Read JSON lines from stdin
-const decoder = new TextDecoder();
-for await (const chunk of Bun.stdin.stream()) {
-  const lines = decoder.decode(chunk).split("\n").filter(Boolean);
-
-  for (const line of lines) {
-    try {
-      const msg: ClientMessage = JSON.parse(line);
-      await handleMessage(msg);
-    } catch (err) {
-      send({ type: "error", agent, error: String(err) });
-    }
-  }
-}
-
-async function handleMessage(msg: ClientMessage) {
-  switch (msg.type) {
-    case "prompt":
-      for await (const agentMsg of provider.query(msg.prompt!, {
-        cwd: "/home/coder/project",
-        autoApprove: false,
-      })) {
-        send({ ...agentMsg, agent });
-      }
-      break;
-
-    case "abort":
-      provider.abort();
-      send({ type: "done", agent });
-      break;
-  }
-}
-
-function send(msg: AgentMessage & { agent: AgentType }) {
-  console.log(JSON.stringify(msg));
+  return provider;
 }
 ```
-
----
-
-## Frontend Updates
-
-### Agent Selector
-
-```typescript
-// frontend/src/components/workspace/AgentWidget/AgentSelector.tsx
-
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-
-type AgentType = 'claude' | 'codex' | 'opencode'
-
-interface AgentSelectorProps {
-  value: AgentType
-  onChange: (agent: AgentType) => void
-  availableAgents: AgentType[]
-}
-
-const agentInfo: Record<AgentType, { name: string; icon: string }> = {
-  claude: { name: 'Claude Code', icon: '🤖' },
-  codex: { name: 'Codex', icon: '🧠' },
-  opencode: { name: 'OpenCode', icon: '💻' },
-}
-
-export function AgentSelector({ value, onChange, availableAgents }: AgentSelectorProps) {
-  return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="w-[160px]">
-        <SelectValue>
-          {agentInfo[value].icon} {agentInfo[value].name}
-        </SelectValue>
-      </SelectTrigger>
-      <SelectContent>
-        {availableAgents.map(agent => (
-          <SelectItem key={agent} value={agent}>
-            {agentInfo[agent].icon} {agentInfo[agent].name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  )
-}
-```
-
-### useAgentConnection
-
-The hook connects to Go backend (same origin as terminal), passing the selected agent:
-
-```typescript
-function getAgentUrl(projectId: string, agent: AgentType): string {
-  // Use same backend as terminal - just different endpoint
-  const backendUrl = import.meta.env.VITE_API_URL || ''
-  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const host = backendUrl.replace(/^https?:\/\//, '') || window.location.host
-  return `${wsProtocol}//${host}/projects/${projectId}/agent/${agent}`
-}
-```
-
-**Key point**: No new environment variable needed. Frontend connects to existing Go backend.
 
 ---
 
@@ -528,24 +339,53 @@ function getAgentUrl(projectId: string, agent: AgentType): string {
 # Claude
 ANTHROPIC_API_KEY=sk-ant-...
 
-# Codex
+# Codex (SDK uses CODEX_API_KEY, set automatically from OPENAI_API_KEY in entrypoint.sh)
 OPENAI_API_KEY=sk-...
+CODEX_API_KEY=sk-...  # Auto-set from OPENAI_API_KEY
 
-# OpenCode
+# OpenCode (TBD)
 OPENCODE_API_KEY=...
+
+# Storage configuration
+STORAGE_DIR=/home/coder/project/.aether
+PROJECT_CWD=/home/coder/project
 ```
 
-Note: Go backend handles auth. These keys are in the VM environment.
+---
+
+## Implementation Steps
+
+### 1. Install Codex SDK
+
+```bash
+cd agent-service
+bun add @openai/codex-sdk
+```
+
+### 2. Create Codex Provider
+
+Create `src/agents/codex.ts` with the implementation above.
+
+### 3. Test Locally
+
+```bash
+export OPENAI_API_KEY="sk-..."
+echo '{"type":"prompt","prompt":"What files are in the current directory?"}' | bun ./src/cli.ts codex
+```
+
+### 4. Update VM Image
+
+Ensure `@openai/codex-sdk` is installed in the VM image.
 
 ---
 
 ## Success Criteria
 
-1. All three agents connect and respond
-2. Unified message format across agents
-3. Agent selector works in UI
-4. Per-agent tool handling works
-5. Error handling for unavailable agents
+1. Codex agent connects and responds to prompts
+2. Streaming events are properly mapped to our AgentMessage format
+3. Conversation history is maintained across turns
+4. Tool calls are visible in the UI
+5. Error handling for missing API keys
 
 ---
 

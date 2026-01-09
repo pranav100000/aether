@@ -1,20 +1,41 @@
-import { useState, type FormEvent } from "react"
+import { useState, useEffect, type FormEvent } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { HardwareSelector } from "./HardwareSelector"
-import { HARDWARE_PRESETS, type HardwareConfig } from "@/lib/api"
+import { useUserSettings } from "@/hooks/useUserSettings"
+import {
+  HARDWARE_PRESETS,
+  IDLE_TIMEOUT_OPTIONS,
+  type HardwareConfig,
+  type IdleTimeoutMinutes,
+} from "@/lib/api"
 
 interface CreateProjectModalProps {
   onClose: () => void
-  onCreate: (name: string, description?: string, hardware?: HardwareConfig) => Promise<void>
+  onCreate: (
+    name: string,
+    description?: string,
+    hardware?: HardwareConfig,
+    idleTimeoutMinutes?: IdleTimeoutMinutes
+  ) => Promise<void>
 }
 
 export function CreateProjectModal({ onClose, onCreate }: CreateProjectModalProps) {
+  const { settings, loading: settingsLoading } = useUserSettings()
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [hardware, setHardware] = useState<HardwareConfig>(HARDWARE_PRESETS[0].config)
+  const [idleTimeout, setIdleTimeout] = useState<IdleTimeoutMinutes>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Apply user defaults when settings load (select "Default" preset by default)
+  useEffect(() => {
+    if (settings) {
+      setHardware(settings.default_hardware)
+      setIdleTimeout(settings.default_idle_timeout_minutes)
+    }
+  }, [settings])
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -22,12 +43,19 @@ export function CreateProjectModal({ onClose, onCreate }: CreateProjectModalProp
     setLoading(true)
 
     try {
-      await onCreate(name, description || undefined, hardware)
+      await onCreate(name, description || undefined, hardware, idleTimeout)
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create project")
       setLoading(false)
     }
+  }
+
+  const getDefaultIdleTimeoutLabel = () => {
+    const defaultMin = settings?.default_idle_timeout_minutes
+    if (defaultMin === 0) return "Never"
+    if (defaultMin) return `${defaultMin} min`
+    return "10 min (system)"
   }
 
   return (
@@ -60,9 +88,43 @@ export function CreateProjectModal({ onClose, onCreate }: CreateProjectModalProp
             onChange={(e) => setDescription(e.target.value)}
           />
 
+          {/* Hardware Configuration */}
           <div>
             <label className="text-sm font-medium block mb-2">Hardware Configuration</label>
-            <HardwareSelector value={hardware} onChange={setHardware} />
+            {settingsLoading ? (
+              <div className="text-sm text-muted-foreground p-4 border rounded-md">
+                Loading defaults...
+              </div>
+            ) : (
+              <HardwareSelector
+                value={hardware}
+                onChange={setHardware}
+                defaultConfig={settings?.default_hardware}
+              />
+            )}
+          </div>
+
+          {/* Idle Timeout */}
+          <div>
+            <label className="text-sm font-medium block mb-2">Idle Timeout</label>
+            <select
+              className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              value={idleTimeout ?? ""}
+              onChange={(e) => {
+                const val = e.target.value
+                setIdleTimeout(val === "" ? null : parseInt(val) as IdleTimeoutMinutes)
+              }}
+            >
+              <option value="">
+                Default ({getDefaultIdleTimeoutLabel()})
+              </option>
+              {IDLE_TIMEOUT_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground mt-1">
+              Project will automatically stop after this duration of inactivity
+            </p>
           </div>
 
           <div className="flex justify-end gap-3 pt-4">

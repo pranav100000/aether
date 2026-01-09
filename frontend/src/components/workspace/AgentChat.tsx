@@ -35,7 +35,7 @@ import {
 } from "@/components/ai-elements/reasoning"
 import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion"
 import { cn } from "@/lib/utils"
-import { RefreshCwIcon, TerminalIcon, SettingsIcon, BrainIcon, ShieldCheckIcon, FileEditIcon } from "lucide-react"
+import { RefreshCwIcon, TerminalIcon, SettingsIcon, BrainIcon, ShieldCheckIcon, FileEditIcon, SparklesIcon, ZapIcon, CodeIcon } from "lucide-react"
 import type { ToolUIPart } from "ai"
 import {
   Select,
@@ -53,6 +53,54 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 type PermissionMode = "default" | "acceptEdits" | "plan" | "bypassPermissions"
+type AgentType = "claude" | "codex" | "opencode"
+
+interface ModelOption {
+  value: string
+  label: string
+}
+
+interface AgentConfigItem {
+  name: string
+  icon: typeof TerminalIcon
+  color: string
+  models: ModelOption[]
+  defaultModel: string
+}
+
+const agentConfig: Record<AgentType, AgentConfigItem> = {
+  claude: {
+    name: "Claude",
+    icon: SparklesIcon,
+    color: "text-orange-400",
+    models: [
+      { value: "sonnet", label: "Sonnet (Fast)" },
+      { value: "opus", label: "Opus (Powerful)" },
+      { value: "haiku", label: "Haiku (Quick)" },
+    ],
+    defaultModel: "sonnet",
+  },
+  codex: {
+    name: "Codex",
+    icon: ZapIcon,
+    color: "text-green-400",
+    models: [
+      { value: "gpt-5.2-codex", label: "GPT-5.2 Codex (Best)" },
+      { value: "gpt-5.1-codex-max", label: "GPT-5.1 Codex Max" },
+      { value: "gpt-5.1-codex-mini", label: "GPT-5.1 Codex Mini (Fast)" },
+    ],
+    defaultModel: "gpt-5.2-codex",
+  },
+  opencode: {
+    name: "OpenCode",
+    icon: CodeIcon,
+    color: "text-blue-400",
+    models: [
+      { value: "default", label: "Default" },
+    ],
+    defaultModel: "default",
+  },
+}
 
 interface AgentSettings {
   model: string
@@ -62,7 +110,7 @@ interface AgentSettings {
 
 interface AgentChatProps {
   projectId: string
-  agent?: "claude" | "codex" | "opencode"
+  defaultAgent?: AgentType
 }
 
 interface HistoryMessage {
@@ -129,20 +177,24 @@ const suggestions = [
   "Refactor for better performance",
 ]
 
-export function AgentChat({ projectId, agent = "claude" }: AgentChatProps) {
+export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps) {
+  const [agent, setAgent] = useState<AgentType>(defaultAgent)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState("")
   const [isConnected, setIsConnected] = useState(false)
   const [status, setStatus] = useState<ChatStatus>("ready")
   const [error, setError] = useState<string | null>(null)
-  const [settings, setSettings] = useState<AgentSettings>({
-    model: "sonnet",
+  const [settings, setSettings] = useState<AgentSettings>(() => ({
+    model: agentConfig[defaultAgent].defaultModel,
     permissionMode: "bypassPermissions",
     extendedThinking: true,
-  })
+  }))
   const wsRef = useRef<WebSocket | null>(null)
   const messageIdRef = useRef(0)
   const thinkingStartRef = useRef<number | null>(null)
+
+  const currentAgentConfig = agentConfig[agent]
+  const AgentIcon = currentAgentConfig.icon
 
   const generateId = useCallback(() => {
     messageIdRef.current += 1
@@ -357,6 +409,26 @@ export function AgentChat({ projectId, agent = "claude" }: AgentChatProps) {
     sendMessage(suggestion)
   }, [sendMessage])
 
+  const handleAgentChange = useCallback((newAgent: AgentType) => {
+    if (newAgent === agent) return
+
+    // Close existing connection
+    wsRef.current?.close()
+    setIsConnected(false)
+
+    // Clear messages (each agent has its own session)
+    setMessages([])
+    messageIdRef.current = 0
+    setError(null)
+    setStatus("ready")
+
+    // Reset model to new agent's default
+    setSettings(s => ({ ...s, model: agentConfig[newAgent].defaultModel }))
+
+    // Switch agent
+    setAgent(newAgent)
+  }, [agent])
+
   const showEmptyState = messages.length === 0
 
   return (
@@ -364,8 +436,30 @@ export function AgentChat({ projectId, agent = "claude" }: AgentChatProps) {
       {/* Header */}
       <div className="flex shrink-0 items-center justify-between px-4 py-2">
         <div className="flex items-center gap-2">
-          <TerminalIcon className="size-4 text-zinc-400" />
-          <span className="text-sm font-medium text-zinc-200 capitalize">{agent}</span>
+          <Select value={agent} onValueChange={(v) => handleAgentChange(v as AgentType)}>
+            <SelectTrigger className="h-8 w-[130px] border-zinc-700 bg-zinc-900 text-xs">
+              <SelectValue>
+                <div className="flex items-center gap-2">
+                  <AgentIcon className={cn("size-4", currentAgentConfig.color)} />
+                  <span>{currentAgentConfig.name}</span>
+                </div>
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.keys(agentConfig) as AgentType[]).map((agentKey) => {
+                const config = agentConfig[agentKey]
+                const Icon = config.icon
+                return (
+                  <SelectItem key={agentKey} value={agentKey}>
+                    <div className="flex items-center gap-2">
+                      <Icon className={cn("size-4", config.color)} />
+                      <span>{config.name}</span>
+                    </div>
+                  </SelectItem>
+                )
+              })}
+            </SelectContent>
+          </Select>
           <span className={cn(
             "size-2 rounded-full",
             isConnected ? "bg-green-500" : "bg-red-500"
@@ -396,9 +490,11 @@ export function AgentChat({ projectId, agent = "claude" }: AgentChatProps) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="sonnet">Sonnet (Fast)</SelectItem>
-                    <SelectItem value="opus">Opus (Powerful)</SelectItem>
-                    <SelectItem value="haiku">Haiku (Quick)</SelectItem>
+                    {currentAgentConfig.models.map((model) => (
+                      <SelectItem key={model.value} value={model.value}>
+                        {model.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -461,10 +557,10 @@ export function AgentChat({ projectId, agent = "claude" }: AgentChatProps) {
           {showEmptyState ? (
             <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
               <div className="rounded-full bg-zinc-800 p-4">
-                <TerminalIcon className="size-8 text-zinc-400" />
+                <AgentIcon className={cn("size-8", currentAgentConfig.color)} />
               </div>
               <div>
-                <h3 className="text-lg font-medium text-zinc-200">Chat with {agent}</h3>
+                <h3 className="text-lg font-medium text-zinc-200">Chat with {currentAgentConfig.name}</h3>
                 <p className="mt-1 text-sm text-zinc-500">
                   Ask questions about your code or give instructions
                 </p>
@@ -554,8 +650,8 @@ export function AgentChat({ projectId, agent = "claude" }: AgentChatProps) {
             <PromptInputFooter>
               <PromptInputTools>
                 <PromptInputButton variant="ghost" disabled>
-                  <TerminalIcon className="size-4" />
-                  <span>{agent}</span>
+                  <AgentIcon className={cn("size-4", currentAgentConfig.color)} />
+                  <span>{currentAgentConfig.name}</span>
                 </PromptInputButton>
               </PromptInputTools>
               <PromptInputSubmit

@@ -135,8 +135,9 @@ type HardwareConfig struct {
 }
 
 var (
-	validCPUKinds = map[string]bool{"shared": true, "performance": true}
-	validGPUKinds = map[string]bool{"a10": true, "l40s": true, "a100-40gb": true, "a100-80gb": true}
+	validCPUKinds     = map[string]bool{"shared": true, "performance": true}
+	validGPUKinds     = map[string]bool{"a10": true, "l40s": true, "a100-40gb": true, "a100-80gb": true}
+	validIdleTimeouts = map[int]bool{0: true, 5: true, 10: true, 30: true, 60: true}
 
 	// Valid CPU/Memory combinations for Fly.io
 	validSharedConfigs = map[int][]int{
@@ -348,4 +349,19 @@ func ValidateUpdateProject(name, description *string) (*UpdateProjectInput, Vali
 		Name:        name,
 		Description: description,
 	}, nil
+}
+
+// ValidateIdleTimeout validates idle timeout value
+// Valid values: nil (use default), 0 (never), 5, 10, 30, 60 minutes
+func ValidateIdleTimeout(minutes *int) *ValidationError {
+	if minutes == nil {
+		return nil // nil is valid (use default)
+	}
+	if !validIdleTimeouts[*minutes] {
+		return &ValidationError{
+			Field:   "idle_timeout_minutes",
+			Message: "must be one of: 5, 10, 30, 60, or 0 (never auto-stop)",
+		}
+	}
+	return nil
 }

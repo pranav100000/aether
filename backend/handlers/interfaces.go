@@ -13,14 +13,15 @@ type ProjectStore interface {
 	ListProjects(ctx context.Context, userID string) ([]db.Project, error)
 	GetProject(ctx context.Context, projectID string) (*db.Project, error)
 	GetProjectByUser(ctx context.Context, projectID, userID string) (*db.Project, error)
-	CreateProject(ctx context.Context, userID, name string, description *string, baseImage string, hw *db.HardwareConfig) (*db.Project, error)
+	CreateProject(ctx context.Context, userID, name string, description *string, baseImage string, hw *db.HardwareConfig, idleTimeoutMinutes *int) (*db.Project, error)
 	UpdateProject(ctx context.Context, projectID, userID string, name, description *string) (*db.Project, error)
 	DeleteProject(ctx context.Context, projectID, userID string) error
 	UpdateProjectStatus(ctx context.Context, projectID, status string, errorMsg *string) error
 	UpdateProjectMachine(ctx context.Context, projectID, machineID string) error
 	UpdateProjectVolume(ctx context.Context, projectID, volumeID string) error
 	UpdateProjectLastAccessed(ctx context.Context, projectID string) error
-	GetIdleRunningProjects(ctx context.Context, timeout time.Duration) ([]db.Project, error)
+	GetRunningProjects(ctx context.Context) ([]db.Project, error)
+	GetUserSettings(ctx context.Context, userID string) (*db.UserSettings, error)
 }
 
 // MachineManager defines the Fly.io operations needed by ProjectHandler
