@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react"
 import { useParams, useNavigate, Link } from "react-router-dom"
-import { ChevronLeft, Terminal as TerminalIcon } from "lucide-react"
+import { ChevronLeft, PanelLeft, PanelBottom, PanelRight } from "lucide-react"
 import { useProject } from "@/hooks/useProject"
 import { useEditor } from "@/hooks/useEditor"
 import { Button } from "@/components/ui/button"
@@ -28,7 +28,9 @@ export function Workspace() {
     getFile,
   } = useEditor(id!)
   const [starting, setStarting] = useState(false)
+  const [leftSidebarOpen, setLeftSidebarOpen] = useState(true)
   const [terminalOpen, setTerminalOpen] = useState(true)
+  const [rightSidebarOpen, setRightSidebarOpen] = useState(false)
   const [fileTreeRefreshTrigger, setFileTreeRefreshTrigger] = useState(0)
 
   const handleFileChange = useCallback(() => {
@@ -120,14 +122,32 @@ export function Workspace() {
           )}
           {project.status === "running" && (
             <>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setTerminalOpen(!terminalOpen)}
-                title={terminalOpen ? "Hide terminal" : "Show terminal"}
-              >
-                <TerminalIcon className="w-4 h-4" />
-              </Button>
+              <div className="flex items-center gap-1 mr-2">
+                <Button
+                  size="sm"
+                  variant={leftSidebarOpen ? "secondary" : "ghost"}
+                  onClick={() => setLeftSidebarOpen(!leftSidebarOpen)}
+                  title={leftSidebarOpen ? "Hide file tree" : "Show file tree"}
+                >
+                  <PanelLeft className="w-4 h-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant={terminalOpen ? "secondary" : "ghost"}
+                  onClick={() => setTerminalOpen(!terminalOpen)}
+                  title={terminalOpen ? "Hide terminal" : "Show terminal"}
+                >
+                  <PanelBottom className="w-4 h-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant={rightSidebarOpen ? "secondary" : "ghost"}
+                  onClick={() => setRightSidebarOpen(!rightSidebarOpen)}
+                  title={rightSidebarOpen ? "Hide right panel" : "Show right panel"}
+                >
+                  <PanelRight className="w-4 h-4" />
+                </Button>
+              </div>
               <Button size="sm" variant="secondary" onClick={stop}>
                 Stop
               </Button>
@@ -180,6 +200,7 @@ export function Workspace() {
               </>
             }
             terminal={<MultiTerminal projectId={project.id} onDisconnect={refresh} onFileChange={handleFileChange} />}
+            leftSidebarOpen={leftSidebarOpen}
             terminalOpen={terminalOpen}
           />
         ) : project.status === "starting" ? (

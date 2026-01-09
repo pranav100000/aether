@@ -59,7 +59,7 @@ export function PreviewButton({ projectId, previewToken }: PreviewButtonProps) {
             "rounded-r transition-colors"
           )}
         >
-          <ChevronDown className="w-4 h-4" />
+          <ChevronDown className="w-4 h-5" />
         </button>
       </div>
 

@@ -6,6 +6,7 @@ interface WorkspaceLayoutProps {
   sidebar: React.ReactNode
   editor: React.ReactNode
   terminal: React.ReactNode
+  leftSidebarOpen: boolean
   terminalOpen: boolean
 }
 
@@ -13,9 +14,21 @@ export function WorkspaceLayout({
   sidebar,
   editor,
   terminal,
+  leftSidebarOpen,
   terminalOpen,
 }: WorkspaceLayoutProps) {
+  const sidebarPanelRef = useRef<ImperativePanelHandle>(null)
   const terminalPanelRef = useRef<ImperativePanelHandle>(null)
+
+  useEffect(() => {
+    if (sidebarPanelRef.current) {
+      if (leftSidebarOpen) {
+        sidebarPanelRef.current.expand()
+      } else {
+        sidebarPanelRef.current.collapse()
+      }
+    }
+  }, [leftSidebarOpen])
 
   useEffect(() => {
     if (terminalPanelRef.current) {
@@ -34,14 +47,23 @@ export function WorkspaceLayout({
         <Panel defaultSize={70} minSize={30}>
           <PanelGroup direction="horizontal" className="h-full">
             {/* Sidebar (File Tree) */}
-            <Panel defaultSize={20} minSize={15} maxSize={40}>
-              <div className="h-full bg-[#1e1e1e] border-r border-border overflow-hidden">
+            <Panel
+              ref={sidebarPanelRef}
+              defaultSize={20}
+              minSize={15}
+              maxSize={40}
+              collapsible
+              collapsedSize={0}
+            >
+              <div className={`h-full bg-[#1e1e1e] border-r border-border overflow-hidden ${leftSidebarOpen ? '' : 'hidden'}`}>
                 {sidebar}
               </div>
             </Panel>
 
             {/* Resize handle between sidebar and editor */}
-            <PanelResizeHandle className="w-1 bg-border hover:bg-primary/50 transition-colors" />
+            {leftSidebarOpen && (
+              <PanelResizeHandle className="w-1 bg-border hover:bg-primary/50 transition-colors" />
+            )}
 
             {/* Editor area */}
             <Panel defaultSize={80} minSize={40}>
