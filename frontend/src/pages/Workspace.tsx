@@ -6,7 +6,7 @@ import { useEditor } from "@/hooks/useEditor"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { StatusBadge } from "@/components/projects/StatusBadge"
-import { Terminal } from "@/components/workspace/Terminal"
+import { MultiTerminal } from "@/components/workspace/MultiTerminal"
 import { FileTree } from "@/components/workspace/FileTree"
 import { Editor } from "@/components/workspace/Editor"
 import { EditorTabs } from "@/components/workspace/EditorTabs"
@@ -179,9 +179,8 @@ export function Workspace() {
                 )}
               </>
             }
-            terminal={<Terminal projectId={project.id} onDisconnect={refresh} onFileChange={handleFileChange} />}
+            terminal={<MultiTerminal projectId={project.id} onDisconnect={refresh} onFileChange={handleFileChange} />}
             terminalOpen={terminalOpen}
-            onToggleTerminal={() => setTerminalOpen(!terminalOpen)}
           />
         ) : project.status === "starting" ? (
           <div className="h-full flex items-center justify-center">

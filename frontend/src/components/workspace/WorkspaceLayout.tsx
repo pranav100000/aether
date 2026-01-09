@@ -1,14 +1,12 @@
 import { useEffect, useRef } from "react"
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels"
 import type { ImperativePanelHandle } from "react-resizable-panels"
-import { Terminal as TerminalIcon, ChevronDown, ChevronUp } from "lucide-react"
 
 interface WorkspaceLayoutProps {
   sidebar: React.ReactNode
   editor: React.ReactNode
   terminal: React.ReactNode
   terminalOpen: boolean
-  onToggleTerminal: () => void
 }
 
 export function WorkspaceLayout({
@@ -16,7 +14,6 @@ export function WorkspaceLayout({
   editor,
   terminal,
   terminalOpen,
-  onToggleTerminal,
 }: WorkspaceLayoutProps) {
   const terminalPanelRef = useRef<ImperativePanelHandle>(null)
 
@@ -69,31 +66,8 @@ export function WorkspaceLayout({
           collapsible
           collapsedSize={0}
         >
-          <div className="h-full flex flex-col bg-[#1a1a1a]">
-            {/* Terminal header */}
-            <div
-              className="flex items-center justify-between px-3 py-1.5 bg-[#252525] border-t border-border cursor-pointer"
-              onClick={onToggleTerminal}
-            >
-              <div className="flex items-center gap-2">
-                <TerminalIcon className="w-4 h-4 text-muted-foreground" />
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Terminal
-                </span>
-              </div>
-              <button className="p-0.5 rounded hover:bg-muted">
-                {terminalOpen ? (
-                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                ) : (
-                  <ChevronUp className="w-4 h-4 text-muted-foreground" />
-                )}
-              </button>
-            </div>
-
-            {/* Terminal content - always mounted, visibility controlled by CSS */}
-            <div className={`flex-1 overflow-hidden ${terminalOpen ? '' : 'hidden'}`}>
-              {terminal}
-            </div>
+          <div className={`h-full ${terminalOpen ? '' : 'hidden'}`}>
+            {terminal}
           </div>
         </Panel>
       </PanelGroup>
