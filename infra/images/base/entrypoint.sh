@@ -61,4 +61,8 @@ EOF
     chmod 600 /home/coder/.codex/auth.json
 fi
 
+# Start port forwarding for IPv6 → localhost
+# This allows the gateway to reach dev servers that only bind to localhost
+/usr/local/bin/port-forward.sh &
+
 exec /usr/sbin/sshd -D -e

@@ -39,15 +39,6 @@ alias ll='ls -alF'
 alias la='ls -A'
 alias l='ls -CF'
 
-# Dev server aliases that auto-bind to all interfaces (required for preview URLs)
-alias vite='npx vite --host'
-alias dev='npm run dev -- --host'
-alias pdev='pnpm dev --host'
-
-# Python server aliases (use :: for IPv6 to work with Fly's 6PN network)
-alias serve='python3 -m http.server --bind ::'
-alias uvicorn='python -m uvicorn --host ::'
-
 # Go environment
 export GOPATH="/home/coder/go"
 export PATH="$GOPATH/bin:/usr/local/go/bin:$PATH"
