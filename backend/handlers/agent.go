@@ -70,7 +70,7 @@ func (h *AgentHandler) HandleAgent(w http.ResponseWriter, r *http.Request) {
 	agentType := chi.URLParam(r, "agent")
 
 	// Validate agent type
-	if agentType != "claude" && agentType != "codex" && agentType != "opencode" {
+	if agentType != "claude" && agentType != "codex" && agentType != "codebuff" && agentType != "opencode" {
 		http.Error(w, "Invalid agent type", http.StatusBadRequest)
 		return
 	}

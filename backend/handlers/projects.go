@@ -23,22 +23,24 @@ type APIKeysGetter interface {
 }
 
 type ProjectHandler struct {
-	store       ProjectStore
-	machines    MachineManager
-	volumes     VolumeManager
-	apiKeys     APIKeysGetter
-	baseImage   string
-	idleTimeout time.Duration
+	store         ProjectStore
+	machines      MachineManager
+	volumes       VolumeManager
+	apiKeys       APIKeysGetter
+	baseImage     string
+	defaultRegion string
+	idleTimeout   time.Duration
 }
 
-func NewProjectHandler(store ProjectStore, machines MachineManager, volumes VolumeManager, apiKeys APIKeysGetter, baseImage string, idleTimeout time.Duration) *ProjectHandler {
+func NewProjectHandler(store ProjectStore, machines MachineManager, volumes VolumeManager, apiKeys APIKeysGetter, baseImage string, defaultRegion string, idleTimeout time.Duration) *ProjectHandler {
 	return &ProjectHandler{
-		store:       store,
-		machines:    machines,
-		volumes:     volumes,
-		apiKeys:     apiKeys,
-		baseImage:   baseImage,
-		idleTimeout: idleTimeout,
+		store:         store,
+		machines:      machines,
+		volumes:       volumes,
+		apiKeys:       apiKeys,
+		baseImage:     baseImage,
+		defaultRegion: defaultRegion,
+		idleTimeout:   idleTimeout,
 	}
 }
 
@@ -388,7 +390,12 @@ func (h *ProjectHandler) Start(w http.ResponseWriter, r *http.Request) {
 	// Create volume if it doesn't exist
 	if project.FlyVolumeID == nil || *project.FlyVolumeID == "" {
 		volumeName := "vol_" + projectID[:8]
-		volume, err := h.volumes.CreateVolume(volumeName, project.VolumeSizeGB)
+		// GPU machines must be in ord region, so volumes must match
+		region := h.defaultRegion
+		if project.GPUKind != nil && *project.GPUKind != "" {
+			region = "ord"
+		}
+		volume, err := h.volumes.CreateVolume(volumeName, project.VolumeSizeGB, region)
 		if err != nil {
 			log.Printf("Error creating volume: %v", err)
 			errMsg := "Failed to create storage volume: " + err.Error()

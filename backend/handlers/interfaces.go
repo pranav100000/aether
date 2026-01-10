@@ -36,7 +36,7 @@ type MachineManager interface {
 
 // VolumeManager defines the Fly.io volume operations needed by ProjectHandler
 type VolumeManager interface {
-	CreateVolume(name string, sizeGB int) (*fly.Volume, error)
+	CreateVolume(name string, sizeGB int, region string) (*fly.Volume, error)
 	GetVolume(volumeID string) (*fly.Volume, error)
 	DeleteVolume(volumeID string) error
 }

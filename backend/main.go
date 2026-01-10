@@ -91,7 +91,7 @@ func main() {
 	legacyTerminalHandler := handlers.NewLegacyTerminalHandler(sshClient, machineHandler)
 
 	// New project-based handlers
-	projectHandler := handlers.NewProjectHandler(dbClient, flyClient, flyClient, apiKeysHandler, baseImage, idleTimeout)
+	projectHandler := handlers.NewProjectHandler(dbClient, flyClient, flyClient, apiKeysHandler, baseImage, flyRegion, idleTimeout)
 	terminalHandler := handlers.NewTerminalHandler(sshClient, flyClient, dbClient, authMiddleware)
 	agentHandler := handlers.NewAgentHandler(sshClient, flyClient, dbClient, authMiddleware)
 	healthHandler := handlers.NewHealthHandler(dbClient, getEnv("VERSION", "dev"))

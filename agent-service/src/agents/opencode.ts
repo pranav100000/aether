@@ -1,11 +1,14 @@
-import { createOpencode } from "@opencode-ai/sdk";
+import { createOpencode, createOpencodeClient } from "@opencode-ai/sdk";
 import type { AgentProvider, AgentConfig, AgentMessage } from "../types";
 
 type OpenCodeClient = Awaited<ReturnType<typeof createOpencode>>["client"];
 
+const OPENCODE_PORT = 4096;
+
 export class OpenCodeProvider implements AgentProvider {
   readonly name = "opencode" as const;
   private client: OpenCodeClient | null = null;
+  private server: { url: string; close(): void } | null = null;
   private sessionId: string | null = null;
   private abortController: AbortController | null = null;
   private authConfigured = false;
@@ -22,12 +25,32 @@ export class OpenCodeProvider implements AgentProvider {
   }
 
   private async getClient(): Promise<OpenCodeClient> {
-    if (!this.client) {
-      const { client } = await createOpencode();
-      this.client = client;
+    if (this.client) {
+      return this.client;
     }
 
-    // Configure auth for providers if not already done
+    // First, try to connect to an existing OpenCode server
+    try {
+      const client = createOpencodeClient({
+        baseUrl: `http://127.0.0.1:${OPENCODE_PORT}`,
+      });
+      // Test if server is actually running by making a simple request
+      await client.app.info();
+      this.client = client;
+      console.error("[opencode] Connected to existing server");
+    } catch {
+      // No existing server, start a new one
+      console.error("[opencode] Starting new server...");
+      const { client, server } = await createOpencode({
+        port: OPENCODE_PORT,
+        hostname: "127.0.0.1",
+      });
+      this.client = client;
+      this.server = server;
+      console.error(`[opencode] Server started at ${server.url}`);
+    }
+
+    // Configure auth for providers
     if (!this.authConfigured) {
       await this.configureAuth(this.client);
       this.authConfigured = true;
@@ -53,21 +76,21 @@ export class OpenCodeProvider implements AgentProvider {
             path: { id: provider.id },
             body: { type: "api", key: apiKey },
           });
+          console.error(`[opencode] Configured auth for ${provider.id}`);
         } catch (err) {
-          // Log but continue - provider might not be needed
-          console.error(`Failed to configure auth for ${provider.id}:`, err);
+          console.error(`[opencode] Failed to configure auth for ${provider.id}:`, err);
         }
       }
     }
   }
 
   private parseModel(model?: string): { providerID: string; modelID: string } {
-    // Model format: "provider:model" e.g., "anthropic:claude-sonnet-4-20250514"
+    // Model format: "provider:model" e.g., "openrouter:anthropic/claude-sonnet-4"
     if (model && model.includes(":")) {
       const [providerID, modelID] = model.split(":", 2);
       return { providerID, modelID };
     }
-    // Default to Claude Sonnet
+    // Default to Anthropic Claude Sonnet
     return { providerID: "anthropic", modelID: "claude-sonnet-4-20250514" };
   }
 
@@ -86,6 +109,7 @@ export class OpenCodeProvider implements AgentProvider {
         });
         if (session.data) {
           this.sessionId = session.data.id;
+          console.error(`[opencode] Created session: ${this.sessionId}`);
         }
       }
 
@@ -108,6 +132,7 @@ export class OpenCodeProvider implements AgentProvider {
 
       // Parse model configuration
       const modelConfig = this.parseModel(config.model);
+      console.error(`[opencode] Using model: ${modelConfig.providerID}/${modelConfig.modelID}`);
 
       // Subscribe to events before sending prompt
       const events = await client.event.subscribe();
@@ -125,7 +150,6 @@ export class OpenCodeProvider implements AgentProvider {
       });
 
       // Process streaming events
-      let currentContent = "";
       let isDone = false;
       let eventCount = 0;
 
@@ -141,9 +165,6 @@ export class OpenCodeProvider implements AgentProvider {
 
         const mapped = this.mapEvent(event, config);
         if (mapped) {
-          if (mapped.type === "text" && mapped.content) {
-            currentContent += mapped.content;
-          }
           if (mapped.type === "done") {
             isDone = true;
           }

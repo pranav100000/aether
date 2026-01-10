@@ -201,7 +201,7 @@ export function Workspace() {
               </>
             }
             terminal={<MultiTerminal projectId={project.id} onDisconnect={refresh} onFileChange={handleFileChange} />}
-            rightPanel={<AgentChat projectId={project.id} agent="claude" />}
+            rightPanel={<AgentChat projectId={project.id} defaultAgent="claude" />}
             leftSidebarOpen={leftSidebarOpen}
             terminalOpen={terminalOpen}
             rightPanelOpen={rightSidebarOpen}

@@ -1,11 +1,13 @@
 import type { AgentProvider, AgentType } from "../types";
 import { ClaudeProvider } from "./claude";
+import { CodebuffProvider } from "./codebuff";
 import { CodexProvider } from "./codex";
 import { OpenCodeProvider } from "./opencode";
 
 const providers: Record<AgentType, AgentProvider> = {
   claude: new ClaudeProvider(),
   codex: new CodexProvider(),
+  codebuff: new CodebuffProvider(),
   opencode: new OpenCodeProvider(),
 };
 

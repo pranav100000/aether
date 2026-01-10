@@ -164,7 +164,7 @@ func (m *mockProjectStore) UpdateProjectVolume(ctx context.Context, projectID, v
 }
 
 type mockVolumeManager struct {
-	createFn func(name string, sizeGB int) (*fly.Volume, error)
+	createFn func(name string, sizeGB int, region string) (*fly.Volume, error)
 	getFn    func(volumeID string) (*fly.Volume, error)
 	deleteFn func(volumeID string) error
 }
@@ -173,11 +173,11 @@ func newMockVolumeManager() *mockVolumeManager {
 	return &mockVolumeManager{}
 }
 
-func (m *mockVolumeManager) CreateVolume(name string, sizeGB int) (*fly.Volume, error) {
+func (m *mockVolumeManager) CreateVolume(name string, sizeGB int, region string) (*fly.Volume, error) {
 	if m.createFn != nil {
-		return m.createFn(name, sizeGB)
+		return m.createFn(name, sizeGB, region)
 	}
-	return &fly.Volume{ID: "vol-123", Name: name, SizeGB: sizeGB, State: "created"}, nil
+	return &fly.Volume{ID: "vol-123", Name: name, SizeGB: sizeGB, Region: region, State: "created"}, nil
 }
 
 func (m *mockVolumeManager) GetVolume(volumeID string) (*fly.Volume, error) {
@@ -284,7 +284,7 @@ func TestProjectHandler_List(t *testing.T) {
 		UpdatedAt:    time.Now(),
 	}
 
-	handler := NewProjectHandler(store, newMockMachineManager(), newMockVolumeManager(), "test-image", 10*time.Minute)
+	handler := NewProjectHandler(store, newMockMachineManager(), newMockVolumeManager(), nil, "test-image", "sjc", 10*time.Minute)
 
 	req := newAuthenticatedRequest("GET", "/projects", nil)
 	rr := httptest.NewRecorder()
@@ -307,7 +307,7 @@ func TestProjectHandler_List(t *testing.T) {
 
 func TestProjectHandler_Create_Valid(t *testing.T) {
 	store := newMockStore()
-	handler := NewProjectHandler(store, newMockMachineManager(), newMockVolumeManager(), "test-image", 10*time.Minute)
+	handler := NewProjectHandler(store, newMockMachineManager(), newMockVolumeManager(), nil, "test-image", "sjc", 10*time.Minute)
 
 	body := []byte(`{"name": "my-project", "description": "A test project"}`)
 	req := newAuthenticatedRequest("POST", "/projects", body)
@@ -347,7 +347,7 @@ func TestProjectHandler_Create_InvalidName(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			store := newMockStore()
-			handler := NewProjectHandler(store, newMockMachineManager(), newMockVolumeManager(), "test-image", 10*time.Minute)
+			handler := NewProjectHandler(store, newMockMachineManager(), newMockVolumeManager(), nil, "test-image", "sjc", 10*time.Minute)
 
 			req := newAuthenticatedRequest("POST", "/projects", []byte(tt.body))
 			rr := httptest.NewRecorder()
@@ -377,7 +377,7 @@ func TestProjectHandler_Get_Found(t *testing.T) {
 		UpdatedAt:    time.Now(),
 	}
 
-	handler := NewProjectHandler(store, newMockMachineManager(), newMockVolumeManager(), "test-image", 10*time.Minute)
+	handler := NewProjectHandler(store, newMockMachineManager(), newMockVolumeManager(), nil, "test-image", "sjc", 10*time.Minute)
 
 	req := newAuthenticatedRequest("GET", "/projects/"+projectID, nil)
 	rr := httptest.NewRecorder()
@@ -394,7 +394,7 @@ func TestProjectHandler_Get_Found(t *testing.T) {
 
 func TestProjectHandler_Get_NotFound(t *testing.T) {
 	store := newMockStore()
-	handler := NewProjectHandler(store, newMockMachineManager(), newMockVolumeManager(), "test-image", 10*time.Minute)
+	handler := NewProjectHandler(store, newMockMachineManager(), newMockVolumeManager(), nil, "test-image", "sjc", 10*time.Minute)
 
 	req := newAuthenticatedRequest("GET", "/projects/550e8400-e29b-41d4-a716-446655440000", nil)
 	rr := httptest.NewRecorder()
@@ -410,7 +410,7 @@ func TestProjectHandler_Get_NotFound(t *testing.T) {
 
 func TestProjectHandler_Get_InvalidUUID(t *testing.T) {
 	store := newMockStore()
-	handler := NewProjectHandler(store, newMockMachineManager(), newMockVolumeManager(), "test-image", 10*time.Minute)
+	handler := NewProjectHandler(store, newMockMachineManager(), newMockVolumeManager(), nil, "test-image", "sjc", 10*time.Minute)
 
 	req := newAuthenticatedRequest("GET", "/projects/not-a-uuid", nil)
 	rr := httptest.NewRecorder()
@@ -440,7 +440,7 @@ func TestProjectHandler_Update(t *testing.T) {
 		UpdatedAt:    time.Now(),
 	}
 
-	handler := NewProjectHandler(store, newMockMachineManager(), newMockVolumeManager(), "test-image", 10*time.Minute)
+	handler := NewProjectHandler(store, newMockMachineManager(), newMockVolumeManager(), nil, "test-image", "sjc", 10*time.Minute)
 
 	body := []byte(`{"name": "new-name"}`)
 	req := newAuthenticatedRequest("PATCH", "/projects/"+projectID, body)
@@ -480,7 +480,7 @@ func TestProjectHandler_Delete(t *testing.T) {
 		UpdatedAt:    time.Now(),
 	}
 
-	handler := NewProjectHandler(store, newMockMachineManager(), newMockVolumeManager(), "test-image", 10*time.Minute)
+	handler := NewProjectHandler(store, newMockMachineManager(), newMockVolumeManager(), nil, "test-image", "sjc", 10*time.Minute)
 
 	req := newAuthenticatedRequest("DELETE", "/projects/"+projectID, nil)
 	rr := httptest.NewRecorder()
@@ -516,7 +516,7 @@ func TestProjectHandler_Start(t *testing.T) {
 
 	machines := newMockMachineManager()
 	volumes := newMockVolumeManager()
-	handler := NewProjectHandler(store, machines, volumes, "test-image", 10*time.Minute)
+	handler := NewProjectHandler(store, machines, volumes, nil, "test-image", "sjc", 10*time.Minute)
 
 	req := newAuthenticatedRequest("POST", "/projects/"+projectID+"/start", nil)
 	rr := httptest.NewRecorder()
@@ -559,7 +559,7 @@ func TestProjectHandler_Stop(t *testing.T) {
 
 	machines := newMockMachineManager()
 	volumes := newMockVolumeManager()
-	handler := NewProjectHandler(store, machines, volumes, "test-image", 10*time.Minute)
+	handler := NewProjectHandler(store, machines, volumes, nil, "test-image", "sjc", 10*time.Minute)
 
 	req := newAuthenticatedRequest("POST", "/projects/"+projectID+"/stop", nil)
 	rr := httptest.NewRecorder()
@@ -598,7 +598,7 @@ func TestProjectHandler_Stop_NoMachine(t *testing.T) {
 		UpdatedAt:    time.Now(),
 	}
 
-	handler := NewProjectHandler(store, newMockMachineManager(), newMockVolumeManager(), "test-image", 10*time.Minute)
+	handler := NewProjectHandler(store, newMockMachineManager(), newMockVolumeManager(), nil, "test-image", "sjc", 10*time.Minute)
 
 	req := newAuthenticatedRequest("POST", "/projects/"+projectID+"/stop", nil)
 	rr := httptest.NewRecorder()

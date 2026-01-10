@@ -29,6 +29,11 @@ if [ -n "$OPENAI_API_KEY" ]; then
     echo "export CODEX_API_KEY=\"$OPENAI_API_KEY\"" >> "$ENV_FILE"
 fi
 
+# Codebuff SDK uses CODEBUFF_BYOK_OPENROUTER (BYOK = Bring Your Own Key)
+if [ -n "$OPENROUTER_API_KEY" ]; then
+    echo "export CODEBUFF_BYOK_OPENROUTER=\"$OPENROUTER_API_KEY\"" >> "$ENV_FILE"
+fi
+
 # Agent service configuration
 echo "export STORAGE_DIR=\"/home/coder/project/.aether\"" >> "$ENV_FILE"
 echo "export PROJECT_CWD=\"/home/coder/project\"" >> "$ENV_FILE"

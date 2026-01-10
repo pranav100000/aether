@@ -53,7 +53,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 type PermissionMode = "default" | "acceptEdits" | "plan" | "bypassPermissions"
-type AgentType = "claude" | "codex" | "opencode"
+type AgentType = "claude" | "codex" | "codebuff" | "opencode"
 
 interface ModelOption {
   value: string
@@ -90,6 +90,15 @@ const agentConfig: Record<AgentType, AgentConfigItem> = {
       { value: "gpt-5.1-codex-mini", label: "GPT-5.1 Codex Mini (Fast)" },
     ],
     defaultModel: "gpt-5.2-codex",
+  },
+  codebuff: {
+    name: "Codebuff",
+    icon: BrainIcon,
+    color: "text-purple-400",
+    models: [
+      { value: "base", label: "Base Agent" },
+    ],
+    defaultModel: "base",
   },
   opencode: {
     name: "OpenCode",

@@ -1,4 +1,4 @@
-export type AgentType = "claude" | "codex" | "opencode";
+export type AgentType = "claude" | "codex" | "codebuff" | "opencode";
 
 export type PermissionMode = "default" | "acceptEdits" | "plan" | "bypassPermissions";
 

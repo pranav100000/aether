@@ -130,9 +130,15 @@ func (c *Client) doRequest(method, path string, body interface{}) ([]byte, error
 }
 
 func (c *Client) CreateMachine(name string, config MachineConfig) (*Machine, error) {
+	region := c.region
+	// GPU machines must be created in ord region
+	if config.Guest.GPUKind != "" {
+		region = "ord"
+	}
+
 	req := CreateMachineRequest{
 		Name:   name,
-		Region: c.region,
+		Region: region,
 		Config: config,
 	}
 
@@ -248,10 +254,10 @@ type CreateVolumeRequest struct {
 	FSType            string `json:"fstype,omitempty"`
 }
 
-func (c *Client) CreateVolume(name string, sizeGB int) (*Volume, error) {
+func (c *Client) CreateVolume(name string, sizeGB int, region string) (*Volume, error) {
 	req := CreateVolumeRequest{
 		Name:      name,
-		Region:    c.region,
+		Region:    region,
 		SizeGB:    sizeGB,
 		Encrypted: true,
 		FSType:    "ext4",
