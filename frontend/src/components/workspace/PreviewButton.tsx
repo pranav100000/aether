@@ -10,7 +10,7 @@ interface PreviewButtonProps {
 
 // Known port labels
 const PORT_LABELS: Record<number, string> = {
-  3000: "React/Next",
+  3000: "3000 (React/Next)",
   3001: "Dev Server",
   4000: "Phoenix",
   5173: "Vite",
@@ -65,7 +65,7 @@ export function PreviewButton({ projectId, activePorts, previewToken }: PreviewB
             title={`Open port ${port} in new tab`}
           >
             <ExternalLink className="w-3.5 h-3.5" />
-            {PORT_LABELS[port] || port}
+            {"Port " + port}
           </button>
         ))}
       </div>
@@ -73,55 +73,55 @@ export function PreviewButton({ projectId, activePorts, previewToken }: PreviewB
   }
 
   // No active ports detected - show dropdown with common ports
-  return (
-    <div className="relative">
-      <div className="flex items-center">
-        <button
-          onClick={() => openPreview(3000)}
-          className={cn(
-            "flex items-center gap-2 px-3 py-1.5 text-sm font-medium",
-            "bg-primary text-primary-foreground hover:bg-primary/90",
-            "rounded-l transition-colors"
-          )}
-          title="Open preview in new tab"
-        >
-          <ExternalLink className="w-4 h-4" />
-          Preview
-        </button>
-        <button
-          onClick={() => setShowDropdown(!showDropdown)}
-          className={cn(
-            "px-2 py-1.5 border-l border-primary-foreground/20",
-            "bg-primary text-primary-foreground hover:bg-primary/90",
-            "rounded-r transition-colors"
-          )}
-        >
-          <ChevronDown className="w-4 h-5" />
-        </button>
-      </div>
+  // return (
+  //   <div className="relative">
+  //     <div className="flex items-center">
+  //       <button
+  //         onClick={() => openPreview(3000)}
+  //         className={cn(
+  //           "flex items-center gap-2 px-3 py-1.5 text-sm font-medium",
+  //           "bg-primary text-primary-foreground hover:bg-primary/90",
+  //           "rounded-l transition-colors"
+  //         )}
+  //         title="Open preview in new tab"
+  //       >
+  //         <ExternalLink className="w-4 h-4" />
+  //         Preview
+  //       </button>
+  //       <button
+  //         onClick={() => setShowDropdown(!showDropdown)}
+  //         className={cn(
+  //           "px-2 py-1.5 border-l border-primary-foreground/20",
+  //           "bg-primary text-primary-foreground hover:bg-primary/90",
+  //           "rounded-r transition-colors"
+  //         )}
+  //       >
+  //         <ChevronDown className="w-4 h-5" />
+  //       </button>
+  //     </div>
 
-      {showDropdown && (
-        <>
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => setShowDropdown(false)}
-          />
-          <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded shadow-lg py-1 min-w-[180px]">
-            <div className="px-3 py-1.5 text-xs text-muted-foreground border-b border-border mb-1">
-              Select port
-            </div>
-            {COMMON_PORTS.map(({ port, label }) => (
-              <button
-                key={port}
-                className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted"
-                onClick={() => openPreview(port)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  )
+  //     {showDropdown && (
+  //       <>
+  //         <div
+  //           className="fixed inset-0 z-40"
+  //           onClick={() => setShowDropdown(false)}
+  //         />
+  //         <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded shadow-lg py-1 min-w-[180px]">
+  //           <div className="px-3 py-1.5 text-xs text-muted-foreground border-b border-border mb-1">
+  //             Select port
+  //           </div>
+  //           {COMMON_PORTS.map(({ port, label }) => (
+  //             <button
+  //               key={port}
+  //               className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted"
+  //               onClick={() => openPreview(port)}
+  //             >
+  //               {label}
+  //             </button>
+  //           ))}
+  //         </div>
+  //       </>
+  //     )}
+  //   </div>
+  // )
 }
