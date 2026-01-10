@@ -159,7 +159,7 @@ function send(msg: AgentMessage & { agent: AgentType }) {
 ### Agent Provider Interface (agents/base.ts)
 
 ```typescript
-export type AgentType = "claude" | "codex" | "opencode";
+export type AgentType = "claude" | "codex" | "opencode" | "codebuff";
 
 export interface AgentConfig {
   cwd: string;

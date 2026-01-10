@@ -1,5 +1,7 @@
+import { readFile } from "fs/promises";
+import path from "path";
 import { getProvider } from "./agents";
-import type { AgentType, ClientMessage, AgentMessage, AgentSettings } from "./types";
+import type { AgentType, ClientMessage, AgentMessage, AgentSettings, FileContext, Attachment } from "./types";
 import {
   loadHistory,
   saveHistory,
@@ -48,6 +50,51 @@ send({ type: "init", sessionId: history.sessionId });
 // Send history if we have messages
 if (history.messages.length > 0) {
   send({ type: "history", history: history.messages });
+}
+
+// Helper: extract specific lines from content
+function extractLines(content: string, startLine: number, endLine: number): string {
+  const lines = content.split("\n");
+  return lines.slice(startLine - 1, endLine).join("\n");
+}
+
+// Helper: process file context from client message
+async function processFileContext(
+  context: ClientMessage["context"],
+  cwd: string
+): Promise<{ fileContext: FileContext[]; attachments: Attachment[] }> {
+  const fileContext: FileContext[] = [];
+  const attachments: Attachment[] = [];
+
+  // Process file references
+  if (context?.files) {
+    for (const file of context.files) {
+      const fc: FileContext = { path: file.path, selection: file.selection };
+
+      if (file.include) {
+        const fullPath = path.join(cwd, file.path);
+        const content = await readFile(fullPath, "utf-8");
+        fc.content = file.selection
+          ? extractLines(content, file.selection.startLine, file.selection.endLine)
+          : content;
+      }
+
+      fileContext.push(fc);
+    }
+  }
+
+  // Pass through attachments
+  if (context?.attachments) {
+    for (const att of context.attachments) {
+      attachments.push({
+        filename: att.filename,
+        mediaType: att.mediaType,
+        data: att.data,
+      });
+    }
+  }
+
+  return { fileContext, attachments };
 }
 
 // Handle uncaught errors
@@ -117,16 +164,22 @@ async function handleMessage(msg: ClientMessage) {
       addUserMessage(history, msg.prompt);
       await saveHistory(history);
 
+      // Process file context and attachments
+      const cwd = process.env.PROJECT_CWD || process.cwd();
+      const { fileContext, attachments } = await processFileContext(msg.context, cwd);
+
       try {
         let currentAssistantContent = "";
 
         for await (const agentMsg of provider.query(msg.prompt, {
-          cwd: process.env.PROJECT_CWD || process.cwd(),
+          cwd,
           autoApprove: currentSettings.permissionMode === "bypassPermissions",
           model: currentSettings.model,
           permissionMode: currentSettings.permissionMode,
           extendedThinking: currentSettings.extendedThinking,
           conversationHistory,
+          fileContext: fileContext.length > 0 ? fileContext : undefined,
+          attachments: attachments.length > 0 ? attachments : undefined,
         })) {
           send(agentMsg);
 

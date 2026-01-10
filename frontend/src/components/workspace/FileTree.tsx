@@ -4,6 +4,7 @@ import { api } from "@/lib/api"
 import type { FileEntry } from "@/lib/api"
 import { FileTreeItem } from "./FileTreeItem"
 import { Spinner } from "@/components/ui/spinner"
+import { useFileTreeContext } from "@/contexts/FileTreeContext"
 
 // Files/folders to hide in the file tree
 const HIDDEN_ENTRIES = new Set([
@@ -36,6 +37,9 @@ export function FileTree({ projectId, onFileSelect, selectedPath, refreshTrigger
   const [creating, setCreating] = useState<"file" | "folder" | null>(null)
   const [createName, setCreateName] = useState("")
 
+  // Get addFiles from context to populate file cache for @mentions
+  const { addFiles } = useFileTreeContext()
+
   const filterAndSortEntries = (entries: FileEntry[]): FileEntry[] => {
     return entries
       .filter((e) => !HIDDEN_ENTRIES.has(e.name))
@@ -53,13 +57,15 @@ export function FileTree({ projectId, onFileSelect, selectedPath, refreshTrigger
     try {
       const listing = await api.listFiles(projectId, "/")
       setEntries(filterAndSortEntries(listing.entries))
+      // Add files to context cache for @mentions
+      addFiles("/", listing.entries)
     } catch (err) {
       console.error("Failed to load file tree:", err)
       setError(err instanceof Error ? err.message : "Failed to load files")
     } finally {
       setLoading(false)
     }
-  }, [projectId])
+  }, [projectId, addFiles])
 
   useEffect(() => {
     loadRoot()

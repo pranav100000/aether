@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, type ChangeEvent } from "react"
 import { supabase } from "@/lib/supabase"
 import { api } from "@/lib/api"
 import {
@@ -19,6 +19,7 @@ import {
   PromptInputSubmit,
   PromptInputTools,
   PromptInputButton,
+  PromptInputSpeechButton,
 } from "@/components/ai-elements/prompt-input"
 import { Loader } from "@/components/ai-elements/loader"
 import {
@@ -33,7 +34,6 @@ import {
   ReasoningContent,
   ReasoningTrigger,
 } from "@/components/ai-elements/reasoning"
-import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion"
 import { cn } from "@/lib/utils"
 import { RefreshCwIcon, TerminalIcon, SettingsIcon, BrainIcon, ShieldCheckIcon, FileEditIcon, SparklesIcon, ZapIcon, CodeIcon } from "lucide-react"
 import type { ToolUIPart } from "ai"
@@ -51,9 +51,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { useFileTreeContext } from "@/contexts/FileTreeContext"
+import { useFileAutocomplete } from "@/hooks/useFileAutocomplete"
+import { FileMentionPopover } from "./FileMentionPopover"
+import { FilePill } from "./FilePill"
+import getCaretCoordinates from "textarea-caret"
 
 type PermissionMode = "default" | "acceptEdits" | "plan" | "bypassPermissions"
-type AgentType = "claude" | "codex" | "codebuff" | "opencode"
+type AgentType = "claude" | "codex" | "codebuff"
 
 interface ModelOption {
   value: string
@@ -100,19 +105,19 @@ const agentConfig: Record<AgentType, AgentConfigItem> = {
     ],
     defaultModel: "base",
   },
-  opencode: {
-    name: "OpenCode",
-    icon: CodeIcon,
-    color: "text-blue-400",
-    models: [
-      { value: "openrouter:anthropic/claude-sonnet-4", label: "Claude Sonnet 4 (OpenRouter)" },
-      { value: "openrouter:anthropic/claude-opus-4", label: "Claude Opus 4 (OpenRouter)" },
-      { value: "openrouter:openai/gpt-5.2", label: "GPT-5.2 (OpenRouter)" },
-      { value: "openrouter:google/gemini-3-pro", label: "Gemini 3 Pro (OpenRouter)" },
-      { value: "openrouter:deepseek/deepseek-r1", label: "DeepSeek R1 (OpenRouter)" },
-    ],
-    defaultModel: "openrouter:anthropic/claude-sonnet-4",
-  },
+  // opencode: {
+  //   name: "OpenCode",
+  //   icon: CodeIcon,
+  //   color: "text-blue-400",
+  //   models: [
+  //     { value: "openrouter:anthropic/claude-sonnet-4", label: "Claude Sonnet 4 (OpenRouter)" },
+  //     { value: "openrouter:anthropic/claude-opus-4", label: "Claude Opus 4 (OpenRouter)" },
+  //     { value: "openrouter:openai/gpt-5.2", label: "GPT-5.2 (OpenRouter)" },
+  //     { value: "openrouter:google/gemini-3-pro", label: "Gemini 3 Pro (OpenRouter)" },
+  //     { value: "openrouter:deepseek/deepseek-r1", label: "DeepSeek R1 (OpenRouter)" },
+  //   ],
+  //   defaultModel: "openrouter:anthropic/claude-sonnet-4",
+  // },
 }
 
 interface AgentSettings {
@@ -183,13 +188,6 @@ interface ChatMessage {
 
 type ChatStatus = "submitted" | "streaming" | "ready" | "error"
 
-const suggestions = [
-  "Explain the codebase structure",
-  "Find and fix bugs in this file",
-  "Write tests for the main functions",
-  "Refactor for better performance",
-]
-
 export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps) {
   const [agent, setAgent] = useState<AgentType>(defaultAgent)
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -202,9 +200,17 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
     permissionMode: "bypassPermissions",
     extendedThinking: true,
   }))
+  const [attachedFiles, setAttachedFiles] = useState<string[]>([])
   const wsRef = useRef<WebSocket | null>(null)
   const messageIdRef = useRef(0)
   const thinkingStartRef = useRef<number | null>(null)
+  const connectionIdRef = useRef(0)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  // File autocomplete
+  const { searchFiles, preloadDirectory, isPreloading } = useFileTreeContext()
+  const autocomplete = useFileAutocomplete()
 
   const currentAgentConfig = agentConfig[agent]
   const AgentIcon = currentAgentConfig.icon
@@ -215,27 +221,41 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
   }, [])
 
   const connect = useCallback(async () => {
+    const thisConnectionId = ++connectionIdRef.current
+
     try {
       const { data: { session } } = await supabase.auth.getSession()
+
+      if (connectionIdRef.current !== thisConnectionId) return
+
       if (!session?.access_token) {
         setError("Not authenticated")
         return
       }
 
       const wsUrl = api.getAgentUrl(projectId, agent)
+      console.log("[AgentChat] Connecting to:", wsUrl)
       const ws = new WebSocket(wsUrl, ["bearer", session.access_token])
 
+      if (connectionIdRef.current !== thisConnectionId) {
+        ws.close()
+        return
+      }
+
       ws.onopen = () => {
+        console.log("[AgentChat] WebSocket opened")
+        if (connectionIdRef.current !== thisConnectionId) return
         setIsConnected(true)
         setError(null)
       }
 
       ws.onmessage = (event) => {
+        if (connectionIdRef.current !== thisConnectionId) return
         try {
           const msg: AgentMessage = JSON.parse(event.data)
 
           if (msg.type === "init") {
-            // Silent init, no system message
+            // Agent initialized successfully
           } else if (msg.type === "history" && msg.history) {
             // Restore messages from history
             const restoredMessages: ChatMessage[] = msg.history.map((histMsg) => {
@@ -361,19 +381,24 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
         }
       }
 
-      ws.onerror = () => {
+      ws.onerror = (e) => {
+        console.log("[AgentChat] WebSocket error:", e)
+        if (connectionIdRef.current !== thisConnectionId) return
         setError("Connection error")
         setIsConnected(false)
         setStatus("error")
       }
 
-      ws.onclose = () => {
+      ws.onclose = (e) => {
+        console.log("[AgentChat] WebSocket closed:", e.code, e.reason)
+        if (connectionIdRef.current !== thisConnectionId) return
         setIsConnected(false)
         setStatus("ready")
       }
 
       wsRef.current = ws
     } catch (err) {
+      if (connectionIdRef.current !== thisConnectionId) return
       setError(err instanceof Error ? err.message : "Failed to connect")
       setStatus("error")
     }
@@ -418,10 +443,6 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
     sendMessage(text)
   }, [sendMessage])
 
-  const handleSuggestionClick = useCallback((suggestion: string) => {
-    sendMessage(suggestion)
-  }, [sendMessage])
-
   const handleAgentChange = useCallback((newAgent: AgentType) => {
     if (newAgent === agent) return
 
@@ -442,10 +463,48 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
     setAgent(newAgent)
   }, [agent])
 
+  // @files autocomplete handlers
+  const handleInputChange = useCallback((e: ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value
+    setInput(value)
+
+    const cursor = e.target.selectionStart ?? 0
+    const charBefore = value[cursor - 1]
+
+    // Detect @ trigger
+    if (charBefore === "@" && textareaRef.current && containerRef.current) {
+      const coords = getCaretCoordinates(textareaRef.current, cursor)
+      const textareaRect = textareaRef.current.getBoundingClientRect()
+      const containerRect = containerRef.current.getBoundingClientRect()
+      // Calculate position relative to the container (which has position: relative)
+      autocomplete.open({
+        top: textareaRect.top + coords.top - textareaRef.current.scrollTop - containerRect.top,
+        left: textareaRect.left + coords.left - containerRect.left,
+      })
+      preloadDirectory("/", 2)
+    }
+  }, [autocomplete, preloadDirectory])
+
+  const handleFileSelect = useCallback((file: string) => {
+    setAttachedFiles(prev => {
+      if (prev.includes(file)) return prev
+      return [...prev, file]
+    })
+    // Remove the @ from input
+    setInput(prev => prev.replace(/@[^@]*$/, ""))
+    autocomplete.close()
+  }, [autocomplete])
+
+  const handleRemoveFile = useCallback((file: string) => {
+    setAttachedFiles(prev => prev.filter(f => f !== file))
+  }, [])
+
+  const searchResults = searchFiles(autocomplete.query, 15)
+
   const showEmptyState = messages.length === 0
 
   return (
-    <div className="relative flex size-full flex-col divide-y divide-zinc-800 overflow-hidden bg-zinc-950">
+    <div ref={containerRef} className="relative flex size-full flex-col divide-y divide-zinc-800 overflow-hidden bg-zinc-950">
       {/* Header */}
       <div className="flex shrink-0 items-center justify-between px-4 py-2">
         <div className="flex items-center gap-2">
@@ -477,6 +536,20 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
             "size-2 rounded-full",
             isConnected ? "bg-green-500" : "bg-red-500"
           )} />
+          <Select value={settings.model} onValueChange={(v) => setSettings(s => ({ ...s, model: v }))}>
+            <SelectTrigger className="h-8 w-[140px] border-zinc-700 bg-zinc-900 text-xs">
+              <SelectValue>
+                {currentAgentConfig.models.find(m => m.value === settings.model)?.label ?? settings.model}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {currentAgentConfig.models.map((model) => (
+                <SelectItem key={model.value} value={model.value}>
+                  {model.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div className="flex items-center gap-2">
           {!isConnected && (
@@ -639,29 +712,28 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
 
       {/* Input Section */}
       <div className="grid shrink-0 gap-4 pt-4">
-        {showEmptyState && (
-          <Suggestions className="px-4">
-            {suggestions.map((suggestion) => (
-              <Suggestion
-                key={suggestion}
-                onClick={() => handleSuggestionClick(suggestion)}
-                suggestion={suggestion}
-              />
-            ))}
-          </Suggestions>
-        )}
         <div className="w-full px-4 pb-4">
+          {/* Attached Files */}
+          {attachedFiles.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-2">
+              {attachedFiles.map((file) => (
+                <FilePill key={file} path={file} onRemove={() => handleRemoveFile(file)} />
+              ))}
+            </div>
+          )}
           <PromptInput onSubmit={handleSubmit}>
             <PromptInputBody>
               <PromptInputTextarea
+                ref={textareaRef}
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder={isConnected ? "Ask anything about your code..." : "Connecting..."}
+                onChange={handleInputChange}
+                placeholder={isConnected ? "Ask anything about your code... (@ to mention files)" : "Connecting..."}
                 disabled={!isConnected || status === "streaming" || status === "submitted"}
               />
             </PromptInputBody>
             <PromptInputFooter>
               <PromptInputTools>
+                <PromptInputSpeechButton textareaRef={textareaRef} />
                 <PromptInputButton variant="ghost" disabled>
                   <AgentIcon className={cn("size-4", currentAgentConfig.color)} />
                   <span>{currentAgentConfig.name}</span>
@@ -675,6 +747,19 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
           </PromptInput>
         </div>
       </div>
+
+      {/* File Mention Popover */}
+      <FileMentionPopover
+        open={autocomplete.isOpen}
+        position={autocomplete.position}
+        query={autocomplete.query}
+        files={searchResults}
+        loading={isPreloading}
+        selectedIndex={autocomplete.selectedIndex}
+        onSelect={handleFileSelect}
+        onClose={autocomplete.close}
+        onQueryChange={autocomplete.setQuery}
+      />
     </div>
   )
 }

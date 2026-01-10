@@ -13,6 +13,7 @@ import { EditorTabs } from "@/components/workspace/EditorTabs"
 import { WorkspaceLayout, WorkspaceEmptyState } from "@/components/workspace/WorkspaceLayout"
 import { PreviewButton } from "@/components/workspace/PreviewButton"
 import { AgentChat } from "@/components/workspace/AgentChat"
+import { FileTreeProvider } from "@/contexts/FileTreeContext"
 
 export function Workspace() {
   const { id } = useParams<{ id: string }>()
@@ -181,42 +182,44 @@ export function Workspace() {
       {/* Main content */}
       <main className="flex-1 overflow-hidden">
         {project.status === "running" ? (
-          <WorkspaceLayout
-            sidebar={
-              <FileTree
-                projectId={project.id}
-                onFileSelect={handleFileSelect}
-                selectedPath={activeFile || undefined}
-                refreshTrigger={fileTreeRefreshTrigger}
-              />
-            }
-            editor={
-              <>
-                <EditorTabs
-                  files={openFiles}
-                  activeFile={activeFile}
-                  onSelect={setActiveFile}
-                  onClose={handleCloseFile}
+          <FileTreeProvider projectId={project.id}>
+            <WorkspaceLayout
+              sidebar={
+                <FileTree
+                  projectId={project.id}
+                  onFileSelect={handleFileSelect}
+                  selectedPath={activeFile || undefined}
+                  refreshTrigger={fileTreeRefreshTrigger}
                 />
-                {activeFileData ? (
-                  <div className="flex-1 overflow-hidden">
-                    <Editor
-                      file={activeFileData}
-                      onContentChange={handleContentChange}
-                      onSave={handleSave}
-                    />
-                  </div>
-                ) : (
-                  <WorkspaceEmptyState />
-                )}
-              </>
-            }
-            terminal={<MultiTerminal projectId={project.id} onDisconnect={refresh} onFileChange={handleFileChange} onPortChange={handlePortChange} />}
-            rightPanel={<AgentChat projectId={project.id} defaultAgent="claude" />}
-            leftSidebarOpen={leftSidebarOpen}
-            terminalOpen={terminalOpen}
-            rightPanelOpen={rightSidebarOpen}
-          />
+              }
+              editor={
+                <>
+                  <EditorTabs
+                    files={openFiles}
+                    activeFile={activeFile}
+                    onSelect={setActiveFile}
+                    onClose={handleCloseFile}
+                  />
+                  {activeFileData ? (
+                    <div className="flex-1 overflow-hidden">
+                      <Editor
+                        file={activeFileData}
+                        onContentChange={handleContentChange}
+                        onSave={handleSave}
+                      />
+                    </div>
+                  ) : (
+                    <WorkspaceEmptyState />
+                  )}
+                </>
+              }
+              terminal={<MultiTerminal projectId={project.id} onDisconnect={refresh} onFileChange={handleFileChange} onPortChange={handlePortChange} />}
+              rightPanel={<AgentChat projectId={project.id} defaultAgent="claude" />}
+              leftSidebarOpen={leftSidebarOpen}
+              terminalOpen={terminalOpen}
+              rightPanelOpen={rightSidebarOpen}
+            />
+          </FileTreeProvider>
         ) : project.status === "starting" ? (
           <div className="h-full flex items-center justify-center">
             <div className="text-center">

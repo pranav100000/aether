@@ -95,6 +95,12 @@ export function useAuth() {
     return data
   }, [])
 
+  const setPassword = useCallback(async (password: string) => {
+    const { data, error } = await supabase.auth.updateUser({ password })
+    if (error) throw error
+    return data
+  }, [])
+
   const getIdentityByProvider = useCallback(
     (provider: string): UserIdentity | undefined => {
       return state.user?.identities?.find((i) => i.provider === provider)
@@ -113,6 +119,7 @@ export function useAuth() {
     getAccessToken,
     linkIdentity,
     unlinkIdentity,
+    setPassword,
     getIdentityByProvider,
   }
 }

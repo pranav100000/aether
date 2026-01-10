@@ -2,6 +2,23 @@ export type AgentType = "claude" | "codex" | "codebuff" | "opencode";
 
 export type PermissionMode = "default" | "acceptEdits" | "plan" | "bypassPermissions";
 
+// File context for @files references
+export interface FileContext {
+  path: string; // Relative path from project root
+  content?: string; // File content (populated by CLI when include: true)
+  selection?: {
+    startLine: number;
+    endLine: number;
+  };
+}
+
+// Binary attachments (images, documents)
+export interface Attachment {
+  filename: string;
+  mediaType: string;
+  data: string; // Base64 encoded content
+}
+
 export interface AgentConfig {
   cwd: string;
   autoApprove: boolean;
@@ -9,6 +26,10 @@ export interface AgentConfig {
   permissionMode?: PermissionMode;
   extendedThinking?: boolean;
   conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>;
+  // File context passed with prompt
+  fileContext?: FileContext[];
+  // Binary attachments (images, PDFs)
+  attachments?: Attachment[];
 }
 
 export interface AgentMessage {
@@ -60,11 +81,32 @@ export interface AgentSettings {
   extendedThinking?: boolean;
 }
 
+// Context sent with prompts from the frontend
+export interface PromptContext {
+  // File references from @files autocomplete
+  files?: Array<{
+    path: string; // Relative path from project root
+    include: boolean; // Whether to read file content
+    selection?: {
+      startLine: number;
+      endLine: number;
+    };
+  }>;
+  // Binary attachments (images, documents)
+  attachments?: Array<{
+    filename: string;
+    mediaType: string;
+    data: string; // Base64 encoded content
+  }>;
+}
+
 export interface ClientMessage {
   type: "prompt" | "abort" | "approve" | "reject" | "settings";
   prompt?: string;
   toolId?: string;
   settings?: AgentSettings;
+  // Context attached to the prompt
+  context?: PromptContext;
 }
 
 export interface AgentProvider {

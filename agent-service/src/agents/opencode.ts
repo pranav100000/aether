@@ -94,6 +94,26 @@ export class OpenCodeProvider implements AgentProvider {
     return { providerID: "anthropic", modelID: "claude-sonnet-4-20250514" };
   }
 
+  // Helper: build file context section for prompt
+  private buildFileContextSection(config: AgentConfig): string {
+    if (!config.fileContext || config.fileContext.length === 0) {
+      return "";
+    }
+
+    let section = "The user has provided the following files as context:\n\n";
+    for (const file of config.fileContext) {
+      if (file.content) {
+        const selectionInfo = file.selection
+          ? ` (lines ${file.selection.startLine}-${file.selection.endLine})`
+          : "";
+        section += `File: ${file.path}${selectionInfo}\n\`\`\`\n${file.content}\n\`\`\`\n\n`;
+      } else {
+        section += `File reference: ${file.path}\n\n`;
+      }
+    }
+    return section;
+  }
+
   async *query(
     prompt: string,
     config: AgentConfig
@@ -118,8 +138,14 @@ export class OpenCodeProvider implements AgentProvider {
         return;
       }
 
-      // Build prompt with conversation history
+      // Build file context section
+      const fileContextSection = this.buildFileContextSection(config);
+
+      // Build prompt with file context and conversation history
       let fullPrompt = prompt;
+      if (fileContextSection) {
+        fullPrompt = `${fileContextSection}\n${prompt}`;
+      }
       if (config.conversationHistory && config.conversationHistory.length > 0) {
         const historyText = config.conversationHistory
           .map(
@@ -127,7 +153,7 @@ export class OpenCodeProvider implements AgentProvider {
               `${msg.role === "user" ? "Human" : "Assistant"}: ${msg.content}`
           )
           .join("\n\n");
-        fullPrompt = `<conversation_history>\n${historyText}\n</conversation_history>\n\nHuman: ${prompt}`;
+        fullPrompt = `<conversation_history>\n${historyText}\n</conversation_history>\n\nHuman: ${fullPrompt}`;
       }
 
       // Parse model configuration

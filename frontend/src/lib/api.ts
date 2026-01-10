@@ -231,7 +231,7 @@ export const api = {
     return `${wsUrl}/projects/${projectId}/terminal`
   },
 
-  getAgentUrl(projectId: string, agent: "claude" | "codex" | "opencode"): string {
+  getAgentUrl(projectId: string, agent: "claude" | "codex" | "opencode" | "codebuff"): string {
     const wsUrl = API_URL.replace("http", "ws")
     return `${wsUrl}/projects/${projectId}/agent/${agent}`
   },
@@ -299,6 +299,13 @@ export const api = {
     return apiRequest("/user/settings", {
       method: "PUT",
       body: JSON.stringify(input),
+    })
+  },
+
+  // Port operations
+  async killPort(projectId: string, port: number): Promise<void> {
+    return apiRequest(`/projects/${projectId}/ports/${port}/kill`, {
+      method: "POST",
     })
   },
 }

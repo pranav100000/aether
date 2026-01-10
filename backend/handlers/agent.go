@@ -1,11 +1,15 @@
 package handlers
 
 import (
+	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -24,14 +28,16 @@ type AgentHandler struct {
 	fly            *fly.Client
 	db             *db.Client
 	authMiddleware *authmw.AuthMiddleware
+	apiKeys        APIKeysGetter
 }
 
-func NewAgentHandler(sshClient *ssh.Client, fly *fly.Client, db *db.Client, authMiddleware *authmw.AuthMiddleware) *AgentHandler {
+func NewAgentHandler(sshClient *ssh.Client, fly *fly.Client, db *db.Client, authMiddleware *authmw.AuthMiddleware, apiKeys APIKeysGetter) *AgentHandler {
 	return &AgentHandler{
 		sshClient:      sshClient,
 		fly:            fly,
 		db:             db,
 		authMiddleware: authMiddleware,
+		apiKeys:        apiKeys,
 	}
 }
 
@@ -143,6 +149,11 @@ func (h *AgentHandler) HandleAgent(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Agent WebSocket connected for project: %s, agent: %s", projectID, agentType)
 
+	// Build fresh env vars for the agent (includes user's latest API keys)
+	agentEnv := h.buildAgentEnv(r.Context(), projectID, userID)
+	envContent := buildEnvFileContent(agentEnv)
+	encodedEnv := base64.StdEncoding.EncodeToString([]byte(envContent))
+
 	// Connect to SSH
 	sshSession, err := h.sshClient.ConnectWithRetry(machine.PrivateIP, 2222, 5, 2*time.Second)
 	if err != nil {
@@ -153,10 +164,11 @@ func (h *AgentHandler) HandleAgent(w http.ResponseWriter, r *http.Request) {
 	defer sshSession.Close()
 
 	// Start the agent CLI
-	// Source .aether_env for API keys, then run the CLI
-	// Use full path to bun since SSH commands without PTY have minimal PATH
-	cmd := "bash -c 'source ~/.aether_env 2>/dev/null; exec /usr/local/bin/bun /opt/agent-service/src/cli.ts " + agentType + "'"
-	log.Printf("Starting agent with command: %s", cmd)
+	// Write env vars via base64 (avoids shell escaping issues), then source and run
+	// Use "." instead of "source" for POSIX shell compatibility
+	// cd to project directory so agent runs in correct context
+	cmd := fmt.Sprintf("echo %s | base64 -d > ~/.aether_env && . ~/.aether_env && cd /home/coder/project && exec /usr/local/bin/bun /opt/agent-service/src/cli.ts %s", encodedEnv, agentType)
+	log.Printf("Starting agent for project %s", projectID)
 	if err := sshSession.Start(cmd); err != nil {
 		log.Printf("Agent start error: %v", err)
 		sendAgentError(conn, "Failed to start agent: "+err.Error())
@@ -297,11 +309,17 @@ func (h *AgentHandler) readAgentStderr(conn *websocket.Conn, session *ssh.Sessio
 		}
 
 		if n > 0 {
-			// Send stderr as error messages (but log-level, not fatal)
 			content := strings.TrimSpace(string(buf[:n]))
 			if content != "" {
-				// Log stderr content for debugging
 				log.Printf("Agent stderr: %s", content)
+				// Send stderr to frontend as error message
+				wsMu.Lock()
+				conn.SetWriteDeadline(time.Now().Add(writeWait))
+				conn.WriteJSON(AgentMessage{
+					Type:  "error",
+					Error: content,
+				})
+				wsMu.Unlock()
 			}
 		}
 	}
@@ -381,4 +399,49 @@ func sendAgentError(conn *websocket.Conn, message string) {
 	}
 	data, _ := json.Marshal(msg)
 	conn.WriteMessage(websocket.TextMessage, data)
+}
+
+// buildAgentEnv builds the environment variables for the agent
+func (h *AgentHandler) buildAgentEnv(ctx context.Context, projectID, userID string) map[string]string {
+	env := map[string]string{
+		"PROJECT_ID":  projectID,
+		"STORAGE_DIR": "/home/coder/project/.aether",
+		"PROJECT_CWD": "/home/coder/project",
+	}
+
+	// Inject platform-level API keys
+	if codebuffKey := os.Getenv("CODEBUFF_API_KEY"); codebuffKey != "" {
+		env["CODEBUFF_API_KEY"] = codebuffKey
+	}
+
+	// Inject user's API keys if available
+	if h.apiKeys != nil {
+		apiKeys, err := h.apiKeys.GetDecryptedKeys(ctx, userID)
+		if err != nil {
+			log.Printf("Warning: failed to get API keys for user %s: %v", userID, err)
+		} else if apiKeys != nil {
+			for envName, key := range apiKeys {
+				env[envName] = key
+			}
+
+			// Derived keys for specific SDKs
+			if openaiKey, ok := apiKeys["OPENAI_API_KEY"]; ok {
+				env["CODEX_API_KEY"] = openaiKey
+			}
+			if openrouterKey, ok := apiKeys["OPENROUTER_API_KEY"]; ok {
+				env["CODEBUFF_BYOK_OPENROUTER"] = openrouterKey
+			}
+		}
+	}
+
+	return env
+}
+
+// buildEnvFileContent creates export statements for the env file
+func buildEnvFileContent(env map[string]string) string {
+	var sb strings.Builder
+	for k, v := range env {
+		sb.WriteString(fmt.Sprintf("export %s=%q\n", k, v))
+	}
+	return sb.String()
 }

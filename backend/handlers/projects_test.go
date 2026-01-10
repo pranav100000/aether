@@ -196,6 +196,7 @@ func (m *mockVolumeManager) DeleteVolume(volumeID string) error {
 
 type mockMachineManager struct {
 	createFn    func(name string, config fly.MachineConfig) (*fly.Machine, error)
+	getFn       func(machineID string) (*fly.Machine, error)
 	startFn     func(machineID string) error
 	stopFn      func(machineID string) error
 	deleteFn    func(machineID string) error
@@ -211,6 +212,13 @@ func (m *mockMachineManager) CreateMachine(name string, config fly.MachineConfig
 		return m.createFn(name, config)
 	}
 	return &fly.Machine{ID: "machine-123", Name: name, State: "created"}, nil
+}
+
+func (m *mockMachineManager) GetMachine(machineID string) (*fly.Machine, error) {
+	if m.getFn != nil {
+		return m.getFn(machineID)
+	}
+	return &fly.Machine{ID: machineID, State: "stopped"}, nil
 }
 
 func (m *mockMachineManager) StartMachine(machineID string) error {

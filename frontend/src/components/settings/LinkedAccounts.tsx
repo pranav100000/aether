@@ -1,6 +1,7 @@
 import { useState } from "react"
 import type { Provider, UserIdentity } from "@supabase/supabase-js"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import {
   Dialog,
@@ -190,9 +191,118 @@ function AccountCard({
   )
 }
 
+interface EmailAccountCardProps {
+  isConnected: boolean
+  email: string | undefined
+  onSetPassword: (password: string) => Promise<void>
+}
+
+function EmailAccountCard({ isConnected, email, onSetPassword }: EmailAccountCardProps) {
+  const [password, setPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState(false)
+
+  const handleSetPassword = async () => {
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters")
+      return
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match")
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+    try {
+      await onSetPassword(password)
+      setSuccess(true)
+      setPassword("")
+      setConfirmPassword("")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to set password")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="border rounded-lg p-4 space-y-3">
+      <div className="flex items-start justify-between">
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5">
+            <EmailIcon className="h-5 w-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              {isConnected ? (
+                <div className="w-2 h-2 rounded-full bg-green-500" />
+              ) : (
+                <div className="w-2 h-2 rounded-full bg-gray-400" />
+              )}
+              <h3 className="font-medium">Email</h3>
+            </div>
+            <p className="text-sm text-muted-foreground mt-1">
+              Sign in with your email and password
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {isConnected ? (
+        <p className="text-sm text-muted-foreground">
+          Connected as {email}
+        </p>
+      ) : (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Set a password to enable email sign-in for {email}
+          </p>
+          <div className="space-y-2">
+            <Input
+              type="password"
+              placeholder="New password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <Input
+              type="password"
+              placeholder="Confirm password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+            />
+            <Button
+              onClick={handleSetPassword}
+              disabled={loading || !password || !confirmPassword}
+              className="w-full"
+            >
+              {loading ? <Spinner size="sm" /> : "Set Password"}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {success && (
+        <p className="text-sm text-green-600">
+          Password set successfully. You can now sign in with email.
+        </p>
+      )}
+      {error && <p className="text-sm text-red-500">{error}</p>}
+    </div>
+  )
+}
+
 export function LinkedAccounts() {
-  const { user, loading, linkIdentity, unlinkIdentity, getIdentityByProvider } =
-    useAuth()
+  const {
+    user,
+    loading,
+    linkIdentity,
+    unlinkIdentity,
+    setPassword,
+    getIdentityByProvider,
+  } = useAuth()
 
   if (loading) {
     return (
@@ -204,6 +314,8 @@ export function LinkedAccounts() {
 
   const identities = user?.identities ?? []
   const totalLinkedCount = identities.length
+  const hasEmailIdentity = !!getIdentityByProvider("email")
+  const oauthProviders = LINKED_ACCOUNTS.filter((a) => a.isOAuth)
 
   const handleConnect = async (provider: Provider) => {
     await linkIdentity(provider)
@@ -211,6 +323,10 @@ export function LinkedAccounts() {
 
   const handleDisconnect = async (identity: UserIdentity) => {
     await unlinkIdentity(identity)
+  }
+
+  const handleSetPassword = async (password: string) => {
+    await setPassword(password)
   }
 
   return (
@@ -224,7 +340,13 @@ export function LinkedAccounts() {
       </div>
 
       <div className="space-y-4">
-        {LINKED_ACCOUNTS.map((account) => {
+        <EmailAccountCard
+          isConnected={hasEmailIdentity}
+          email={user?.email}
+          onSetPassword={handleSetPassword}
+        />
+
+        {oauthProviders.map((account) => {
           const identity = getIdentityByProvider(account.provider)
           const isConnected = !!identity
           const canDisconnect = totalLinkedCount > 1

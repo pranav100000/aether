@@ -93,9 +93,10 @@ func main() {
 	// New project-based handlers
 	projectHandler := handlers.NewProjectHandler(dbClient, flyClient, flyClient, apiKeysHandler, baseImage, flyRegion, idleTimeout)
 	terminalHandler := handlers.NewTerminalHandler(sshClient, flyClient, dbClient, authMiddleware)
-	agentHandler := handlers.NewAgentHandler(sshClient, flyClient, dbClient, authMiddleware)
+	agentHandler := handlers.NewAgentHandler(sshClient, flyClient, dbClient, authMiddleware, apiKeysHandler)
 	healthHandler := handlers.NewHealthHandler(dbClient, getEnv("VERSION", "dev"))
 	filesHandler := handlers.NewFilesHandler(sftpClient, flyClient, dbClient)
+	portsHandler := handlers.NewPortsHandler(sshClient, flyClient, dbClient)
 
 	// Start idle project checker
 	projectHandler.StartIdleChecker(1 * time.Minute)
@@ -153,6 +154,9 @@ func main() {
 				r.Post("/mkdir", filesHandler.Mkdir)
 				r.Post("/rename", filesHandler.Rename)
 			})
+
+			// Port operations
+			r.Post("/{id}/ports/{port}/kill", portsHandler.KillPort)
 		})
 
 		// User API keys routes

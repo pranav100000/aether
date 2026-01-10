@@ -6,6 +6,7 @@ vendor/
 dist/
 build/
 bin/
+backend/aether
 *.exe
 *.dll
 *.so

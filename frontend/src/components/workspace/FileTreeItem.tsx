@@ -3,6 +3,7 @@ import { ChevronRight, ChevronDown, File, Folder, FolderOpen, MoreVertical, Tras
 import { api } from "@/lib/api"
 import type { FileEntry } from "@/lib/api"
 import { cn } from "@/lib/utils"
+import { useFileTreeContext } from "@/contexts/FileTreeContext"
 
 // Files/folders to hide in the file tree
 const HIDDEN_ENTRIES = new Set([
@@ -90,6 +91,9 @@ export function FileTreeItem({
   const [creating, setCreating] = useState<"file" | "folder" | null>(null)
   const [createName, setCreateName] = useState("")
 
+  // Get addFiles from context to populate file cache for @mentions
+  const { addFiles } = useFileTreeContext()
+
   const fullPath = path === "/" ? `/${entry.name}` : `${path}/${entry.name}`
   const isSelected = selectedPath === fullPath
   const isDirectory = entry.type === "directory"
@@ -113,6 +117,8 @@ export function FileTreeItem({
       try {
         const listing = await api.listFiles(projectId, fullPath)
         setChildren(filterAndSortEntries(listing.entries))
+        // Add files to context cache for @mentions
+        addFiles(fullPath, listing.entries)
       } catch (err) {
         console.error("Failed to load directory:", err)
       } finally {
@@ -121,7 +127,7 @@ export function FileTreeItem({
     }
 
     setExpanded(!expanded)
-  }, [expanded, children, isDirectory, projectId, fullPath])
+  }, [expanded, children, isDirectory, projectId, fullPath, addFiles])
 
   const handleClick = useCallback(() => {
     if (isDirectory) {
@@ -185,6 +191,8 @@ export function FileTreeItem({
       // Refresh the children
       const listing = await api.listFiles(projectId, fullPath)
       setChildren(filterAndSortEntries(listing.entries))
+      // Add files to context cache for @mentions
+      addFiles(fullPath, listing.entries)
       setExpanded(true)
     } catch (err) {
       console.error("Failed to create:", err)
@@ -193,7 +201,7 @@ export function FileTreeItem({
       setCreating(null)
       setCreateName("")
     }
-  }, [createName, creating, projectId, fullPath])
+  }, [createName, creating, projectId, fullPath, addFiles])
 
   return (
     <div>

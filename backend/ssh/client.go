@@ -125,6 +125,54 @@ func (c *Client) ConnectWithRetry(host string, port int, maxRetries int, retryDe
 	return nil, fmt.Errorf("failed to connect after %d retries: %w", maxRetries, lastErr)
 }
 
+// Exec runs a single command and returns its combined output
+// This creates a fresh session without pre-allocated pipes
+func (c *Client) Exec(host string, port int, cmd string) ([]byte, error) {
+	config := &ssh.ClientConfig{
+		User: c.user,
+		Auth: []ssh.AuthMethod{
+			ssh.PublicKeys(c.privateKey),
+		},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         10 * time.Second,
+	}
+
+	addr := net.JoinHostPort(host, fmt.Sprintf("%d", port))
+	conn, err := ssh.Dial("tcp", addr, config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to dial: %w", err)
+	}
+	defer conn.Close()
+
+	session, err := conn.NewSession()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create session: %w", err)
+	}
+	defer session.Close()
+
+	return session.CombinedOutput(cmd)
+}
+
+// ExecWithRetry runs a single command with retries
+func (c *Client) ExecWithRetry(host string, port int, cmd string, maxRetries int, retryDelay time.Duration) ([]byte, error) {
+	var lastErr error
+
+	for i := 0; i < maxRetries; i++ {
+		output, err := c.Exec(host, port, cmd)
+		if err == nil {
+			return output, nil
+		}
+
+		lastErr = err
+
+		if i < maxRetries-1 {
+			time.Sleep(retryDelay)
+		}
+	}
+
+	return nil, fmt.Errorf("failed to exec after %d retries: %w", maxRetries, lastErr)
+}
+
 func (s *Session) RequestPTY(term string, cols, rows int) error {
 	modes := ssh.TerminalModes{
 		ssh.ECHO:          1,
@@ -195,6 +243,10 @@ func (s *Session) Wait() error {
 
 func (s *Session) Start(cmd string) error {
 	return s.session.Start(cmd)
+}
+
+func (s *Session) Run(cmd string) error {
+	return s.session.Run(cmd)
 }
 
 func (s *Session) KeepAlive(interval time.Duration, done <-chan struct{}) {

@@ -537,34 +537,7 @@ func (h *ProjectHandler) createMachine(ctx context.Context, project *db.Project,
 	}
 
 	// Build environment variables
-	machineEnv := map[string]string{
-		"PROJECT_ID": project.ID,
-	}
-
-	// Inject platform-level API keys (not user-specific)
-	if codebuffKey := os.Getenv("CODEBUFF_API_KEY"); codebuffKey != "" {
-		machineEnv["CODEBUFF_API_KEY"] = codebuffKey
-	}
-
-	// Inject user's API keys if available
-	if h.apiKeys != nil {
-		log.Printf("Fetching API keys for user %s", userID)
-		apiKeys, err := h.apiKeys.GetDecryptedKeys(ctx, userID)
-		if err != nil {
-			log.Printf("Warning: failed to get API keys for user %s: %v", userID, err)
-		} else if apiKeys != nil {
-			log.Printf("Found %d API keys for user %s", len(apiKeys), userID)
-			for envName, key := range apiKeys {
-				log.Printf("Injecting env var %s (key length: %d)", envName, len(key))
-				machineEnv[envName] = key
-			}
-		} else {
-			log.Printf("No API keys found for user %s", userID)
-		}
-	} else {
-		log.Printf("API keys handler not available")
-	}
-
+	machineEnv := h.buildMachineEnv(ctx, project.ID, userID)
 	log.Printf("Creating machine with %d env vars", len(machineEnv))
 	config := fly.MachineConfig{
 		Image: h.baseImage,
@@ -582,6 +555,32 @@ func (h *ProjectHandler) createMachine(ctx context.Context, project *db.Project,
 
 	machineName := "aether-" + project.ID[:8]
 	return h.machines.CreateMachine(machineName, config)
+}
+
+// buildMachineEnv builds the environment variables for a machine
+func (h *ProjectHandler) buildMachineEnv(ctx context.Context, projectID, userID string) map[string]string {
+	env := map[string]string{
+		"PROJECT_ID": projectID,
+	}
+
+	// Inject platform-level API keys (not user-specific)
+	if codebuffKey := os.Getenv("CODEBUFF_API_KEY"); codebuffKey != "" {
+		env["CODEBUFF_API_KEY"] = codebuffKey
+	}
+
+	// Inject user's API keys if available
+	if h.apiKeys != nil {
+		apiKeys, err := h.apiKeys.GetDecryptedKeys(ctx, userID)
+		if err != nil {
+			log.Printf("Warning: failed to get API keys for user %s: %v", userID, err)
+		} else if apiKeys != nil {
+			for envName, key := range apiKeys {
+				env[envName] = key
+			}
+		}
+	}
+
+	return env
 }
 
 // StartIdleChecker starts background goroutine to stop idle projects

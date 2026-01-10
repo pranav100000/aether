@@ -23,14 +23,40 @@ export class CodebuffProvider implements AgentProvider {
     return this.client;
   }
 
+  // Helper: build file context section for prompt
+  private buildFileContextSection(config: AgentConfig): string {
+    if (!config.fileContext || config.fileContext.length === 0) {
+      return "";
+    }
+
+    let section = "The user has provided the following files as context:\n\n";
+    for (const file of config.fileContext) {
+      if (file.content) {
+        const selectionInfo = file.selection
+          ? ` (lines ${file.selection.startLine}-${file.selection.endLine})`
+          : "";
+        section += `File: ${file.path}${selectionInfo}\n\`\`\`\n${file.content}\n\`\`\`\n\n`;
+      } else {
+        section += `File reference: ${file.path}\n\n`;
+      }
+    }
+    return section;
+  }
+
   async *query(
     prompt: string,
     config: AgentConfig
   ): AsyncIterable<AgentMessage> {
     const client = this.getClient(config.cwd);
 
-    // Build prompt with conversation history if available
+    // Build file context section
+    const fileContextSection = this.buildFileContextSection(config);
+
+    // Build prompt with file context and conversation history
     let fullPrompt = prompt;
+    if (fileContextSection) {
+      fullPrompt = `${fileContextSection}\n${prompt}`;
+    }
     if (config.conversationHistory && config.conversationHistory.length > 0) {
       const historyText = config.conversationHistory
         .map(
@@ -38,7 +64,7 @@ export class CodebuffProvider implements AgentProvider {
             `${msg.role === "user" ? "Human" : "Assistant"}: ${msg.content}`
         )
         .join("\n\n");
-      fullPrompt = `<conversation_history>\n${historyText}\n</conversation_history>\n\nHuman: ${prompt}`;
+      fullPrompt = `<conversation_history>\n${historyText}\n</conversation_history>\n\nHuman: ${fullPrompt}`;
     }
 
     // Create a channel to stream events from callback to async iterator
@@ -60,7 +86,7 @@ export class CodebuffProvider implements AgentProvider {
     // Start the run in the background
     const runPromise = client
       .run({
-        agent: config.model || "base",
+        agent: config.model || "base2",
         prompt: fullPrompt,
         handleEvent,
         ...(this.previousRun ? { previousRun: this.previousRun } : {}),
