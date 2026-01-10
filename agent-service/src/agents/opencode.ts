@@ -8,6 +8,7 @@ export class OpenCodeProvider implements AgentProvider {
   private client: OpenCodeClient | null = null;
   private sessionId: string | null = null;
   private abortController: AbortController | null = null;
+  private authConfigured = false;
 
   isConfigured(): boolean {
     // OpenCode uses provider-specific API keys
@@ -25,7 +26,39 @@ export class OpenCodeProvider implements AgentProvider {
       const { client } = await createOpencode();
       this.client = client;
     }
+
+    // Configure auth for providers if not already done
+    if (!this.authConfigured) {
+      await this.configureAuth(this.client);
+      this.authConfigured = true;
+    }
+
     return this.client;
+  }
+
+  private async configureAuth(client: OpenCodeClient): Promise<void> {
+    // Set up auth for each available provider
+    const providers = [
+      { id: "anthropic", envKey: "ANTHROPIC_API_KEY" },
+      { id: "openai", envKey: "OPENAI_API_KEY" },
+      { id: "google", envKey: "GOOGLE_API_KEY" },
+      { id: "openrouter", envKey: "OPENROUTER_API_KEY" },
+    ];
+
+    for (const provider of providers) {
+      const apiKey = process.env[provider.envKey];
+      if (apiKey) {
+        try {
+          await client.auth.set({
+            path: { id: provider.id },
+            body: { type: "api", key: apiKey },
+          });
+        } catch (err) {
+          // Log but continue - provider might not be needed
+          console.error(`Failed to configure auth for ${provider.id}:`, err);
+        }
+      }
+    }
   }
 
   private parseModel(model?: string): { providerID: string; modelID: string } {
@@ -79,23 +112,32 @@ export class OpenCodeProvider implements AgentProvider {
       // Subscribe to events before sending prompt
       const events = await client.event.subscribe();
 
-      // Send prompt (don't await - we'll get response via events)
-      client.session.prompt({
+      // Send prompt - catch errors but don't block (events come via subscription)
+      const promptPromise = client.session.prompt({
         path: { id: this.sessionId },
         body: {
           model: modelConfig,
           parts: [{ type: "text", text: fullPrompt }],
         },
+      }).catch((err: Error) => {
+        console.error("[opencode] Prompt error:", err);
+        return { error: err };
       });
 
       // Process streaming events
       let currentContent = "";
       let isDone = false;
+      let eventCount = 0;
 
       for await (const event of events.stream) {
+        eventCount++;
+
         if (this.abortController?.signal.aborted) {
           break;
         }
+
+        // Debug: log event types to stderr
+        console.error(`[opencode] Event ${eventCount}: ${event.type}`);
 
         const mapped = this.mapEvent(event, config);
         if (mapped) {
@@ -108,10 +150,17 @@ export class OpenCodeProvider implements AgentProvider {
           yield mapped;
         }
 
-        // Break on turn complete
-        if (event.type === "session.updated" && isDone) {
+        // Break on session idle (turn complete)
+        if (isDone || event.type === "session.idle") {
           break;
         }
+      }
+
+      // Check if prompt had an error
+      const promptResult = await promptPromise;
+      if (promptResult && "error" in promptResult) {
+        yield { type: "error", error: String(promptResult.error) };
+        return;
       }
 
       if (!isDone) {
@@ -132,91 +181,100 @@ export class OpenCodeProvider implements AgentProvider {
     const props = event.properties as Record<string, unknown> | undefined;
 
     switch (event.type) {
-      case "part.text.delta": {
-        // Streaming text content
+      case "message.part.updated": {
+        // Part updated - check the part type
+        // Part has: id, sessionID, messageID, type, text, etc.
+        // Also may have delta for streaming increments
         const delta = props?.delta as string | undefined;
-        if (delta) {
-          return { type: "text", content: delta, streaming: true };
-        }
-        return null;
-      }
+        const part = props?.part as {
+          type?: string;
+          text?: string;
+          callID?: string;
+          tool?: string;
+          state?: { type?: string; input?: Record<string, unknown>; output?: unknown };
+        } | undefined;
 
-      case "part.text": {
-        // Complete text content
-        const text = props?.text as string | undefined;
-        if (text) {
-          return { type: "text", content: text, streaming: false };
-        }
-        return null;
-      }
+        if (!part) return null;
 
-      case "part.thinking.delta": {
-        // Streaming thinking/reasoning
-        const delta = props?.delta as string | undefined;
-        if (delta) {
-          return { type: "thinking", content: delta, streaming: true };
-        }
-        return null;
-      }
+        // Use delta for streaming if available, otherwise use full text
+        const content = delta || part.text;
 
-      case "part.tool-invocation": {
-        // Tool call
-        const toolCall = props as {
-          toolCallId?: string;
-          toolName?: string;
-          args?: Record<string, unknown>;
-          state?: string;
-        };
-        if (toolCall) {
+        if (part.type === "text" && content) {
+          return { type: "text", content, streaming: !!delta };
+        }
+
+        if (part.type === "reasoning" && content) {
+          return { type: "thinking", content, streaming: !!delta };
+        }
+
+        if (part.type === "tool" && part.tool) {
+          // ToolPart has: callID, tool (tool name), state (ToolState)
+          // ToolState can be: pending, running, completed, error
+          const state = part.state;
+          const stateType = state?.type || "pending";
+
+          // For tool results (completed or error state)
+          if (stateType === "completed" || stateType === "error") {
+            return {
+              type: "tool_result",
+              toolId: part.callID,
+              result: typeof state?.output === "string"
+                ? state.output
+                : JSON.stringify(state?.output || ""),
+              error: stateType === "error" ? String(state?.output) : undefined,
+            };
+          }
+
+          // For tool invocations (pending or running)
           return {
             type: "tool_use",
             tool: {
-              id: toolCall.toolCallId || crypto.randomUUID(),
-              name: toolCall.toolName || "unknown",
-              input: toolCall.args || {},
+              id: part.callID || crypto.randomUUID(),
+              name: part.tool,
+              input: state?.input || {},
               status: config.autoApprove ? "running" : "pending",
             },
           };
         }
+
         return null;
       }
 
-      case "part.tool-result": {
-        // Tool result
-        const result = props as {
-          toolCallId?: string;
-          result?: unknown;
-          isError?: boolean;
-        };
-        if (result) {
-          return {
-            type: "tool_result",
-            toolId: result.toolCallId,
-            result: typeof result.result === "string"
-              ? result.result
-              : JSON.stringify(result.result),
-            error: result.isError ? String(result.result) : undefined,
-          };
+      case "message.updated": {
+        // Full message update - extract text content
+        const message = props?.message as { content?: Array<{ type?: string; text?: string }> } | undefined;
+        if (message?.content) {
+          const textParts = message.content
+            .filter((p) => p.type === "text" && p.text)
+            .map((p) => p.text)
+            .join("");
+          if (textParts) {
+            return { type: "text", content: textParts, streaming: false };
+          }
         }
         return null;
       }
 
-      case "message.completed":
-      case "session.completed": {
-        // Turn complete
-        const usage = props?.usage as {
-          promptTokens?: number;
-          completionTokens?: number;
-        } | undefined;
+      case "session.idle": {
+        // Session finished processing
+        return { type: "done" };
+      }
+
+      case "session.status": {
+        // Check if session is done
+        const status = props?.status as { state?: string } | undefined;
+        if (status?.state === "idle") {
+          return { type: "done" };
+        }
+        return null;
+      }
+
+      case "session.error": {
+        // Session error
+        const error = props?.error as { message?: string } | undefined;
         return {
-          type: "done",
-          usage: usage
-            ? {
-                inputTokens: usage.promptTokens || 0,
-                outputTokens: usage.completionTokens || 0,
-                cost: 0,
-              }
-            : undefined,
+          type: "error",
+          error: error?.message || "Unknown session error",
         };
       }
 

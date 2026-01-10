@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { useApiKeys } from "@/hooks/useApiKeys"
+import { LinkedAccounts } from "./LinkedAccounts"
 import type { ConnectedProvider } from "@/lib/api"
 
 const PROVIDER_INFO: Record<string, { name: string; description: string; placeholder: string; helpUrl: string }> = {
@@ -153,47 +154,51 @@ export function ConnectedAccounts() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold">Connected Accounts</h2>
-        <p className="text-sm text-muted-foreground">
-          Connect your AI provider accounts to use coding agents in your projects.
-        </p>
-      </div>
+    <div className="space-y-10">
+      <LinkedAccounts />
 
-      <div className="space-y-4">
-        {providers.map((provider) => (
-          <ProviderCard
-            key={provider.provider}
-            provider={provider}
-            onConnect={(apiKey) => addKey(provider.provider, apiKey)}
-            onDisconnect={() => removeKey(provider.provider)}
-          />
-        ))}
-      </div>
-
-      <div className="border rounded-lg p-4 bg-muted/50">
-        <div className="flex items-start gap-2">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="mt-0.5 text-muted-foreground"
-          >
-            <circle cx="12" cy="12" r="10" />
-            <path d="M12 16v-4" />
-            <path d="M12 8h.01" />
-          </svg>
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-lg font-semibold">API Keys</h2>
           <p className="text-sm text-muted-foreground">
-            Your API keys are encrypted and only used to run agents in your cloud environments.
-            We never access your keys for any other purpose.
+            Connect your AI provider accounts to use coding agents in your projects.
           </p>
+        </div>
+
+        <div className="space-y-4">
+          {providers.map((provider) => (
+            <ProviderCard
+              key={provider.provider}
+              provider={provider}
+              onConnect={(apiKey) => addKey(provider.provider, apiKey)}
+              onDisconnect={() => removeKey(provider.provider)}
+            />
+          ))}
+        </div>
+
+        <div className="border rounded-lg p-4 bg-muted/50">
+          <div className="flex items-start gap-2">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="mt-0.5 text-muted-foreground"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 16v-4" />
+              <path d="M12 8h.01" />
+            </svg>
+            <p className="text-sm text-muted-foreground">
+              Your API keys are encrypted and only used to run agents in your cloud environments.
+              We never access your keys for any other purpose.
+            </p>
+          </div>
         </div>
       </div>
     </div>

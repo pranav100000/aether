@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react"
-import type { User, Session } from "@supabase/supabase-js"
+import type { User, Session, Provider, UserIdentity } from "@supabase/supabase-js"
 import { supabase } from "@/lib/supabase"
 
 interface AuthState {
@@ -57,6 +57,17 @@ export function useAuth() {
     return data
   }, [])
 
+  const signInWithOAuth = useCallback(async (provider: Provider) => {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: `${window.location.origin}/`,
+      },
+    })
+    if (error) throw error
+    return data
+  }, [])
+
   const signOut = useCallback(async () => {
     const { error } = await supabase.auth.signOut()
     if (error) throw error
@@ -67,13 +78,41 @@ export function useAuth() {
     return session?.access_token ?? null
   }, [])
 
+  const linkIdentity = useCallback(async (provider: Provider) => {
+    const { data, error } = await supabase.auth.linkIdentity({
+      provider,
+      options: {
+        redirectTo: `${window.location.origin}/settings`,
+      },
+    })
+    if (error) throw error
+    return data
+  }, [])
+
+  const unlinkIdentity = useCallback(async (identity: UserIdentity) => {
+    const { data, error } = await supabase.auth.unlinkIdentity(identity)
+    if (error) throw error
+    return data
+  }, [])
+
+  const getIdentityByProvider = useCallback(
+    (provider: string): UserIdentity | undefined => {
+      return state.user?.identities?.find((i) => i.provider === provider)
+    },
+    [state.user]
+  )
+
   return {
     user: state.user,
     session: state.session,
     loading: state.loading,
     signIn,
     signUp,
+    signInWithOAuth,
     signOut,
     getAccessToken,
+    linkIdentity,
+    unlinkIdentity,
+    getIdentityByProvider,
   }
 }
