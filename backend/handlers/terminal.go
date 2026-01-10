@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -77,8 +78,9 @@ type WSMessage struct {
 	Data   string `json:"data,omitempty"`
 	Cols   int    `json:"cols,omitempty"`
 	Rows   int    `json:"rows,omitempty"`
-	Action string `json:"action,omitempty"` // For file_change: create, modify, delete
+	Action string `json:"action,omitempty"` // For file_change: create, modify, delete; For port_change: open, close
 	Path   string `json:"path,omitempty"`   // For file_change: the file path
+	Port   int    `json:"port,omitempty"`   // For port_change: the port number
 }
 
 func (h *TerminalHandler) HandleTerminal(w http.ResponseWriter, r *http.Request) {
@@ -218,6 +220,13 @@ func (h *TerminalHandler) HandleTerminal(w http.ResponseWriter, r *http.Request)
 	go func() {
 		defer wg.Done()
 		h.startFileWatcher(conn, machine.PrivateIP, done, &wsMu)
+	}()
+
+	// Start port watcher
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		h.startPortWatcher(conn, machine.PrivateIP, done, &wsMu)
 	}()
 
 	<-done
@@ -488,6 +497,115 @@ func (h *TerminalHandler) startFileWatcher(conn *websocket.Conn, privateIP strin
 
 				if err != nil {
 					log.Printf("File watcher WebSocket write error: %v", err)
+					return
+				}
+			}
+		}
+	}
+}
+
+func (h *TerminalHandler) startPortWatcher(conn *websocket.Conn, privateIP string, done chan struct{}, wsMu *sync.Mutex) {
+	log.Printf("Port watcher: starting for %s", privateIP)
+
+	// Connect to SSH for port watching
+	watchSession, err := h.sshClient.ConnectWithRetry(privateIP, 2222, 3, 2*time.Second)
+	if err != nil {
+		log.Printf("Port watcher SSH connection error: %v", err)
+		return
+	}
+	defer watchSession.Close()
+
+	log.Printf("Port watcher: SSH connected, starting binary")
+
+	// Run port-watcher binary (uses netlink to detect listening ports)
+	// Outputs: "LISTEN 5173" or "CLOSE 5173"
+	cmd := `/usr/local/bin/port-watcher`
+	if err := watchSession.Start(cmd); err != nil {
+		log.Printf("Port watcher start error: %v", err)
+		return
+	}
+
+	log.Printf("Port watcher: binary started, reading output")
+
+	go watchSession.KeepAlive(30*time.Second, done)
+
+	// Log stderr from port-watcher for debugging
+	go func() {
+		stderrBuf := make([]byte, 4096)
+		for {
+			n, err := watchSession.Stderr().Read(stderrBuf)
+			if err != nil {
+				return
+			}
+			if n > 0 {
+				log.Printf("Port watcher stderr: %s", string(stderrBuf[:n]))
+			}
+		}
+	}()
+
+	buf := make([]byte, 4096)
+	for {
+		select {
+		case <-done:
+			return
+		default:
+		}
+
+		n, err := watchSession.Read(buf)
+		if err != nil {
+			if err != io.EOF {
+				log.Printf("Port watcher read error: %v", err)
+			}
+			return
+		}
+
+		if n > 0 {
+			log.Printf("Port watcher: received data: %q", string(buf[:n]))
+			// Parse port-watcher output: "LISTEN 5173" or "CLOSE 5173"
+			lines := strings.Split(string(buf[:n]), "\n")
+			for _, line := range lines {
+				line = strings.TrimSpace(line)
+				if line == "" {
+					continue
+				}
+
+				parts := strings.SplitN(line, " ", 2)
+				if len(parts) != 2 {
+					continue
+				}
+
+				event := parts[0]
+				portStr := parts[1]
+
+				var port int
+				if _, err := fmt.Sscanf(portStr, "%d", &port); err != nil {
+					continue
+				}
+
+				var action string
+				switch event {
+				case "LISTEN":
+					action = "open"
+				case "CLOSE":
+					action = "close"
+				default:
+					continue
+				}
+
+				// Send port change message
+				msg := WSMessage{
+					Type:   "port_change",
+					Action: action,
+					Port:   port,
+				}
+
+				wsMu.Lock()
+				conn.SetWriteDeadline(time.Now().Add(writeWait))
+				err := conn.WriteJSON(msg)
+				wsMu.Unlock()
+
+				if err != nil {
+					log.Printf("Port watcher WebSocket write error: %v", err)
 					return
 				}
 			}

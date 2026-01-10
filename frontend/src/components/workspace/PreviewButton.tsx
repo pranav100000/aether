@@ -4,7 +4,20 @@ import { cn } from "@/lib/utils"
 
 interface PreviewButtonProps {
   projectId: string
+  activePorts: number[]
   previewToken?: string
+}
+
+// Known port labels
+const PORT_LABELS: Record<number, string> = {
+  3000: "React/Next",
+  3001: "Dev Server",
+  4000: "Phoenix",
+  5173: "Vite",
+  5174: "Vite",
+  8000: "Django",
+  8080: "Go/Java",
+  5000: "Flask",
 }
 
 const COMMON_PORTS = [
@@ -27,20 +40,44 @@ function getPreviewUrl(projectId: string, port: number, token?: string): string 
   return `http://${subdomain}.${PREVIEW_DOMAIN}`
 }
 
-export function PreviewButton({ projectId, previewToken }: PreviewButtonProps) {
+export function PreviewButton({ projectId, activePorts, previewToken }: PreviewButtonProps) {
   const [showDropdown, setShowDropdown] = useState(false)
 
-  const handlePreview = (port: number) => {
+  const openPreview = (port: number) => {
     const url = getPreviewUrl(projectId, port, previewToken)
     window.open(url, "_blank")
     setShowDropdown(false)
   }
 
+  // If we have detected active ports, show dynamic buttons
+  if (activePorts.length > 0) {
+    return (
+      <div className="flex items-center gap-1">
+        {activePorts.map((port) => (
+          <button
+            key={port}
+            onClick={() => openPreview(port)}
+            className={cn(
+              "flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium",
+              "bg-primary text-primary-foreground hover:bg-primary/90",
+              "rounded transition-colors"
+            )}
+            title={`Open port ${port} in new tab`}
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            {PORT_LABELS[port] || port}
+          </button>
+        ))}
+      </div>
+    )
+  }
+
+  // No active ports detected - show dropdown with common ports
   return (
     <div className="relative">
       <div className="flex items-center">
         <button
-          onClick={() => handlePreview(3000)}
+          onClick={() => openPreview(3000)}
           className={cn(
             "flex items-center gap-2 px-3 py-1.5 text-sm font-medium",
             "bg-primary text-primary-foreground hover:bg-primary/90",
@@ -77,7 +114,7 @@ export function PreviewButton({ projectId, previewToken }: PreviewButtonProps) {
               <button
                 key={port}
                 className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted"
-                onClick={() => handlePreview(port)}
+                onClick={() => openPreview(port)}
               >
                 {label}
               </button>

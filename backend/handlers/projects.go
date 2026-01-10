@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"aether/db"
@@ -538,6 +539,11 @@ func (h *ProjectHandler) createMachine(ctx context.Context, project *db.Project,
 	// Build environment variables
 	machineEnv := map[string]string{
 		"PROJECT_ID": project.ID,
+	}
+
+	// Inject platform-level API keys (not user-specific)
+	if codebuffKey := os.Getenv("CODEBUFF_API_KEY"); codebuffKey != "" {
+		machineEnv["CODEBUFF_API_KEY"] = codebuffKey
 	}
 
 	// Inject user's API keys if available

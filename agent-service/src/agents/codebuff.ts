@@ -9,14 +9,14 @@ export class CodebuffProvider implements AgentProvider {
   private previousRun: RunState | null = null;
 
   isConfigured(): boolean {
-    // CodeBuff uses BYOK (Bring Your Own Key) with OpenRouter
-    return !!process.env.CODEBUFF_BYOK_OPENROUTER;
+    // CodeBuff requires both: CODEBUFF_API_KEY (service auth) and CODEBUFF_BYOK_OPENROUTER (model provider)
+    return !!process.env.CODEBUFF_API_KEY && !!process.env.CODEBUFF_BYOK_OPENROUTER;
   }
 
   private getClient(cwd: string): CodebuffClient {
     if (!this.client) {
       this.client = new CodebuffClient({
-        apiKey: process.env.CODEBUFF_BYOK_OPENROUTER!,
+        apiKey: process.env.CODEBUFF_API_KEY!,
         cwd,
       });
     }
@@ -27,9 +27,6 @@ export class CodebuffProvider implements AgentProvider {
     prompt: string,
     config: AgentConfig
   ): AsyncIterable<AgentMessage> {
-    console.error("[codebuff] Starting query with prompt:", prompt.slice(0, 100));
-    console.error("[codebuff] CODEBUFF_BYOK_OPENROUTER set:", !!process.env.CODEBUFF_BYOK_OPENROUTER);
-
     const client = this.getClient(config.cwd);
 
     // Build prompt with conversation history if available
@@ -50,7 +47,6 @@ export class CodebuffProvider implements AgentProvider {
     let isComplete = false;
 
     const handleEvent = (event: { type: string; [key: string]: unknown }) => {
-      console.error("[codebuff] Event received:", event.type);
       const mapped = this.mapEvent(event, config);
       if (mapped) {
         eventQueue.push(mapped);
@@ -62,7 +58,6 @@ export class CodebuffProvider implements AgentProvider {
     };
 
     // Start the run in the background
-    console.error("[codebuff] Starting client.run()");
     const runPromise = client
       .run({
         agent: config.model || "base",
@@ -71,7 +66,6 @@ export class CodebuffProvider implements AgentProvider {
         ...(this.previousRun ? { previousRun: this.previousRun } : {}),
       })
       .then((result: RunState) => {
-        console.error("[codebuff] Run completed successfully");
         this.previousRun = result;
         isComplete = true;
         if (resolveWait) {
@@ -81,7 +75,6 @@ export class CodebuffProvider implements AgentProvider {
         return result;
       })
       .catch((err: Error) => {
-        console.error("[codebuff] Run failed:", err.message);
         eventQueue.push({
           type: "error",
           error: err.message,
@@ -95,22 +88,17 @@ export class CodebuffProvider implements AgentProvider {
       });
 
     // Yield events as they come in
-    console.error("[codebuff] Entering event loop");
     while (!isComplete || eventQueue.length > 0) {
       if (eventQueue.length > 0) {
-        const msg = eventQueue.shift()!;
-        console.error("[codebuff] Yielding message:", msg.type);
-        yield msg;
+        yield eventQueue.shift()!;
       } else if (!isComplete) {
         // Wait for next event
-        console.error("[codebuff] Waiting for next event...");
         await new Promise<void>((resolve) => {
           resolveWait = resolve;
         });
       }
     }
 
-    console.error("[codebuff] Event loop complete, waiting for runPromise");
     // Wait for run to complete
     try {
       await runPromise;
@@ -118,7 +106,6 @@ export class CodebuffProvider implements AgentProvider {
       // Error already pushed to queue
     }
 
-    console.error("[codebuff] Yielding done");
     yield { type: "done" };
   }
 

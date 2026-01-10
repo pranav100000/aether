@@ -12,15 +12,17 @@ interface TerminalInstanceProps {
   isActive: boolean
   onDisconnect?: () => void
   onFileChange?: (action: string, path: string) => void
+  onPortChange?: (action: "open" | "close", port: number) => void
 }
 
 interface WSMessage {
-  type: "input" | "output" | "resize" | "error" | "file_change"
+  type: "input" | "output" | "resize" | "error" | "file_change" | "port_change"
   data?: string
   cols?: number
   rows?: number
   action?: string
   path?: string
+  port?: number
 }
 
 export interface TerminalInstanceHandle {
@@ -29,7 +31,7 @@ export interface TerminalInstanceHandle {
 
 export const TerminalInstance = forwardRef<TerminalInstanceHandle, TerminalInstanceProps>(
   function TerminalInstance(
-    { sessionId, projectId, isActive, onDisconnect, onFileChange },
+    { sessionId, projectId, isActive, onDisconnect, onFileChange, onPortChange },
     ref
   ) {
     const containerRef = useRef<HTMLDivElement>(null)
@@ -37,6 +39,7 @@ export const TerminalInstance = forwardRef<TerminalInstanceHandle, TerminalInsta
     const wsRef = useRef<WebSocket | null>(null)
     const fitAddonRef = useRef<FitAddon | null>(null)
     const onFileChangeRef = useRef(onFileChange)
+    const onPortChangeRef = useRef(onPortChange)
     const isActiveRef = useRef(isActive)
 
     // Expose focus method via ref
@@ -50,6 +53,10 @@ export const TerminalInstance = forwardRef<TerminalInstanceHandle, TerminalInsta
     useEffect(() => {
       onFileChangeRef.current = onFileChange
     }, [onFileChange])
+
+    useEffect(() => {
+      onPortChangeRef.current = onPortChange
+    }, [onPortChange])
 
     useEffect(() => {
       isActiveRef.current = isActive
@@ -155,6 +162,8 @@ export const TerminalInstance = forwardRef<TerminalInstanceHandle, TerminalInsta
                 terminal.write(`\r\n\x1b[31mError: ${message.data}\x1b[0m\r\n`)
               } else if (message.type === "file_change" && message.action && message.path) {
                 onFileChangeRef.current?.(message.action, message.path)
+              } else if (message.type === "port_change" && message.action && message.port) {
+                onPortChangeRef.current?.(message.action as "open" | "close", message.port)
               }
             } catch {
               terminal.write(event.data)

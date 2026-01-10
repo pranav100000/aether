@@ -84,6 +84,12 @@ WORKDIR /opt/agent-service
 RUN bun install --frozen-lockfile --production
 WORKDIR /home/coder
 
+# Build and install port-watcher (uses netlink to detect listening ports)
+COPY port-watcher /tmp/port-watcher
+WORKDIR /tmp/port-watcher
+RUN go mod download && CGO_ENABLED=0 go build -o /usr/local/bin/port-watcher . && rm -rf /tmp/port-watcher
+WORKDIR /home/coder
+
 # Port forwarding script for IPv6 → localhost
 COPY port-forward.sh /usr/local/bin/port-forward.sh
 RUN chmod +x /usr/local/bin/port-forward.sh

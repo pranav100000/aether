@@ -7,12 +7,14 @@ interface MultiTerminalProps {
   projectId: string
   onDisconnect?: () => void
   onFileChange?: (action: string, path: string) => void
+  onPortChange?: (action: "open" | "close", port: number) => void
 }
 
 export function MultiTerminal({
   projectId,
   onDisconnect,
   onFileChange,
+  onPortChange,
 }: MultiTerminalProps) {
   const {
     sessions,
@@ -102,6 +104,7 @@ export function MultiTerminal({
               isActive={session.id === activeSessionId}
               onDisconnect={onDisconnect}
               onFileChange={onFileChange}
+              onPortChange={onPortChange}
             />
           </div>
         ))}

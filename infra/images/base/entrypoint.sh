@@ -18,7 +18,7 @@ ENV_FILE="/home/coder/.aether_env"
 : > "$ENV_FILE"  # Create/truncate file
 
 # Export API keys and other relevant env vars
-for var in ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY GOOGLE_API_KEY PROJECT_ID; do
+for var in ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY GOOGLE_API_KEY CODEBUFF_API_KEY PROJECT_ID; do
     if [ -n "${!var}" ]; then
         echo "export $var=\"${!var}\"" >> "$ENV_FILE"
     fi

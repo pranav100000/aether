@@ -33,9 +33,20 @@ export function Workspace() {
   const [terminalOpen, setTerminalOpen] = useState(true)
   const [rightSidebarOpen, setRightSidebarOpen] = useState(false)
   const [fileTreeRefreshTrigger, setFileTreeRefreshTrigger] = useState(0)
+  const [activePorts, setActivePorts] = useState<number[]>([])
 
   const handleFileChange = useCallback(() => {
     setFileTreeRefreshTrigger((prev) => prev + 1)
+  }, [])
+
+  const handlePortChange = useCallback((action: "open" | "close", port: number) => {
+    setActivePorts((prev) => {
+      if (action === "open") {
+        return prev.includes(port) ? prev : [...prev, port].sort((a, b) => a - b)
+      } else {
+        return prev.filter((p) => p !== port)
+      }
+    })
   }, [])
 
   const handleStart = async () => {
@@ -119,7 +130,7 @@ export function Workspace() {
 
         <div className="flex items-center gap-2">
           {project.status === "running" && (
-            <PreviewButton projectId={project.id} previewToken={project.preview_token} />
+            <PreviewButton projectId={project.id} activePorts={activePorts} previewToken={project.preview_token} />
           )}
           {project.status === "running" && (
             <>
@@ -200,7 +211,7 @@ export function Workspace() {
                 )}
               </>
             }
-            terminal={<MultiTerminal projectId={project.id} onDisconnect={refresh} onFileChange={handleFileChange} />}
+            terminal={<MultiTerminal projectId={project.id} onDisconnect={refresh} onFileChange={handleFileChange} onPortChange={handlePortChange} />}
             rightPanel={<AgentChat projectId={project.id} defaultAgent="claude" />}
             leftSidebarOpen={leftSidebarOpen}
             terminalOpen={terminalOpen}
