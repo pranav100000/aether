@@ -8,6 +8,15 @@ import (
 	"strings"
 )
 
+// keysForLog returns env var names only (no values) for safe logging
+func keysForLog(keys map[string]string) []string {
+	names := make([]string, 0, len(keys))
+	for k := range keys {
+		names = append(names, k)
+	}
+	return names
+}
+
 // EnvBuilder builds environment variables for machines and agents
 type EnvBuilder struct {
 	apiKeys APIKeysGetter
@@ -46,10 +55,15 @@ func (b *EnvBuilder) BuildEnv(ctx context.Context, projectID, userID string, ext
 		if err != nil {
 			log.Printf("Warning: failed to get API keys for user %s: %v", userID, err)
 		} else if apiKeys != nil {
+			log.Printf("Got %d API keys for user %s: %v", len(apiKeys), userID, keysForLog(apiKeys))
 			for envName, key := range apiKeys {
 				env[envName] = key
 			}
+		} else {
+			log.Printf("No API keys found for user %s", userID)
 		}
+	} else {
+		log.Printf("apiKeys handler is nil, cannot fetch user keys")
 	}
 
 	return env

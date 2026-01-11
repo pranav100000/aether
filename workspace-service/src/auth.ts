@@ -1,5 +1,18 @@
 import * as jose from "jose";
 
+// Extract bearer token from WebSocket subprotocol header
+// Format: "bearer, <token>" (browsers join subprotocols with ", ")
+export function extractTokenFromProtocol(protocols: string | null): string | null {
+  if (!protocols) return null;
+  const parts = protocols.split(", ");
+  for (let i = 0; i < parts.length; i++) {
+    if (parts[i] === "bearer" && i + 1 < parts.length) {
+      return parts[i + 1];
+    }
+  }
+  return null;
+}
+
 // Cache for JWKS
 let jwksCache: jose.JSONWebKeySet | null = null;
 let jwksCacheTime = 0;

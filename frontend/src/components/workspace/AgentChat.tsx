@@ -127,7 +127,8 @@ interface AgentSettings {
 }
 
 interface AgentChatProps {
-  projectId: string
+  vmUrl: string
+  machineId: string
   defaultAgent?: AgentType
 }
 
@@ -188,7 +189,7 @@ interface ChatMessage {
 
 type ChatStatus = "submitted" | "streaming" | "ready" | "error"
 
-export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps) {
+export function AgentChat({ vmUrl, machineId, defaultAgent = "claude" }: AgentChatProps) {
   const [agent, setAgent] = useState<AgentType>(defaultAgent)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState("")
@@ -224,7 +225,7 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
     const thisConnectionId = ++connectionIdRef.current
 
     try {
-      const wsUrl = api.getAgentUrl(projectId, agent)
+      const wsUrl = api.getAgentUrl(vmUrl, machineId, agent)
       // Local mode only when VITE_LOCAL_AGENT_URL is explicitly set
       const isLocalMode = !!import.meta.env.VITE_LOCAL_AGENT_URL
 
@@ -414,7 +415,7 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
       setError(err instanceof Error ? err.message : "Failed to connect")
       setStatus("error")
     }
-  }, [projectId, agent, generateId])
+  }, [vmUrl, machineId, agent, generateId])
 
   useEffect(() => {
     connect()

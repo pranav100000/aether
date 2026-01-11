@@ -9,7 +9,8 @@ fi
 # Ensure project directory exists and has correct permissions
 # (Fly Volume mounts may create directories owned by root)
 mkdir -p /home/coder/project
-chown coder:coder /home/coder/project
+mkdir -p /home/coder/project/.aether
+chown -R coder:coder /home/coder/project
 
 # Export environment variables for SSH sessions
 # sshd doesn't pass container env vars to login shells, so we write them to a file
@@ -26,17 +27,21 @@ done
 
 # Codex SDK uses CODEX_API_KEY instead of OPENAI_API_KEY
 if [ -n "$OPENAI_API_KEY" ]; then
+    export CODEX_API_KEY="$OPENAI_API_KEY"
     echo "export CODEX_API_KEY=\"$OPENAI_API_KEY\"" >> "$ENV_FILE"
 fi
 
 # Codebuff SDK uses CODEBUFF_BYOK_OPENROUTER (BYOK = Bring Your Own Key)
 if [ -n "$OPENROUTER_API_KEY" ]; then
+    export CODEBUFF_BYOK_OPENROUTER="$OPENROUTER_API_KEY"
     echo "export CODEBUFF_BYOK_OPENROUTER=\"$OPENROUTER_API_KEY\"" >> "$ENV_FILE"
 fi
 
-# Agent service configuration
-echo "export STORAGE_DIR=\"/home/coder/project/.aether\"" >> "$ENV_FILE"
-echo "export PROJECT_CWD=\"/home/coder/project\"" >> "$ENV_FILE"
+# Agent service configuration - export for workspace-service and write to file for SSH sessions
+export STORAGE_DIR="/home/coder/project/.aether"
+export PROJECT_CWD="/home/coder/project"
+echo "export STORAGE_DIR=\"$STORAGE_DIR\"" >> "$ENV_FILE"
+echo "export PROJECT_CWD=\"$PROJECT_CWD\"" >> "$ENV_FILE"
 
 chown coder:coder "$ENV_FILE"
 chmod 600 "$ENV_FILE"

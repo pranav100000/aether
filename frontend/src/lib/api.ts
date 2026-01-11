@@ -265,20 +265,21 @@ export const api = {
     })
   },
 
-  getTerminalUrl(projectId: string): string {
-    const wsUrl = API_URL.replace("http", "ws")
-    return `${wsUrl}/projects/${projectId}/terminal`
+  getTerminalUrl(vmUrl: string, machineId: string): string {
+    // Direct to VM via workspace-service
+    const wsUrl = vmUrl.replace("https", "wss").replace("http", "ws")
+    return `${wsUrl}/terminal?fly-force-instance-id=${machineId}`
   },
 
-  getAgentUrl(projectId: string, agent: "claude" | "codex" | "opencode" | "codebuff"): string {
+  getAgentUrl(vmUrl: string, machineId: string, agent: "claude" | "codex" | "opencode" | "codebuff"): string {
     // Local dev mode: direct WebSocket to local agent service
     if (LOCAL_AGENT_URL) {
       return `${LOCAL_AGENT_URL}/agent/${agent}`
     }
 
-    // Production mode: WebSocket to Go backend
-    const wsUrl = API_URL.replace("http", "ws")
-    return `${wsUrl}/projects/${projectId}/agent/${agent}`
+    // Direct to VM via workspace-service
+    const wsUrl = vmUrl.replace("https", "wss").replace("http", "ws")
+    return `${wsUrl}/agent/${agent}?fly-force-instance-id=${machineId}`
   },
 
   // File system operations - call VM directly via workspace-service

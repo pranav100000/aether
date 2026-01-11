@@ -1,7 +1,7 @@
 import { AgentHandler } from "./handler";
 import type { AgentType, ClientMessage, AgentMessage } from "./types";
 import type { ServerWebSocket } from "bun";
-import { authenticateRequest } from "./auth";
+import { authenticateRequest, extractTokenFromProtocol, validateToken } from "./auth";
 import {
   listTree,
   listOrRead,
@@ -10,9 +10,24 @@ import {
   deleteFile,
   renameFile,
 } from "./files";
+import {
+  handleTerminalOpen,
+  handleTerminalMessage,
+  handleTerminalClose,
+  type TerminalWSData,
+} from "./terminal";
+import {
+  handleEventsOpen,
+  handleEventsClose,
+  type EventsWSData,
+} from "./watcher";
 
 const PORT = parseInt(process.env.AGENT_PORT || process.env.PORT || "3001");
 const VALID_AGENTS = ["claude", "codex", "codebuff", "opencode"];
+
+// Debug: log API key env vars (names only, not values)
+const apiKeyVars = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "CODEBUFF_API_KEY", "CODEBUFF_BYOK_OPENROUTER", "CODEX_API_KEY"];
+console.log("[env] API key env vars present:", apiKeyVars.filter(k => !!process.env[k]));
 
 // CORS headers for cross-origin requests
 const CORS_HEADERS = {
@@ -21,10 +36,16 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, fly-force-instance-id",
 };
 
-interface WSData {
+// Agent WebSocket data
+interface AgentWSData {
+  type: "agent";
   agent: AgentType;
+  userId: string;
   handler?: AgentHandler;
 }
+
+// Union type for all WebSocket connections
+type WSData = AgentWSData | TerminalWSData | EventsWSData;
 
 // Helper to create JSON response with CORS headers
 function jsonResponse(data: unknown, status = 200): Response {
@@ -138,11 +159,79 @@ const server = Bun.serve<WSData>({
     // Agent WebSocket routes
     const agentMatch = pathname.match(/^\/agent\/(\w+)$/);
     if (agentMatch && VALID_AGENTS.includes(agentMatch[1])) {
-      const upgraded = server.upgrade(req, {
-        data: { agent: agentMatch[1] as AgentType },
-      });
-      if (upgraded) return undefined;
-      return new Response("WebSocket upgrade failed", { status: 500 });
+      // Extract token from Sec-WebSocket-Protocol header (browser sends "bearer, <token>")
+      const protocols = req.headers.get("sec-websocket-protocol");
+      const token = extractTokenFromProtocol(protocols);
+
+      if (!token) {
+        return new Response("Unauthorized: Missing token", { status: 401, headers: CORS_HEADERS });
+      }
+
+      try {
+        const userId = await validateToken(token);
+        console.log(`[agent] Authenticated user: ${userId}`);
+
+        const upgraded = server.upgrade(req, {
+          data: { type: "agent" as const, agent: agentMatch[1] as AgentType, userId },
+          // Echo back the subprotocol so browser accepts the connection
+          headers: { "Sec-WebSocket-Protocol": protocols! },
+        });
+        if (upgraded) return undefined;
+        return new Response("WebSocket upgrade failed", { status: 500, headers: CORS_HEADERS });
+      } catch (err) {
+        console.error("[agent] Auth error:", err);
+        return new Response("Unauthorized: Invalid token", { status: 401, headers: CORS_HEADERS });
+      }
+    }
+
+    // Terminal WebSocket route
+    if (pathname === "/terminal") {
+      const protocols = req.headers.get("sec-websocket-protocol");
+      const token = extractTokenFromProtocol(protocols);
+
+      if (!token) {
+        return new Response("Unauthorized: Missing token", { status: 401, headers: CORS_HEADERS });
+      }
+
+      try {
+        const userId = await validateToken(token);
+        console.log(`[terminal] Authenticated user: ${userId}`);
+
+        const upgraded = server.upgrade(req, {
+          data: { type: "terminal" as const, userId },
+          headers: { "Sec-WebSocket-Protocol": protocols! },
+        });
+        if (upgraded) return undefined;
+        return new Response("WebSocket upgrade failed", { status: 500, headers: CORS_HEADERS });
+      } catch (err) {
+        console.error("[terminal] Auth error:", err);
+        return new Response("Unauthorized: Invalid token", { status: 401, headers: CORS_HEADERS });
+      }
+    }
+
+    // Events WebSocket route (file change notifications)
+    if (pathname === "/events") {
+      const protocols = req.headers.get("sec-websocket-protocol");
+      const token = extractTokenFromProtocol(protocols);
+
+      if (!token) {
+        return new Response("Unauthorized: Missing token", { status: 401, headers: CORS_HEADERS });
+      }
+
+      try {
+        const userId = await validateToken(token);
+        console.log(`[events] Authenticated user: ${userId}`);
+
+        const upgraded = server.upgrade(req, {
+          data: { type: "events" as const, userId },
+          headers: { "Sec-WebSocket-Protocol": protocols! },
+        });
+        if (upgraded) return undefined;
+        return new Response("WebSocket upgrade failed", { status: 500, headers: CORS_HEADERS });
+      } catch (err) {
+        console.error("[events] Auth error:", err);
+        return new Response("Unauthorized: Invalid token", { status: 401, headers: CORS_HEADERS });
+      }
     }
 
     // File operation routes
@@ -160,7 +249,23 @@ const server = Bun.serve<WSData>({
 
   websocket: {
     async open(ws: ServerWebSocket<WSData>) {
-      const { agent } = ws.data;
+      const { type } = ws.data;
+
+      if (type === "terminal") {
+        console.log("[terminal] WebSocket connected");
+        handleTerminalOpen(ws as ServerWebSocket<TerminalWSData>);
+        return;
+      }
+
+      if (type === "events") {
+        console.log("[events] WebSocket connected");
+        handleEventsOpen(ws as ServerWebSocket<EventsWSData>);
+        return;
+      }
+
+      // Agent connection
+      const agentData = ws.data as AgentWSData;
+      const { agent } = agentData;
       console.log(`[${agent}] WebSocket connected`);
 
       try {
@@ -170,7 +275,7 @@ const server = Bun.serve<WSData>({
           },
         });
 
-        ws.data.handler = handler;
+        agentData.handler = handler;
         await handler.initialize();
       } catch (err) {
         console.error(`[${agent}] Failed to initialize handler:`, err);
@@ -184,7 +289,21 @@ const server = Bun.serve<WSData>({
     },
 
     async message(ws: ServerWebSocket<WSData>, message: string | Buffer) {
-      const { agent, handler } = ws.data;
+      const { type } = ws.data;
+
+      if (type === "terminal") {
+        handleTerminalMessage(ws as ServerWebSocket<TerminalWSData>, String(message));
+        return;
+      }
+
+      if (type === "events") {
+        // Events WebSocket is read-only (server pushes to client)
+        return;
+      }
+
+      // Agent message
+      const agentData = ws.data as AgentWSData;
+      const { agent, handler } = agentData;
 
       if (!handler) {
         ws.send(JSON.stringify({
@@ -210,8 +329,22 @@ const server = Bun.serve<WSData>({
     },
 
     close(ws: ServerWebSocket<WSData>) {
-      const { agent } = ws.data;
-      console.log(`[${agent}] WebSocket closed`);
+      const { type } = ws.data;
+
+      if (type === "terminal") {
+        console.log("[terminal] WebSocket closed");
+        handleTerminalClose(ws as ServerWebSocket<TerminalWSData>);
+        return;
+      }
+
+      if (type === "events") {
+        console.log("[events] WebSocket closed");
+        handleEventsClose(ws as ServerWebSocket<EventsWSData>);
+        return;
+      }
+
+      const agentData = ws.data as AgentWSData;
+      console.log(`[${agentData.agent}] WebSocket closed`);
     },
   },
 });
@@ -225,7 +358,9 @@ console.log(`    PUT  /files?path=/foo    - Write file`);
 console.log(`    DELETE /files?path=/foo  - Delete file/directory`);
 console.log(`    POST /files/mkdir        - Create directory`);
 console.log(`    POST /files/rename       - Rename file/directory`);
-console.log(`  Agent WebSockets:`);
+console.log(`  WebSockets:`);
+console.log(`    ws://localhost:${PORT}/terminal - Terminal PTY`);
+console.log(`    ws://localhost:${PORT}/events   - File change events`);
 for (const agent of VALID_AGENTS) {
   console.log(`    ws://localhost:${PORT}/agent/${agent}`);
 }

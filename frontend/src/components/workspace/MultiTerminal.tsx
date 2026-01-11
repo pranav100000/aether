@@ -5,13 +5,15 @@ import { TerminalInstance, type TerminalInstanceHandle } from "./TerminalInstanc
 import { useFileTreeContext } from "@/contexts/FileTreeContext"
 
 interface MultiTerminalProps {
-  projectId: string
+  vmUrl: string
+  machineId: string
   onDisconnect?: () => void
   onPortChange?: (action: "open" | "close", port: number) => void
 }
 
 export function MultiTerminal({
-  projectId,
+  vmUrl,
+  machineId,
   onDisconnect,
   onPortChange,
 }: MultiTerminalProps) {
@@ -101,7 +103,8 @@ export function MultiTerminal({
             <TerminalInstance
               ref={setTerminalRef(session.id)}
               sessionId={session.id}
-              projectId={projectId}
+              vmUrl={vmUrl}
+              machineId={machineId}
               isActive={session.id === activeSessionId}
               onDisconnect={onDisconnect}
               onFileChange={handleFileChange}

@@ -11,7 +11,10 @@ export class CodebuffProvider implements AgentProvider {
 
   isConfigured(): boolean {
     // CodeBuff requires both: CODEBUFF_API_KEY (service auth) and CODEBUFF_BYOK_OPENROUTER (model provider)
-    return !!process.env.CODEBUFF_API_KEY && !!process.env.CODEBUFF_BYOK_OPENROUTER;
+    const hasApiKey = !!process.env.CODEBUFF_API_KEY;
+    const hasByok = !!process.env.CODEBUFF_BYOK_OPENROUTER;
+    console.log(`[codebuff] isConfigured check: CODEBUFF_API_KEY=${hasApiKey}, CODEBUFF_BYOK_OPENROUTER=${hasByok}`);
+    return hasApiKey && hasByok;
   }
 
   private getClient(cwd: string): CodebuffClient {

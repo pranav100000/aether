@@ -554,8 +554,8 @@ func (h *ProjectHandler) createMachine(ctx context.Context, project *db.Project,
 		log.Printf("Creating CPU machine with cpu_kind=%s, cpus=%d, memory_mb=%d", project.CPUKind, project.CPUs, project.MemoryMB)
 	}
 
-	// Build environment variables
-	machineEnv := NewEnvBuilder(h.apiKeys).BuildEnv(ctx, project.ID, userID, nil)
+	// Build environment variables (includes derived keys for agents)
+	machineEnv := NewEnvBuilder(h.apiKeys).BuildAgentEnv(ctx, project.ID, userID)
 	log.Printf("Creating machine with %d env vars", len(machineEnv))
 	config := fly.MachineConfig{
 		Image: h.baseImage,
