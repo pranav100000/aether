@@ -1,8 +1,9 @@
 import { useState, useCallback } from "react"
-import { ChevronRight, ChevronDown, File, Folder, FolderOpen, MoreVertical, Trash2, Pencil, FilePlus, FolderPlus } from "lucide-react"
+import { ChevronRight, ChevronDown, Folder, FolderOpen, MoreVertical, Trash2, Pencil, FilePlus, FolderPlus } from "lucide-react"
 import { api } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { useFileTreeContext } from "@/contexts/FileTreeContext"
+import { FileIcon } from "@/components/icons/FileIcon"
 
 export interface TreeNode {
   name: string
@@ -17,46 +18,6 @@ interface FileTreeItemProps {
   level: number
   selectedPath?: string
   onFileSelect: (path: string) => void
-}
-
-function getFileIcon(name: string): string {
-  const ext = name.split(".").pop()?.toLowerCase()
-
-  switch (ext) {
-    case "js":
-    case "mjs":
-    case "cjs":
-      return "text-yellow-400"
-    case "jsx":
-      return "text-cyan-400"
-    case "ts":
-    case "mts":
-    case "cts":
-      return "text-blue-400"
-    case "tsx":
-      return "text-blue-500"
-    case "py":
-      return "text-green-400"
-    case "go":
-      return "text-cyan-300"
-    case "html":
-    case "htm":
-      return "text-orange-400"
-    case "css":
-    case "scss":
-    case "less":
-      return "text-purple-400"
-    case "json":
-      return "text-yellow-300"
-    case "md":
-    case "markdown":
-      return "text-gray-400"
-    case "yaml":
-    case "yml":
-      return "text-pink-400"
-    default:
-      return "text-gray-400"
-  }
 }
 
 export function FileTreeItem({
@@ -185,7 +146,7 @@ export function FileTreeItem({
         ) : (
           <>
             <div className="w-4" />
-            <File className={cn("w-4 h-4", getFileIcon(node.name))} />
+            <FileIcon path={node.name} size="md" />
           </>
         )}
 
@@ -288,7 +249,7 @@ export function FileTreeItem({
           {creating === "folder" ? (
             <Folder className="w-4 h-4 text-yellow-500" />
           ) : (
-            <File className="w-4 h-4 text-gray-400" />
+            <FileIcon path={createName || "file"} size="md" />
           )}
           <input
             type="text"

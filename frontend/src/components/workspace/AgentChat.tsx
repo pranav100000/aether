@@ -475,18 +475,36 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
     setInput(value)
 
     const cursor = e.target.selectionStart ?? 0
-    const charBefore = value[cursor - 1]
 
-    // Detect @ trigger
-    if (charBefore === "@" && textareaRef.current && containerRef.current) {
-      const coords = getCaretCoordinates(textareaRef.current, cursor)
-      const textareaRect = textareaRef.current.getBoundingClientRect()
-      const containerRect = containerRef.current.getBoundingClientRect()
-      // Calculate position relative to the container (which has position: relative)
-      autocomplete.open({
-        top: textareaRect.top + coords.top - textareaRef.current.scrollTop - containerRect.top,
-        left: textareaRect.left + coords.left - containerRect.left,
-      })
+    // Find if we're in an @ mention (look backwards for @)
+    const textBeforeCursor = value.slice(0, cursor)
+    const atIndex = textBeforeCursor.lastIndexOf("@")
+
+    if (atIndex !== -1) {
+      // Check if there's no space between @ and cursor (still typing the mention)
+      const textAfterAt = textBeforeCursor.slice(atIndex + 1)
+      const hasSpace = textAfterAt.includes(" ")
+
+      if (!hasSpace) {
+        // Open popover if not already open
+        if (!autocomplete.isOpen && textareaRef.current && containerRef.current) {
+          const coords = getCaretCoordinates(textareaRef.current, atIndex + 1)
+          const textareaRect = textareaRef.current.getBoundingClientRect()
+          const containerRect = containerRef.current.getBoundingClientRect()
+          autocomplete.open({
+            top: textareaRect.top + coords.top - textareaRef.current.scrollTop - containerRect.top,
+            left: textareaRect.left + coords.left - containerRect.left,
+          })
+        }
+        // Update query with text after @
+        autocomplete.setQuery(textAfterAt)
+        return
+      }
+    }
+
+    // Close if we're no longer in an @ mention
+    if (autocomplete.isOpen) {
+      autocomplete.close()
     }
   }, [autocomplete])
 
@@ -796,14 +814,10 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
       <FileMentionPopover
         open={autocomplete.isOpen}
         position={autocomplete.position}
-        query={autocomplete.query}
         files={searchResults}
         loading={isLoadingFiles}
         selectedIndex={autocomplete.selectedIndex}
         onSelect={handleFileSelect}
-        onClose={autocomplete.close}
-        onQueryChange={autocomplete.setQuery}
-        onMoveSelection={(dir) => autocomplete.moveSelection(dir, searchResults.length)}
       />
     </div>
   )

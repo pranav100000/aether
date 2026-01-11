@@ -1,6 +1,7 @@
 import { X, Circle } from "lucide-react"
 import type { OpenFile } from "@/hooks/useEditor"
 import { cn } from "@/lib/utils"
+import { FileIcon } from "@/components/icons/FileIcon"
 
 interface EditorTabsProps {
   files: OpenFile[]
@@ -13,46 +14,6 @@ function getFileName(path: string): string {
   return path.split("/").pop() || path
 }
 
-function getFileIcon(path: string): string {
-  const ext = path.split(".").pop()?.toLowerCase()
-
-  switch (ext) {
-    case "js":
-    case "mjs":
-    case "cjs":
-      return "text-yellow-400"
-    case "jsx":
-      return "text-cyan-400"
-    case "ts":
-    case "mts":
-    case "cts":
-      return "text-blue-400"
-    case "tsx":
-      return "text-blue-500"
-    case "py":
-      return "text-green-400"
-    case "go":
-      return "text-cyan-300"
-    case "html":
-    case "htm":
-      return "text-orange-400"
-    case "css":
-    case "scss":
-    case "less":
-      return "text-purple-400"
-    case "json":
-      return "text-yellow-300"
-    case "md":
-    case "markdown":
-      return "text-gray-400"
-    case "yaml":
-    case "yml":
-      return "text-pink-400"
-    default:
-      return "text-gray-400"
-  }
-}
-
 export function EditorTabs({ files, activeFile, onSelect, onClose }: EditorTabsProps) {
   if (files.length === 0) {
     return null
@@ -63,7 +24,6 @@ export function EditorTabs({ files, activeFile, onSelect, onClose }: EditorTabsP
       {files.map((file) => {
         const isActive = file.path === activeFile
         const fileName = getFileName(file.path)
-        const iconColor = getFileIcon(file.path)
 
         return (
           <div
@@ -76,7 +36,7 @@ export function EditorTabs({ files, activeFile, onSelect, onClose }: EditorTabsP
             )}
             onClick={() => onSelect(file.path)}
           >
-            <span className={cn("text-xs", iconColor)}>●</span>
+            <FileIcon path={file.path} size="sm" />
             <span className="truncate text-sm max-w-[120px]" title={file.path}>
               {fileName}
             </span>
