@@ -1,6 +1,7 @@
 import { supabase } from "./supabase"
 
 const API_URL = import.meta.env.VITE_API_URL
+const LOCAL_AGENT_URL = import.meta.env.VITE_LOCAL_AGENT_URL
 
 if (!API_URL) {
   throw new Error("Missing VITE_API_URL environment variable")
@@ -237,6 +238,12 @@ export const api = {
   },
 
   getAgentUrl(projectId: string, agent: "claude" | "codex" | "opencode" | "codebuff"): string {
+    // Local dev mode: direct WebSocket to local agent service
+    if (LOCAL_AGENT_URL) {
+      return `${LOCAL_AGENT_URL}/agent/${agent}`
+    }
+
+    // Production mode: WebSocket to Go backend
     const wsUrl = API_URL.replace("http", "ws")
     return `${wsUrl}/projects/${projectId}/agent/${agent}`
   },

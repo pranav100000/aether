@@ -1,0 +1,30 @@
+version: "3.8"
+
+services:
+  agent-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3001:3001"
+    volumes:
+      # Mount agent source for live editing
+      - ./src:/app/src:ro
+      # Mount a test project directory
+      - ${TEST_PROJECT_DIR:-./test-project}:/home/coder/project
+      # Persist agent history
+      - agent-data:/home/coder/project/.aether
+    environment:
+      - AGENT_PORT=3001
+      - PROJECT_CWD=/home/coder/project
+      - STORAGE_DIR=/home/coder/project/.aether
+      # API keys from host .env
+      - ANTHROPIC_API_KEY
+      - OPENAI_API_KEY
+      - CODEBUFF_API_KEY
+      - CODEBUFF_BYOK_OPENROUTER
+      - OPENROUTER_API_KEY
+    working_dir: /app
+
+volumes:
+  agent-data:

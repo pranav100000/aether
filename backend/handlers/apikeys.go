@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"path"
 	"strings"
 	"time"
 
@@ -196,13 +197,7 @@ func (h *APIKeysHandler) Remove(w http.ResponseWriter, r *http.Request) {
 
 	// Extract provider from URL path
 	// Expected path: /user/api-keys/{provider}
-	path := r.URL.Path
-	parts := strings.Split(strings.TrimSuffix(path, "/"), "/")
-	if len(parts) == 0 {
-		apiKeysWriteJSON(w, http.StatusBadRequest, map[string]string{"error": "provider is required"})
-		return
-	}
-	provider := strings.ToLower(parts[len(parts)-1])
+	provider := strings.ToLower(path.Base(strings.TrimSuffix(r.URL.Path, "/")))
 
 	// Validate provider
 	if _, ok := supportedProviders[provider]; !ok {

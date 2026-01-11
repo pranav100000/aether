@@ -1,5 +1,6 @@
 import { XIcon } from "lucide-react"
 import { FileIcon } from "@/components/icons/FileIcon"
+import { basename } from "@/lib/path-utils"
 
 interface FilePillProps {
   path: string
@@ -7,7 +8,7 @@ interface FilePillProps {
 }
 
 export function FilePill({ path, onRemove }: FilePillProps) {
-  const filename = path.split("/").pop()
+  const filename = basename(path)
 
   return (
     <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/50 px-2 py-1 text-xs">

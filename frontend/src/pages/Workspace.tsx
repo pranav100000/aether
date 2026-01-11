@@ -14,6 +14,7 @@ import { WorkspaceLayout, WorkspaceEmptyState } from "@/components/workspace/Wor
 import { PreviewButton } from "@/components/workspace/PreviewButton"
 import { AgentChat } from "@/components/workspace/AgentChat"
 import { FileTreeProvider } from "@/contexts/FileTreeContext"
+import { basename } from "@/lib/path-utils"
 
 export function Workspace() {
   const { id } = useParams<{ id: string }>()
@@ -80,7 +81,7 @@ export function Workspace() {
     (path: string) => {
       const file = getFile(path)
       if (file?.dirty) {
-        if (!confirm(`"${path.split("/").pop()}" has unsaved changes. Close anyway?`)) {
+        if (!confirm(`"${basename(path)}" has unsaved changes. Close anyway?`)) {
           return
         }
       }

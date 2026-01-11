@@ -3,6 +3,11 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "dev": "bun run src/server.ts",
+    "dev:watch": "bun --watch run src/server.ts",
+    "dev:docker": "docker compose -f docker-compose.dev.yml up --build",
+    "dev:docker:down": "docker compose -f docker-compose.dev.yml down",
+    "cli": "bun run src/cli.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -2,6 +2,7 @@ import { X, Circle } from "lucide-react"
 import type { OpenFile } from "@/hooks/useEditor"
 import { cn } from "@/lib/utils"
 import { FileIcon } from "@/components/icons/FileIcon"
+import { basename } from "@/lib/path-utils"
 
 interface EditorTabsProps {
   files: OpenFile[]
@@ -11,7 +12,7 @@ interface EditorTabsProps {
 }
 
 function getFileName(path: string): string {
-  return path.split("/").pop() || path
+  return basename(path)
 }
 
 export function EditorTabs({ files, activeFile, onSelect, onClose }: EditorTabsProps) {

@@ -224,18 +224,30 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
     const thisConnectionId = ++connectionIdRef.current
 
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-
-      if (connectionIdRef.current !== thisConnectionId) return
-
-      if (!session?.access_token) {
-        setError("Not authenticated")
-        return
-      }
-
       const wsUrl = api.getAgentUrl(projectId, agent)
-      console.log("[AgentChat] Connecting to:", wsUrl)
-      const ws = new WebSocket(wsUrl, ["bearer", session.access_token])
+      // Local mode only when VITE_LOCAL_AGENT_URL is explicitly set
+      const isLocalMode = !!import.meta.env.VITE_LOCAL_AGENT_URL
+
+      let ws: WebSocket
+
+      if (isLocalMode) {
+        // Local dev mode: no authentication needed
+        console.log("[AgentChat] Connecting to local agent:", wsUrl)
+        ws = new WebSocket(wsUrl)
+      } else {
+        // Production mode: authenticate via Supabase
+        const { data: { session } } = await supabase.auth.getSession()
+
+        if (connectionIdRef.current !== thisConnectionId) return
+
+        if (!session?.access_token) {
+          setError("Not authenticated")
+          return
+        }
+
+        console.log("[AgentChat] Connecting to:", wsUrl)
+        ws = new WebSocket(wsUrl, ["bearer", session.access_token])
+      }
 
       if (connectionIdRef.current !== thisConnectionId) {
         ws.close()

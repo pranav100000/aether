@@ -14,6 +14,7 @@ import { yaml } from "@codemirror/lang-yaml"
 import { oneDark } from "@codemirror/theme-one-dark"
 import type { OpenFile } from "@/hooks/useEditor"
 import { Spinner } from "@/components/ui/spinner"
+import { extname } from "@/lib/path-utils"
 
 interface EditorProps {
   file: OpenFile
@@ -22,7 +23,7 @@ interface EditorProps {
 }
 
 function getLanguageExtension(path: string): Extension | null {
-  const ext = path.split(".").pop()?.toLowerCase()
+  const ext = extname(path).slice(1).toLowerCase()
 
   switch (ext) {
     case "js":

@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react"
 import { api } from "@/lib/api"
 import type { FileEntry } from "@/lib/api"
+import { join } from "@/lib/path-utils"
 
 // Files/folders to hide in the file tree
 const HIDDEN_ENTRIES = new Set([
@@ -77,7 +78,7 @@ export function useFiles(projectId: string): UseFilesReturn {
     async (name: string, content: string = "") => {
       setError(null)
       try {
-        const path = currentPath === "/" ? `/${name}` : `${currentPath}/${name}`
+        const path = join(currentPath, name)
         await api.writeFile(projectId, path, content)
         await refresh()
       } catch (err) {
@@ -92,7 +93,7 @@ export function useFiles(projectId: string): UseFilesReturn {
     async (name: string) => {
       setError(null)
       try {
-        const path = currentPath === "/" ? `/${name}` : `${currentPath}/${name}`
+        const path = join(currentPath, name)
         await api.mkdir(projectId, path)
         await refresh()
       } catch (err) {
@@ -107,7 +108,7 @@ export function useFiles(projectId: string): UseFilesReturn {
     async (name: string) => {
       setError(null)
       try {
-        const path = currentPath === "/" ? `/${name}` : `${currentPath}/${name}`
+        const path = join(currentPath, name)
         await api.deleteFile(projectId, path)
         await refresh()
       } catch (err) {
@@ -122,10 +123,8 @@ export function useFiles(projectId: string): UseFilesReturn {
     async (oldName: string, newName: string) => {
       setError(null)
       try {
-        const oldPath =
-          currentPath === "/" ? `/${oldName}` : `${currentPath}/${oldName}`
-        const newPath =
-          currentPath === "/" ? `/${newName}` : `${currentPath}/${newName}`
+        const oldPath = join(currentPath, oldName)
+        const newPath = join(currentPath, newName)
         await api.renameFile(projectId, oldPath, newPath)
         await refresh()
       } catch (err) {

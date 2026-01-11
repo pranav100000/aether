@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react"
 import { api } from "@/lib/api"
+import { basename, isChildOrEqualPath } from "@/lib/path-utils"
 
 interface FileTreeContextValue {
   // All file paths in the project
@@ -78,9 +79,9 @@ export function FileTreeProvider({ projectId, children }: FileTreeProviderProps)
       }
     } else if (action === "delete") {
       // Remove from files
-      setAllFiles(prev => prev.filter(p => p !== normalizedPath && !p.startsWith(normalizedPath + "/")))
+      setAllFiles(prev => prev.filter(p => !isChildOrEqualPath(p, normalizedPath)))
       // Remove from directories
-      setDirectories(prev => prev.filter(p => p !== normalizedPath && !p.startsWith(normalizedPath + "/")))
+      setDirectories(prev => prev.filter(p => !isChildOrEqualPath(p, normalizedPath)))
     }
     // 'modify' doesn't change paths, so we ignore it
   }, [])
@@ -98,15 +99,15 @@ export function FileTreeProvider({ projectId, children }: FileTreeProviderProps)
 
     return allFiles
       .filter(path => {
-        const filename = path.split("/").pop()?.toLowerCase() ?? ""
+        const filename = basename(path).toLowerCase()
         const pathLower = path.toLowerCase()
         // Match filename first, then full path
         return filename.includes(lowerQuery) || pathLower.includes(lowerQuery)
       })
       .sort((a, b) => {
         // Prioritize exact filename matches
-        const aName = a.split("/").pop()?.toLowerCase() ?? ""
-        const bName = b.split("/").pop()?.toLowerCase() ?? ""
+        const aName = basename(a).toLowerCase()
+        const bName = basename(b).toLowerCase()
         const aExact = aName === lowerQuery
         const bExact = bName === lowerQuery
         if (aExact !== bExact) return aExact ? -1 : 1

@@ -4,6 +4,7 @@ import { api } from "@/lib/api"
 import { FileTreeItem, type TreeNode } from "./FileTreeItem"
 import { Spinner } from "@/components/ui/spinner"
 import { useFileTreeContext } from "@/contexts/FileTreeContext"
+import { basename, dirname } from "@/lib/path-utils"
 
 interface FileTreeProps {
   projectId: string
@@ -18,7 +19,7 @@ function buildTreeFromPaths(files: string[], directories: string[]): TreeNode[] 
   // Add all directories first
   for (const dir of directories) {
     nodeMap.set(dir, {
-      name: dir.split("/").pop() || "",
+      name: basename(dir),
       path: dir,
       type: "directory",
       children: [],
@@ -28,7 +29,7 @@ function buildTreeFromPaths(files: string[], directories: string[]): TreeNode[] 
   // Add all files
   for (const file of files) {
     nodeMap.set(file, {
-      name: file.split("/").pop() || "",
+      name: basename(file),
       path: file,
       type: "file",
     })
@@ -38,7 +39,7 @@ function buildTreeFromPaths(files: string[], directories: string[]): TreeNode[] 
   const rootNodes: TreeNode[] = []
 
   for (const [path, node] of nodeMap) {
-    const parentPath = path.substring(0, path.lastIndexOf("/")) || ""
+    const parentPath = dirname(path)
 
     if (parentPath === "" || parentPath === "/") {
       // Root level item

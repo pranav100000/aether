@@ -4,6 +4,7 @@ import { api } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { useFileTreeContext } from "@/contexts/FileTreeContext"
 import { FileIcon } from "@/components/icons/FileIcon"
+import { dirname, join } from "@/lib/path-utils"
 
 export interface TreeNode {
   name: string
@@ -80,8 +81,8 @@ export function FileTreeItem({
     }
 
     try {
-      const parentPath = node.path.substring(0, node.path.lastIndexOf("/")) || ""
-      const newPath = parentPath ? `${parentPath}/${newName}` : `/${newName}`
+      const parentPath = dirname(node.path)
+      const newPath = join(parentPath, newName)
       await api.renameFile(projectId, node.path, newPath)
       // Delete old path and add new path
       handleFileChange("delete", node.path, isDirectory)
@@ -101,7 +102,7 @@ export function FileTreeItem({
     }
 
     try {
-      const createPath = node.path + "/" + createName
+      const createPath = join(node.path, createName)
       const creatingDirectory = creating === "folder"
       if (creatingDirectory) {
         await api.mkdir(projectId, createPath)

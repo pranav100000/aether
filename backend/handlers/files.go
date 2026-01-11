@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"aether/db"
@@ -381,7 +382,7 @@ func (h *FilesHandler) Mkdir(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusCreated, map[string]string{
-		"path": sftp.WorkingDir + "/" + strings.TrimPrefix(req.Path, "/"),
+		"path": filepath.Join(sftp.WorkingDir, strings.TrimPrefix(req.Path, "/")),
 	})
 }
 
@@ -544,6 +545,6 @@ func (h *FilesHandler) Rename(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, map[string]string{
-		"path": sftp.WorkingDir + "/" + strings.TrimPrefix(req.NewPath, "/"),
+		"path": filepath.Join(sftp.WorkingDir, strings.TrimPrefix(req.NewPath, "/")),
 	})
 }

@@ -346,7 +346,7 @@ func (c *Client) walkDirectory(sftpClient *sftp.Client, basePath string, relativ
 		if relativePath == "" {
 			entryRelPath = "/" + name
 		} else {
-			entryRelPath = relativePath + "/" + name
+			entryRelPath = filepath.Join(relativePath, name)
 		}
 
 		if entry.IsDir() {
