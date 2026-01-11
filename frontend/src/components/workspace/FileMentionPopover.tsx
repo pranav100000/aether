@@ -19,6 +19,7 @@ interface FileMentionPopoverProps {
   onSelect: (file: string) => void
   onClose: () => void
   onQueryChange: (query: string) => void
+  onMoveSelection: (direction: "up" | "down") => void
 }
 
 function getFileIcon(path: string) {
@@ -49,14 +50,47 @@ export function FileMentionPopover({
   onSelect,
   onClose,
   onQueryChange,
+  onMoveSelection,
 }: FileMentionPopoverProps) {
   const inputRef = useRef<HTMLInputElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (open && inputRef.current) {
       inputRef.current.focus()
     }
   }, [open])
+
+  // Scroll selected item into view
+  useEffect(() => {
+    if (!open || !listRef.current) return
+    const selectedElement = listRef.current.querySelector('[data-selected="true"]')
+    selectedElement?.scrollIntoView({ block: "nearest" })
+  }, [open, selectedIndex])
+
+  // Handle keyboard navigation in the popover
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault()
+        onMoveSelection("down")
+        break
+      case "ArrowUp":
+        e.preventDefault()
+        onMoveSelection("up")
+        break
+      case "Enter":
+        e.preventDefault()
+        if (files.length > 0) {
+          onSelect(files[selectedIndex])
+        }
+        break
+      case "Escape":
+        e.preventDefault()
+        onClose()
+        break
+    }
+  }
 
   if (!open || !position) return null
 
@@ -76,14 +110,14 @@ export function FileMentionPopover({
         sideOffset={8}
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
-        <Command shouldFilter={false}>
+        <Command shouldFilter={false} onKeyDown={handleKeyDown}>
           <CommandInput
             ref={inputRef}
             placeholder="Search files..."
             value={query}
             onValueChange={onQueryChange}
           />
-          <CommandList>
+          <CommandList ref={listRef}>
             {loading && files.length === 0 && (
               <div className="py-3 px-3 text-xs text-muted-foreground text-center">
                 Loading files...
@@ -95,7 +129,8 @@ export function FileMentionPopover({
                 key={file}
                 value={file}
                 onSelect={() => onSelect(file)}
-                className={index === selectedIndex ? "bg-accent" : ""}
+                data-selected={index === selectedIndex}
+                aria-selected={index === selectedIndex}
               >
                 {getFileIcon(file)}
                 <span className="truncate ml-2">{file}</span>

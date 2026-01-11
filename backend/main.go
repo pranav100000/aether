@@ -149,6 +149,7 @@ func main() {
 			// File operations
 			r.Route("/{id}/files", func(r chi.Router) {
 				r.Get("/", filesHandler.ListOrRead)
+				r.Get("/tree", filesHandler.ListTree)
 				r.Put("/", filesHandler.Write)
 				r.Delete("/", filesHandler.Delete)
 				r.Post("/mkdir", filesHandler.Mkdir)

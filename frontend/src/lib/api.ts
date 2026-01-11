@@ -134,6 +134,11 @@ export interface FileInfo {
   modified: string
 }
 
+export interface FileTree {
+  paths: string[]
+  directories: string[]
+}
+
 // API Keys types
 export interface ConnectedProvider {
   provider: string
@@ -239,6 +244,10 @@ export const api = {
   // File system operations
   async listFiles(projectId: string, path: string = "/"): Promise<DirListing> {
     return apiRequest(`/projects/${projectId}/files?path=${encodeURIComponent(path)}`)
+  },
+
+  async listFilesTree(projectId: string): Promise<FileTree> {
+    return apiRequest(`/projects/${projectId}/files/tree`)
   },
 
   async readFile(projectId: string, path: string): Promise<FileInfo> {

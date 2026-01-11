@@ -1,82 +1,94 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useCallback, useMemo } from "react"
 import { RefreshCw, FilePlus, FolderPlus } from "lucide-react"
 import { api } from "@/lib/api"
-import type { FileEntry } from "@/lib/api"
-import { FileTreeItem } from "./FileTreeItem"
+import { FileTreeItem, type TreeNode } from "./FileTreeItem"
 import { Spinner } from "@/components/ui/spinner"
 import { useFileTreeContext } from "@/contexts/FileTreeContext"
-
-// Files/folders to hide in the file tree
-const HIDDEN_ENTRIES = new Set([
-  "node_modules",
-  ".git",
-  "__pycache__",
-  ".venv",
-  "venv",
-  ".env",
-  "dist",
-  "build",
-  ".next",
-  ".cache",
-  ".DS_Store",
-  "Thumbs.db",
-  "lost+found",
-])
 
 interface FileTreeProps {
   projectId: string
   onFileSelect: (path: string) => void
   selectedPath?: string
-  refreshTrigger?: number
 }
 
-export function FileTree({ projectId, onFileSelect, selectedPath, refreshTrigger }: FileTreeProps) {
-  const [entries, setEntries] = useState<FileEntry[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+// Build tree structure from flat paths
+function buildTreeFromPaths(files: string[], directories: string[]): TreeNode[] {
+  const nodeMap = new Map<string, TreeNode>()
+
+  // Add all directories first
+  for (const dir of directories) {
+    nodeMap.set(dir, {
+      name: dir.split("/").pop() || "",
+      path: dir,
+      type: "directory",
+      children: [],
+    })
+  }
+
+  // Add all files
+  for (const file of files) {
+    nodeMap.set(file, {
+      name: file.split("/").pop() || "",
+      path: file,
+      type: "file",
+    })
+  }
+
+  // Build parent-child relationships
+  const rootNodes: TreeNode[] = []
+
+  for (const [path, node] of nodeMap) {
+    const parentPath = path.substring(0, path.lastIndexOf("/")) || ""
+
+    if (parentPath === "" || parentPath === "/") {
+      // Root level item
+      rootNodes.push(node)
+    } else {
+      // Find parent and add as child
+      const parent = nodeMap.get(parentPath)
+      if (parent && parent.children) {
+        parent.children.push(node)
+      } else {
+        // Parent doesn't exist (shouldn't happen with proper data), add to root
+        rootNodes.push(node)
+      }
+    }
+  }
+
+  // Sort: directories first, then alphabetically
+  const sortNodes = (nodes: TreeNode[]): TreeNode[] => {
+    return nodes.sort((a, b) => {
+      if (a.type !== b.type) {
+        return a.type === "directory" ? -1 : 1
+      }
+      return a.name.localeCompare(b.name)
+    })
+  }
+
+  // Sort root and all children recursively
+  const sortRecursive = (nodes: TreeNode[]): TreeNode[] => {
+    const sorted = sortNodes(nodes)
+    for (const node of sorted) {
+      if (node.children) {
+        node.children = sortRecursive(node.children)
+      }
+    }
+    return sorted
+  }
+
+  return sortRecursive(rootNodes)
+}
+
+export function FileTree({ projectId, onFileSelect, selectedPath }: FileTreeProps) {
   const [creating, setCreating] = useState<"file" | "folder" | null>(null)
   const [createName, setCreateName] = useState("")
 
-  // Get addFiles from context to populate file cache for @mentions
-  const { addFiles } = useFileTreeContext()
+  const { allFiles, directories, isLoading, error, refresh, handleFileChange } = useFileTreeContext()
 
-  const filterAndSortEntries = (entries: FileEntry[]): FileEntry[] => {
-    return entries
-      .filter((e) => !HIDDEN_ENTRIES.has(e.name))
-      .sort((a, b) => {
-        if (a.type !== b.type) {
-          return a.type === "directory" ? -1 : 1
-        }
-        return a.name.localeCompare(b.name)
-      })
-  }
-
-  const loadRoot = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const listing = await api.listFiles(projectId, "/")
-      setEntries(filterAndSortEntries(listing.entries))
-      // Add files to context cache for @mentions
-      addFiles("/", listing.entries)
-    } catch (err) {
-      console.error("Failed to load file tree:", err)
-      setError(err instanceof Error ? err.message : "Failed to load files")
-    } finally {
-      setLoading(false)
-    }
-  }, [projectId, addFiles])
-
-  useEffect(() => {
-    loadRoot()
-  }, [loadRoot])
-
-  // Refresh when refreshTrigger changes (from file watcher)
-  useEffect(() => {
-    if (refreshTrigger !== undefined && refreshTrigger > 0) {
-      loadRoot()
-    }
-  }, [refreshTrigger, loadRoot])
+  // Build tree structure from flat paths
+  const treeNodes = useMemo(() => {
+    return buildTreeFromPaths(allFiles, directories)
+  }, [allFiles, directories])
 
   const handleCreate = useCallback(async () => {
     if (!createName || !creating) {
@@ -88,10 +100,11 @@ export function FileTree({ projectId, onFileSelect, selectedPath, refreshTrigger
       const createPath = "/" + createName
       if (creating === "folder") {
         await api.mkdir(projectId, createPath)
+        handleFileChange("create", createPath, true)
       } else {
         await api.writeFile(projectId, createPath, "")
+        handleFileChange("create", createPath, false)
       }
-      await loadRoot()
     } catch (err) {
       console.error("Failed to create:", err)
       alert("Failed to create: " + (err instanceof Error ? err.message : "Unknown error"))
@@ -99,9 +112,9 @@ export function FileTree({ projectId, onFileSelect, selectedPath, refreshTrigger
       setCreating(null)
       setCreateName("")
     }
-  }, [createName, creating, projectId, loadRoot])
+  }, [createName, creating, projectId, handleFileChange])
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-32">
         <Spinner size="md" />
@@ -114,7 +127,7 @@ export function FileTree({ projectId, onFileSelect, selectedPath, refreshTrigger
       <div className="p-4 text-center">
         <p className="text-destructive text-sm mb-2">{error}</p>
         <button
-          onClick={loadRoot}
+          onClick={refresh}
           className="text-sm text-muted-foreground hover:text-foreground"
         >
           Try again
@@ -147,7 +160,7 @@ export function FileTree({ projectId, onFileSelect, selectedPath, refreshTrigger
           </button>
           <button
             className="p-1 rounded hover:bg-muted"
-            onClick={loadRoot}
+            onClick={refresh}
             title="Refresh"
           >
             <RefreshCw className="w-4 h-4 text-muted-foreground" />
@@ -180,21 +193,19 @@ export function FileTree({ projectId, onFileSelect, selectedPath, refreshTrigger
 
       {/* Tree content */}
       <div className="flex-1 overflow-y-auto">
-        {entries.length === 0 ? (
+        {treeNodes.length === 0 ? (
           <div className="p-4 text-center text-muted-foreground text-sm">
             No files yet
           </div>
         ) : (
-          entries.map((entry) => (
+          treeNodes.map((node) => (
             <FileTreeItem
-              key={entry.name}
-              entry={entry}
-              path="/"
+              key={node.path}
+              node={node}
               projectId={projectId}
               level={0}
               selectedPath={selectedPath}
               onFileSelect={onFileSelect}
-              onRefresh={loadRoot}
             />
           ))
         )}

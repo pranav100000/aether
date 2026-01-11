@@ -31,14 +31,9 @@ export function Workspace() {
   } = useEditor(id!)
   const [starting, setStarting] = useState(false)
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(true)
-  const [terminalOpen, setTerminalOpen] = useState(true)
-  const [rightSidebarOpen, setRightSidebarOpen] = useState(false)
-  const [fileTreeRefreshTrigger, setFileTreeRefreshTrigger] = useState(0)
+  const [terminalOpen, setTerminalOpen] = useState(false)
+  const [rightSidebarOpen, setRightSidebarOpen] = useState(true)
   const [activePorts, setActivePorts] = useState<number[]>([])
-
-  const handleFileChange = useCallback(() => {
-    setFileTreeRefreshTrigger((prev) => prev + 1)
-  }, [])
 
   const handlePortChange = useCallback((action: "open" | "close", port: number) => {
     setActivePorts((prev) => {
@@ -189,7 +184,6 @@ export function Workspace() {
                   projectId={project.id}
                   onFileSelect={handleFileSelect}
                   selectedPath={activeFile || undefined}
-                  refreshTrigger={fileTreeRefreshTrigger}
                 />
               }
               editor={
@@ -213,7 +207,7 @@ export function Workspace() {
                   )}
                 </>
               }
-              terminal={<MultiTerminal projectId={project.id} onDisconnect={refresh} onFileChange={handleFileChange} onPortChange={handlePortChange} />}
+              terminal={<MultiTerminal projectId={project.id} onDisconnect={refresh} onPortChange={handlePortChange} />}
               rightPanel={<AgentChat projectId={project.id} defaultAgent="claude" />}
               leftSidebarOpen={leftSidebarOpen}
               terminalOpen={terminalOpen}

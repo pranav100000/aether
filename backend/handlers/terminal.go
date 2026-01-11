@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -74,13 +75,14 @@ func (h *TerminalHandler) updateLastAccessedDebounced(projectID string) {
 }
 
 type WSMessage struct {
-	Type   string `json:"type"`
-	Data   string `json:"data,omitempty"`
-	Cols   int    `json:"cols,omitempty"`
-	Rows   int    `json:"rows,omitempty"`
-	Action string `json:"action,omitempty"` // For file_change: create, modify, delete; For port_change: open, close
-	Path   string `json:"path,omitempty"`   // For file_change: the file path
-	Port   int    `json:"port,omitempty"`   // For port_change: the port number
+	Type        string `json:"type"`
+	Data        string `json:"data,omitempty"`
+	Cols        int    `json:"cols,omitempty"`
+	Rows        int    `json:"rows,omitempty"`
+	Action      string `json:"action,omitempty"`       // For file_change: create, modify, delete; For port_change: open, close
+	Path        string `json:"path,omitempty"`         // For file_change: the file path
+	IsDirectory bool   `json:"is_directory,omitempty"` // For file_change: true if path is a directory
+	Port        int    `json:"port,omitempty"`         // For port_change: the port number
 }
 
 func (h *TerminalHandler) HandleTerminal(w http.ResponseWriter, r *http.Request) {
@@ -468,7 +470,17 @@ func (h *TerminalHandler) startFileWatcher(conn *websocket.Conn, privateIP strin
 				}
 
 				event := parts[0]
-				path := parts[1]
+				fullPath := parts[1]
+
+				// Get path relative to project directory
+				relPath, err := filepath.Rel("/home/coder/project", fullPath)
+				if err != nil {
+					continue
+				}
+				path := "/" + relPath
+
+				// Check if this is a directory event (inotify includes ISDIR in event string)
+				isDirectory := strings.Contains(event, "ISDIR")
 
 				// Map inotify events to our action types
 				var action string
@@ -485,18 +497,19 @@ func (h *TerminalHandler) startFileWatcher(conn *websocket.Conn, privateIP strin
 
 				// Send file change message
 				msg := WSMessage{
-					Type:   "file_change",
-					Action: action,
-					Path:   path,
+					Type:        "file_change",
+					Action:      action,
+					Path:        path,
+					IsDirectory: isDirectory,
 				}
 
 				wsMu.Lock()
 				conn.SetWriteDeadline(time.Now().Add(writeWait))
-				err := conn.WriteJSON(msg)
+				writeErr := conn.WriteJSON(msg)
 				wsMu.Unlock()
 
-				if err != nil {
-					log.Printf("File watcher WebSocket write error: %v", err)
+				if writeErr != nil {
+					log.Printf("File watcher WebSocket write error: %v", writeErr)
 					return
 				}
 			}

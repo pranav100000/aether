@@ -1,35 +1,22 @@
 import { useState, useCallback } from "react"
 import { ChevronRight, ChevronDown, File, Folder, FolderOpen, MoreVertical, Trash2, Pencil, FilePlus, FolderPlus } from "lucide-react"
 import { api } from "@/lib/api"
-import type { FileEntry } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { useFileTreeContext } from "@/contexts/FileTreeContext"
 
-// Files/folders to hide in the file tree
-const HIDDEN_ENTRIES = new Set([
-  "node_modules",
-  ".git",
-  "__pycache__",
-  ".venv",
-  "venv",
-  ".env",
-  "dist",
-  "build",
-  ".next",
-  ".cache",
-  ".DS_Store",
-  "Thumbs.db",
-  "lost+found",
-])
+export interface TreeNode {
+  name: string
+  path: string
+  type: "file" | "directory"
+  children?: TreeNode[]
+}
 
 interface FileTreeItemProps {
-  entry: FileEntry
-  path: string
+  node: TreeNode
   projectId: string
   level: number
   selectedPath?: string
   onFileSelect: (path: string) => void
-  onRefresh: () => void
 }
 
 function getFileIcon(name: string): string {
@@ -73,69 +60,37 @@ function getFileIcon(name: string): string {
 }
 
 export function FileTreeItem({
-  entry,
-  path,
+  node,
   projectId,
   level,
   selectedPath,
   onFileSelect,
-  onRefresh,
 }: FileTreeItemProps) {
   const [expanded, setExpanded] = useState(false)
-  const [children, setChildren] = useState<FileEntry[] | null>(null)
-  const [loading, setLoading] = useState(false)
   const [showContextMenu, setShowContextMenu] = useState(false)
   const [contextMenuPos, setContextMenuPos] = useState({ x: 0, y: 0 })
   const [renaming, setRenaming] = useState(false)
-  const [newName, setNewName] = useState(entry.name)
+  const [newName, setNewName] = useState(node.name)
   const [creating, setCreating] = useState<"file" | "folder" | null>(null)
   const [createName, setCreateName] = useState("")
 
-  // Get addFiles from context to populate file cache for @mentions
-  const { addFiles } = useFileTreeContext()
+  const { handleFileChange } = useFileTreeContext()
 
-  const fullPath = path === "/" ? `/${entry.name}` : `${path}/${entry.name}`
-  const isSelected = selectedPath === fullPath
-  const isDirectory = entry.type === "directory"
+  const isSelected = selectedPath === node.path
+  const isDirectory = node.type === "directory"
 
-  const filterAndSortEntries = (entries: FileEntry[]): FileEntry[] => {
-    return entries
-      .filter((e) => !HIDDEN_ENTRIES.has(e.name))
-      .sort((a, b) => {
-        if (a.type !== b.type) {
-          return a.type === "directory" ? -1 : 1
-        }
-        return a.name.localeCompare(b.name)
-      })
-  }
-
-  const handleExpand = useCallback(async () => {
+  const handleExpand = useCallback(() => {
     if (!isDirectory) return
-
-    if (!expanded && children === null) {
-      setLoading(true)
-      try {
-        const listing = await api.listFiles(projectId, fullPath)
-        setChildren(filterAndSortEntries(listing.entries))
-        // Add files to context cache for @mentions
-        addFiles(fullPath, listing.entries)
-      } catch (err) {
-        console.error("Failed to load directory:", err)
-      } finally {
-        setLoading(false)
-      }
-    }
-
     setExpanded(!expanded)
-  }, [expanded, children, isDirectory, projectId, fullPath, addFiles])
+  }, [expanded, isDirectory])
 
   const handleClick = useCallback(() => {
     if (isDirectory) {
       handleExpand()
     } else {
-      onFileSelect(fullPath)
+      onFileSelect(node.path)
     }
-  }, [isDirectory, handleExpand, onFileSelect, fullPath])
+  }, [isDirectory, handleExpand, onFileSelect, node.path])
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
@@ -146,34 +101,37 @@ export function FileTreeItem({
 
   const handleDelete = useCallback(async () => {
     setShowContextMenu(false)
-    if (!confirm(`Delete "${entry.name}"?`)) return
+    if (!confirm(`Delete "${node.name}"?`)) return
 
     try {
-      await api.deleteFile(projectId, fullPath)
-      onRefresh()
+      await api.deleteFile(projectId, node.path)
+      handleFileChange("delete", node.path, isDirectory)
     } catch (err) {
       console.error("Failed to delete:", err)
       alert("Failed to delete: " + (err instanceof Error ? err.message : "Unknown error"))
     }
-  }, [projectId, fullPath, entry.name, onRefresh])
+  }, [projectId, node.path, node.name, isDirectory, handleFileChange])
 
   const handleRename = useCallback(async () => {
-    if (!newName || newName === entry.name) {
+    if (!newName || newName === node.name) {
       setRenaming(false)
       return
     }
 
     try {
-      const newPath = path === "/" ? `/${newName}` : `${path}/${newName}`
-      await api.renameFile(projectId, fullPath, newPath)
-      onRefresh()
+      const parentPath = node.path.substring(0, node.path.lastIndexOf("/")) || ""
+      const newPath = parentPath ? `${parentPath}/${newName}` : `/${newName}`
+      await api.renameFile(projectId, node.path, newPath)
+      // Delete old path and add new path
+      handleFileChange("delete", node.path, isDirectory)
+      handleFileChange("create", newPath, isDirectory)
     } catch (err) {
       console.error("Failed to rename:", err)
       alert("Failed to rename: " + (err instanceof Error ? err.message : "Unknown error"))
     } finally {
       setRenaming(false)
     }
-  }, [newName, entry.name, projectId, fullPath, path, onRefresh])
+  }, [newName, node.name, projectId, node.path, isDirectory, handleFileChange])
 
   const handleCreate = useCallback(async () => {
     if (!createName || !creating) {
@@ -182,17 +140,14 @@ export function FileTreeItem({
     }
 
     try {
-      const createPath = fullPath + "/" + createName
-      if (creating === "folder") {
+      const createPath = node.path + "/" + createName
+      const creatingDirectory = creating === "folder"
+      if (creatingDirectory) {
         await api.mkdir(projectId, createPath)
       } else {
         await api.writeFile(projectId, createPath, "")
       }
-      // Refresh the children
-      const listing = await api.listFiles(projectId, fullPath)
-      setChildren(filterAndSortEntries(listing.entries))
-      // Add files to context cache for @mentions
-      addFiles(fullPath, listing.entries)
+      handleFileChange("create", createPath, creatingDirectory)
       setExpanded(true)
     } catch (err) {
       console.error("Failed to create:", err)
@@ -201,7 +156,7 @@ export function FileTreeItem({
       setCreating(null)
       setCreateName("")
     }
-  }, [createName, creating, projectId, fullPath, addFiles])
+  }, [createName, creating, projectId, node.path, handleFileChange])
 
   return (
     <div>
@@ -216,9 +171,7 @@ export function FileTreeItem({
       >
         {isDirectory ? (
           <>
-            {loading ? (
-              <div className="w-4 h-4 animate-spin border border-muted-foreground border-t-transparent rounded-full" />
-            ) : expanded ? (
+            {expanded ? (
               <ChevronDown className="w-4 h-4 text-muted-foreground" />
             ) : (
               <ChevronRight className="w-4 h-4 text-muted-foreground" />
@@ -232,7 +185,7 @@ export function FileTreeItem({
         ) : (
           <>
             <div className="w-4" />
-            <File className={cn("w-4 h-4", getFileIcon(entry.name))} />
+            <File className={cn("w-4 h-4", getFileIcon(node.name))} />
           </>
         )}
 
@@ -246,7 +199,7 @@ export function FileTreeItem({
               if (e.key === "Enter") handleRename()
               if (e.key === "Escape") {
                 setRenaming(false)
-                setNewName(entry.name)
+                setNewName(node.name)
               }
             }}
             className="flex-1 bg-input text-sm px-1 py-0 outline-none"
@@ -254,7 +207,7 @@ export function FileTreeItem({
             onClick={(e) => e.stopPropagation()}
           />
         ) : (
-          <span className="text-sm truncate flex-1">{entry.name}</span>
+          <span className="text-sm truncate flex-1">{node.name}</span>
         )}
 
         <button
@@ -356,19 +309,17 @@ export function FileTreeItem({
         </div>
       )}
 
-      {/* Children */}
-      {expanded && children && (
+      {/* Children - no loading needed, they're already computed */}
+      {expanded && node.children && node.children.length > 0 && (
         <div>
-          {children.map((child) => (
+          {node.children.map((child) => (
             <FileTreeItem
-              key={child.name}
-              entry={child}
-              path={fullPath}
+              key={child.path}
+              node={child}
               projectId={projectId}
               level={level + 1}
               selectedPath={selectedPath}
               onFileSelect={onFileSelect}
-              onRefresh={onRefresh}
             />
           ))}
         </div>

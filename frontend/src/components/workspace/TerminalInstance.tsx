@@ -11,7 +11,7 @@ interface TerminalInstanceProps {
   projectId: string
   isActive: boolean
   onDisconnect?: () => void
-  onFileChange?: (action: string, path: string) => void
+  onFileChange?: (action: string, path: string, isDirectory: boolean) => void
   onPortChange?: (action: "open" | "close", port: number) => void
 }
 
@@ -22,6 +22,7 @@ interface WSMessage {
   rows?: number
   action?: string
   path?: string
+  is_directory?: boolean
   port?: number
 }
 
@@ -173,7 +174,7 @@ export const TerminalInstance = forwardRef<TerminalInstanceHandle, TerminalInsta
               } else if (message.type === "error" && message.data) {
                 terminal.write(`\r\n\x1b[31mError: ${message.data}\x1b[0m\r\n`)
               } else if (message.type === "file_change" && message.action && message.path) {
-                onFileChangeRef.current?.(message.action, message.path)
+                onFileChangeRef.current?.(message.action, message.path, message.is_directory ?? false)
               } else if (message.type === "port_change" && message.action && message.port) {
                 onPortChangeRef.current?.(message.action as "open" | "close", message.port)
               }

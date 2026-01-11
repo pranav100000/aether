@@ -52,6 +52,28 @@ type DirListing struct {
 	Entries []FileEntry `json:"entries"`
 }
 
+type FileTree struct {
+	Paths       []string `json:"paths"`
+	Directories []string `json:"directories"`
+}
+
+// HiddenEntries are files/folders to skip when listing
+var HiddenEntries = map[string]bool{
+	"node_modules": true,
+	".git":         true,
+	"__pycache__":  true,
+	".venv":        true,
+	"venv":         true,
+	".env":         true,
+	"dist":         true,
+	"build":        true,
+	".next":        true,
+	".cache":       true,
+	".DS_Store":    true,
+	"Thumbs.db":    true,
+	"lost+found":   true,
+}
+
 func NewClient(privateKeyPath string, user string) (*Client, error) {
 	keyBytes, err := os.ReadFile(privateKeyPath)
 	if err != nil {
@@ -262,6 +284,84 @@ func (c *Client) List(host string, port int, path string) (*DirListing, error) {
 	}
 
 	return result, nil
+}
+
+// ListAllFiles recursively walks the directory tree and returns all file and directory paths
+func (c *Client) ListAllFiles(host string, port int) (*FileTree, error) {
+	sftpClient, err := c.getOrCreateConnection(host, port)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &FileTree{
+		Paths:       make([]string, 0),
+		Directories: make([]string, 0),
+	}
+
+	err = c.walkDirectory(sftpClient, WorkingDir, "", result)
+	if err != nil {
+		// Retry once if connection error
+		if isConnectionError(err) {
+			sftpClient, err = c.invalidateConnection(host, port)
+			if err != nil {
+				return nil, err
+			}
+			// Reset and retry
+			result.Paths = make([]string, 0)
+			result.Directories = make([]string, 0)
+			err = c.walkDirectory(sftpClient, WorkingDir, "", result)
+			if err != nil {
+				return nil, fmt.Errorf("failed to walk directory: %w", err)
+			}
+		} else {
+			return nil, fmt.Errorf("failed to walk directory: %w", err)
+		}
+	}
+
+	return result, nil
+}
+
+// walkDirectory recursively walks a directory and collects file/directory paths
+func (c *Client) walkDirectory(sftpClient *sftp.Client, basePath string, relativePath string, result *FileTree) error {
+	fullPath := basePath
+	if relativePath != "" {
+		fullPath = filepath.Join(basePath, relativePath)
+	}
+
+	entries, err := sftpClient.ReadDir(fullPath)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		name := entry.Name()
+
+		// Skip hidden entries
+		if HiddenEntries[name] {
+			continue
+		}
+
+		// Build relative path (what frontend expects)
+		var entryRelPath string
+		if relativePath == "" {
+			entryRelPath = "/" + name
+		} else {
+			entryRelPath = relativePath + "/" + name
+		}
+
+		if entry.IsDir() {
+			result.Directories = append(result.Directories, entryRelPath)
+			// Recurse into subdirectory
+			if err := c.walkDirectory(sftpClient, basePath, entryRelPath, result); err != nil {
+				// Log but continue on errors in subdirectories
+				continue
+			}
+		} else {
+			result.Paths = append(result.Paths, entryRelPath)
+		}
+	}
+
+	return nil
 }
 
 // Read returns the contents of a file

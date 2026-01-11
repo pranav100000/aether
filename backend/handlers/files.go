@@ -47,6 +47,69 @@ type RenameRequest struct {
 	NewPath string `json:"new_path"`
 }
 
+// ListTree returns all files and directories in the project
+// GET /projects/:id/files/tree
+func (h *FilesHandler) ListTree(w http.ResponseWriter, r *http.Request) {
+	userID := authmw.GetUserID(r.Context())
+	projectID := chi.URLParam(r, "id")
+
+	log.Printf("[FILES] ListTree: projectID=%s, userID=%s", projectID, userID)
+
+	if err := validation.ValidateUUID(projectID, "id"); err != nil {
+		respondJSON(w, http.StatusBadRequest, map[string]any{
+			"error":  "Validation failed",
+			"errors": []validation.ValidationError{*err},
+		})
+		return
+	}
+
+	// Get project and verify ownership
+	project, err := h.db.GetProjectByUser(r.Context(), projectID, userID)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			respondError(w, http.StatusNotFound, "Project not found")
+			return
+		}
+		log.Printf("Error getting project: %v", err)
+		respondError(w, http.StatusInternalServerError, "Failed to get project")
+		return
+	}
+
+	// Verify project is running
+	if project.Status != "running" {
+		respondError(w, http.StatusBadRequest, "Project is not running")
+		return
+	}
+
+	if project.FlyMachineID == nil || *project.FlyMachineID == "" {
+		respondError(w, http.StatusBadRequest, "Project has no VM")
+		return
+	}
+
+	// Get machine and check actual state
+	machine, err := h.fly.GetMachine(*project.FlyMachineID)
+	if err != nil {
+		log.Printf("Error getting machine: %v", err)
+		respondError(w, http.StatusInternalServerError, "Failed to get VM")
+		return
+	}
+
+	if machine.State != "started" {
+		respondError(w, http.StatusServiceUnavailable, "VM is not running")
+		return
+	}
+
+	// Get all files
+	tree, err := h.sftp.ListAllFiles(machine.PrivateIP, SSHPort)
+	if err != nil {
+		log.Printf("Error listing all files: %v", err)
+		respondError(w, http.StatusInternalServerError, "Failed to list files")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, tree)
+}
+
 // ListOrRead handles both directory listing and file reading based on the path
 // GET /projects/:id/files?path=/
 func (h *FilesHandler) ListOrRead(w http.ResponseWriter, r *http.Request) {

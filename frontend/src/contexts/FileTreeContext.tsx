@@ -1,38 +1,21 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react"
-import { api, type FileEntry } from "@/lib/api"
-
-// Files/folders to hide in the file tree
-const HIDDEN_ENTRIES = new Set([
-  "node_modules",
-  ".git",
-  "__pycache__",
-  ".venv",
-  "venv",
-  ".env",
-  "dist",
-  "build",
-  ".next",
-  ".cache",
-  ".DS_Store",
-  "Thumbs.db",
-  "lost+found",
-])
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react"
+import { api } from "@/lib/api"
 
 interface FileTreeContextValue {
-  // All known file paths (cached as user navigates)
+  // All file paths in the project
   allFiles: string[]
-
-  // Add files to cache when directory is expanded
-  addFiles: (parentPath: string, entries: FileEntry[]) => void
-
+  // All directory paths in the project
+  directories: string[]
+  // Loading state for initial fetch
+  isLoading: boolean
+  // Error state
+  error: string | null
   // Search files by query (fuzzy match on path)
   searchFiles: (query: string, limit?: number) => string[]
-
-  // Recursively load a directory (for initial @files search)
-  preloadDirectory: (path: string, depth?: number) => Promise<void>
-
-  // Check if preloading is in progress
-  isPreloading: boolean
+  // Handle file change from websocket or UI
+  handleFileChange: (action: string, path: string, isDirectory: boolean) => void
+  // Refresh the file tree (refetch from server)
+  refresh: () => Promise<void>
 }
 
 const FileTreeContext = createContext<FileTreeContextValue | null>(null)
@@ -52,60 +35,59 @@ interface FileTreeProviderProps {
 
 export function FileTreeProvider({ projectId, children }: FileTreeProviderProps) {
   const [allFiles, setAllFiles] = useState<string[]>([])
-  const [isPreloading, setIsPreloading] = useState(false)
-  const [loadedDirs, setLoadedDirs] = useState<Set<string>>(new Set())
+  const [directories, setDirectories] = useState<string[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const addFiles = useCallback((parentPath: string, entries: FileEntry[]) => {
-    const newFiles: string[] = []
-
-    for (const entry of entries) {
-      if (HIDDEN_ENTRIES.has(entry.name)) continue
-
-      const fullPath = parentPath === "/" ? `/${entry.name}` : `${parentPath}/${entry.name}`
-
-      if (entry.type === "file") {
-        newFiles.push(fullPath)
-      }
-    }
-
-    if (newFiles.length > 0) {
-      setAllFiles(prev => {
-        const existing = new Set(prev)
-        const toAdd = newFiles.filter(f => !existing.has(f))
-        if (toAdd.length === 0) return prev
-        return [...prev, ...toAdd]
-      })
-    }
-
-    setLoadedDirs(prev => new Set([...prev, parentPath]))
-  }, [])
-
-  const preloadDirectory = useCallback(async (path: string, depth: number = 2) => {
-    if (depth <= 0) return
-    if (loadedDirs.has(path)) return
-
-    setIsPreloading(true)
+  const loadFileTree = useCallback(async () => {
+    setIsLoading(true)
+    setError(null)
 
     try {
-      const listing = await api.listFiles(projectId, path)
-      const entries = listing.entries.filter(e => !HIDDEN_ENTRIES.has(e.name))
-
-      addFiles(path, entries)
-
-      // Recursively load subdirectories
-      const subdirs = entries.filter(e => e.type === "directory")
-      await Promise.all(
-        subdirs.map(dir => {
-          const subPath = path === "/" ? `/${dir.name}` : `${path}/${dir.name}`
-          return preloadDirectory(subPath, depth - 1)
-        })
-      )
+      const tree = await api.listFilesTree(projectId)
+      setAllFiles(tree.paths)
+      setDirectories(tree.directories)
     } catch (err) {
-      console.error("Failed to preload directory:", path, err)
+      console.error("Failed to load file tree:", err)
+      setError(err instanceof Error ? err.message : "Failed to load file tree")
     } finally {
-      setIsPreloading(false)
+      setIsLoading(false)
     }
-  }, [projectId, loadedDirs, addFiles])
+  }, [projectId])
+
+  // Load file tree on mount
+  useEffect(() => {
+    loadFileTree()
+  }, [loadFileTree])
+
+  const handleFileChange = useCallback((action: string, path: string, isDirectory: boolean) => {
+    // Normalize path to ensure it starts with /
+    const normalizedPath = path.startsWith("/") ? path : `/${path}`
+
+    if (action === "create") {
+      if (isDirectory) {
+        setDirectories(prev => {
+          if (prev.includes(normalizedPath)) return prev
+          return [...prev, normalizedPath].sort()
+        })
+      } else {
+        setAllFiles(prev => {
+          if (prev.includes(normalizedPath)) return prev
+          return [...prev, normalizedPath].sort()
+        })
+      }
+    } else if (action === "delete") {
+      // Remove from files
+      setAllFiles(prev => prev.filter(p => p !== normalizedPath && !p.startsWith(normalizedPath + "/")))
+      // Remove from directories
+      setDirectories(prev => prev.filter(p => p !== normalizedPath && !p.startsWith(normalizedPath + "/")))
+    }
+    // 'modify' doesn't change paths, so we ignore it
+  }, [])
+
+  const refresh = useCallback(async () => {
+    await loadFileTree()
+  }, [loadFileTree])
 
   const searchFiles = useCallback((query: string, limit: number = 20): string[] => {
     if (!query) {
@@ -138,10 +120,12 @@ export function FileTreeProvider({ projectId, children }: FileTreeProviderProps)
     <FileTreeContext.Provider
       value={{
         allFiles,
-        addFiles,
+        directories,
+        isLoading,
+        error,
         searchFiles,
-        preloadDirectory,
-        isPreloading,
+        handleFileChange,
+        refresh,
       }}
     >
       {children}

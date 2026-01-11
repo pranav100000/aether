@@ -2,20 +2,21 @@ import { useEffect, useRef, useCallback } from "react"
 import { useTerminalSessions } from "@/hooks/useTerminalSessions"
 import { TerminalTabs } from "./TerminalTabs"
 import { TerminalInstance, type TerminalInstanceHandle } from "./TerminalInstance"
+import { useFileTreeContext } from "@/contexts/FileTreeContext"
 
 interface MultiTerminalProps {
   projectId: string
   onDisconnect?: () => void
-  onFileChange?: (action: string, path: string) => void
   onPortChange?: (action: "open" | "close", port: number) => void
 }
 
 export function MultiTerminal({
   projectId,
   onDisconnect,
-  onFileChange,
   onPortChange,
 }: MultiTerminalProps) {
+  // Get handleFileChange from context for websocket file_change events
+  const { handleFileChange } = useFileTreeContext()
   const {
     sessions,
     activeSessionId,
@@ -103,7 +104,7 @@ export function MultiTerminal({
               projectId={projectId}
               isActive={session.id === activeSessionId}
               onDisconnect={onDisconnect}
-              onFileChange={onFileChange}
+              onFileChange={handleFileChange}
               onPortChange={onPortChange}
             />
           </div>

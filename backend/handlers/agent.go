@@ -54,7 +54,35 @@ type AgentMessage struct {
 	Usage     *UsageInfo             `json:"usage,omitempty"`
 	Error     string                 `json:"error,omitempty"`
 	Prompt    string                 `json:"prompt,omitempty"`
+	Settings  map[string]interface{} `json:"settings,omitempty"`
+	Context   *PromptContext         `json:"context,omitempty"`
 	Extra     map[string]interface{} `json:"-"` // For any additional fields
+}
+
+// PromptContext contains file references and attachments sent with prompts
+type PromptContext struct {
+	Files       []FileReference `json:"files,omitempty"`
+	Attachments []Attachment    `json:"attachments,omitempty"`
+}
+
+// FileReference is a file attached via @mentions
+type FileReference struct {
+	Path      string          `json:"path"`
+	Include   bool            `json:"include"`
+	Selection *SelectionRange `json:"selection,omitempty"`
+}
+
+// SelectionRange specifies a range of lines in a file
+type SelectionRange struct {
+	StartLine int `json:"startLine"`
+	EndLine   int `json:"endLine"`
+}
+
+// Attachment is a binary file attachment (images, documents)
+type Attachment struct {
+	Filename  string `json:"filename"`
+	MediaType string `json:"mediaType"`
+	Data      string `json:"data"`
 }
 
 type ToolInfo struct {

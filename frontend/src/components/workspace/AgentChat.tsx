@@ -35,7 +35,7 @@ import {
   ReasoningTrigger,
 } from "@/components/ai-elements/reasoning"
 import { cn } from "@/lib/utils"
-import { RefreshCwIcon, TerminalIcon, SettingsIcon, BrainIcon, ShieldCheckIcon, FileEditIcon, SparklesIcon, ZapIcon, CodeIcon } from "lucide-react"
+import { RefreshCwIcon, TerminalIcon, SettingsIcon, BrainIcon, ShieldCheckIcon, FileEditIcon, SparklesIcon, ZapIcon } from "lucide-react"
 import type { ToolUIPart } from "ai"
 import {
   Select,
@@ -208,8 +208,8 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // File autocomplete
-  const { searchFiles, preloadDirectory, isPreloading } = useFileTreeContext()
+  // File autocomplete - files are loaded on startup, no preloading needed
+  const { searchFiles, isLoading: isLoadingFiles } = useFileTreeContext()
   const autocomplete = useFileAutocomplete()
 
   const currentAgentConfig = agentConfig[agent]
@@ -435,9 +435,15 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
         model: settings.model,
         permissionMode: settings.permissionMode,
         extendedThinking: settings.extendedThinking,
-      }
+      },
+      context: attachedFiles.length > 0 ? {
+        files: attachedFiles.map(path => ({ path, include: true }))
+      } : undefined
     }))
-  }, [generateId, settings])
+
+    // Clear attached files after sending
+    setAttachedFiles([])
+  }, [generateId, settings, attachedFiles])
 
   const handleSubmit = useCallback(({ text }: { text: string }) => {
     sendMessage(text)
@@ -481,9 +487,8 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
         top: textareaRect.top + coords.top - textareaRef.current.scrollTop - containerRect.top,
         left: textareaRect.left + coords.left - containerRect.left,
       })
-      preloadDirectory("/", 2)
     }
-  }, [autocomplete, preloadDirectory])
+  }, [autocomplete])
 
   const handleFileSelect = useCallback((file: string) => {
     setAttachedFiles(prev => {
@@ -500,6 +505,44 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
   }, [])
 
   const searchResults = searchFiles(autocomplete.query, 15)
+
+  // Handle keyboard events for file autocomplete
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // When autocomplete is open, intercept navigation and selection keys
+    if (autocomplete.isOpen) {
+      switch (e.key) {
+        case "Enter":
+          e.preventDefault()
+          e.stopPropagation()
+          if (searchResults.length > 0) {
+            handleFileSelect(searchResults[autocomplete.selectedIndex])
+          }
+          return
+        case "Escape":
+          e.preventDefault()
+          autocomplete.close()
+          return
+        case "ArrowDown":
+          e.preventDefault()
+          autocomplete.moveSelection("down", searchResults.length)
+          return
+        case "ArrowUp":
+          e.preventDefault()
+          autocomplete.moveSelection("up", searchResults.length)
+          return
+      }
+    }
+
+    // When autocomplete is closed, handle Enter to submit (replaces PromptInputTextarea's internal handler)
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault()
+      const form = e.currentTarget.form
+      const submitButton = form?.querySelector('button[type="submit"]') as HTMLButtonElement | null
+      if (!submitButton?.disabled) {
+        form?.requestSubmit()
+      }
+    }
+  }, [autocomplete, searchResults, handleFileSelect])
 
   const showEmptyState = messages.length === 0
 
@@ -727,6 +770,7 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
                 ref={textareaRef}
                 value={input}
                 onChange={handleInputChange}
+                onKeyDown={handleKeyDown}
                 placeholder={isConnected ? "Ask anything about your code... (@ to mention files)" : "Connecting..."}
                 disabled={!isConnected || status === "streaming" || status === "submitted"}
               />
@@ -754,11 +798,12 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
         position={autocomplete.position}
         query={autocomplete.query}
         files={searchResults}
-        loading={isPreloading}
+        loading={isLoadingFiles}
         selectedIndex={autocomplete.selectedIndex}
         onSelect={handleFileSelect}
         onClose={autocomplete.close}
         onQueryChange={autocomplete.setQuery}
+        onMoveSelection={(dir) => autocomplete.moveSelection(dir, searchResults.length)}
       />
     </div>
   )
