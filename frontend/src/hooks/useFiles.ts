@@ -32,7 +32,7 @@ interface UseFilesReturn {
   renameEntry: (oldName: string, newName: string) => Promise<void>
 }
 
-export function useFiles(projectId: string): UseFilesReturn {
+export function useFiles(vmUrl: string, machineId: string): UseFilesReturn {
   const [entries, setEntries] = useState<FileEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -58,7 +58,7 @@ export function useFiles(projectId: string): UseFilesReturn {
       setLoading(true)
       setError(null)
       try {
-        const listing = await api.listFiles(projectId, path)
+        const listing = await api.listFiles(vmUrl, machineId, path)
         setEntries(sortEntries(filterEntries(listing.entries)))
         setCurrentPath(path)
       } catch (err) {
@@ -67,7 +67,7 @@ export function useFiles(projectId: string): UseFilesReturn {
         setLoading(false)
       }
     },
-    [projectId]
+    [vmUrl, machineId]
   )
 
   const refresh = useCallback(async () => {
@@ -79,14 +79,14 @@ export function useFiles(projectId: string): UseFilesReturn {
       setError(null)
       try {
         const path = join(currentPath, name)
-        await api.writeFile(projectId, path, content)
+        await api.writeFile(vmUrl, machineId, path, content)
         await refresh()
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to create file")
         throw err
       }
     },
-    [projectId, currentPath, refresh]
+    [vmUrl, machineId, currentPath, refresh]
   )
 
   const createFolder = useCallback(
@@ -94,14 +94,14 @@ export function useFiles(projectId: string): UseFilesReturn {
       setError(null)
       try {
         const path = join(currentPath, name)
-        await api.mkdir(projectId, path)
+        await api.mkdir(vmUrl, machineId, path)
         await refresh()
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to create folder")
         throw err
       }
     },
-    [projectId, currentPath, refresh]
+    [vmUrl, machineId, currentPath, refresh]
   )
 
   const deleteEntry = useCallback(
@@ -109,14 +109,14 @@ export function useFiles(projectId: string): UseFilesReturn {
       setError(null)
       try {
         const path = join(currentPath, name)
-        await api.deleteFile(projectId, path)
+        await api.deleteFile(vmUrl, machineId, path)
         await refresh()
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to delete")
         throw err
       }
     },
-    [projectId, currentPath, refresh]
+    [vmUrl, machineId, currentPath, refresh]
   )
 
   const renameEntry = useCallback(
@@ -125,14 +125,14 @@ export function useFiles(projectId: string): UseFilesReturn {
       try {
         const oldPath = join(currentPath, oldName)
         const newPath = join(currentPath, newName)
-        await api.renameFile(projectId, oldPath, newPath)
+        await api.renameFile(vmUrl, machineId, oldPath, newPath)
         await refresh()
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to rename")
         throw err
       }
     },
-    [projectId, currentPath, refresh]
+    [vmUrl, machineId, currentPath, refresh]
   )
 
   return {

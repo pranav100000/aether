@@ -1,5 +1,5 @@
 #!/bin/bash
-# Sync agent-service code to a running VM for hot-reload development
+# Sync workspace-service code to a running VM for hot-reload development
 #
 # Usage: ./scripts/dev-agent-sync.sh <project-id>
 #
@@ -41,10 +41,10 @@ echo ""
 
 # Function to sync files
 sync_files() {
-  echo "[$(date +%H:%M:%S)] Syncing agent-service to VM..."
+  echo "[$(date +%H:%M:%S)] Syncing workspace-service to VM..."
 
   # Use flyctl proxy to tunnel rsync through Fly's WireGuard network
-  flyctl ssh console -a "$APP_NAME" -C "mkdir -p /opt/agent-service/src" 2>/dev/null || true
+  flyctl ssh console -a "$APP_NAME" -C "mkdir -p /opt/workspace-service/src" 2>/dev/null || true
 
   # Sync the src directory
   rsync -avz --delete \
@@ -52,8 +52,8 @@ sync_files() {
     --exclude '.env' \
     --exclude 'data' \
     -e "flyctl ssh console -a $APP_NAME -C" \
-    ./agent-service/src/ \
-    :/opt/agent-service/src/
+    ./workspace-service/src/ \
+    :/opt/workspace-service/src/
 
   echo "[$(date +%H:%M:%S)] Sync complete. Agent will use new code on next connection."
 }
@@ -63,10 +63,10 @@ sync_files
 
 # Watch for changes and sync
 echo ""
-echo "Watching for changes in agent-service/src/..."
+echo "Watching for changes in workspace-service/src/..."
 echo "Press Ctrl+C to stop"
 echo ""
 
-fswatch -o ./agent-service/src | while read; do
+fswatch -o ./workspace-service/src | while read; do
   sync_files
 done

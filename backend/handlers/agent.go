@@ -193,7 +193,7 @@ func (h *AgentHandler) HandleAgent(w http.ResponseWriter, r *http.Request) {
 	// Write env vars via base64 (avoids shell escaping issues), then source and run
 	// Use "." instead of "source" for POSIX shell compatibility
 	// cd to project directory so agent runs in correct context
-	cmd := fmt.Sprintf("echo %s | base64 -d > ~/.aether_env && . ~/.aether_env && cd /home/coder/project && exec /usr/local/bin/bun /opt/agent-service/src/cli.ts %s", encodedEnv, agentType)
+	cmd := fmt.Sprintf("echo %s | base64 -d > ~/.aether_env && . ~/.aether_env && cd /home/coder/project && exec /usr/local/bin/bun /opt/workspace-service/src/cli.ts %s", encodedEnv, agentType)
 	log.Printf("Starting agent for project %s", projectID)
 	if err := sshSession.Start(cmd); err != nil {
 		log.Printf("Agent start error: %v", err)

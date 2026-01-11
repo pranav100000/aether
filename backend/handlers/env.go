@@ -25,6 +25,11 @@ func (b *EnvBuilder) BuildEnv(ctx context.Context, projectID, userID string, ext
 		"PROJECT_ID": projectID,
 	}
 
+	// Pass Supabase URL for JWT validation in workspace-service
+	if supabaseURL := os.Getenv("SUPABASE_URL"); supabaseURL != "" {
+		env["SUPABASE_URL"] = supabaseURL
+	}
+
 	// Merge extra vars first so platform/user keys can override
 	for k, v := range extraVars {
 		env[k] = v

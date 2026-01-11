@@ -7,7 +7,8 @@ import { useFileTreeContext } from "@/contexts/FileTreeContext"
 import { basename, dirname } from "@/lib/path-utils"
 
 interface FileTreeProps {
-  projectId: string
+  vmUrl: string
+  machineId: string
   onFileSelect: (path: string) => void
   selectedPath?: string
 }
@@ -80,7 +81,7 @@ function buildTreeFromPaths(files: string[], directories: string[]): TreeNode[] 
   return sortRecursive(rootNodes)
 }
 
-export function FileTree({ projectId, onFileSelect, selectedPath }: FileTreeProps) {
+export function FileTree({ vmUrl, machineId, onFileSelect, selectedPath }: FileTreeProps) {
   const [creating, setCreating] = useState<"file" | "folder" | null>(null)
   const [createName, setCreateName] = useState("")
 
@@ -100,10 +101,10 @@ export function FileTree({ projectId, onFileSelect, selectedPath }: FileTreeProp
     try {
       const createPath = "/" + createName
       if (creating === "folder") {
-        await api.mkdir(projectId, createPath)
+        await api.mkdir(vmUrl, machineId, createPath)
         handleFileChange("create", createPath, true)
       } else {
-        await api.writeFile(projectId, createPath, "")
+        await api.writeFile(vmUrl, machineId, createPath, "")
         handleFileChange("create", createPath, false)
       }
     } catch (err) {
@@ -113,7 +114,7 @@ export function FileTree({ projectId, onFileSelect, selectedPath }: FileTreeProp
       setCreating(null)
       setCreateName("")
     }
-  }, [createName, creating, projectId, handleFileChange])
+  }, [createName, creating, vmUrl, machineId, handleFileChange])
 
   if (isLoading) {
     return (
@@ -203,7 +204,8 @@ export function FileTree({ projectId, onFileSelect, selectedPath }: FileTreeProp
             <FileTreeItem
               key={node.path}
               node={node}
-              projectId={projectId}
+              vmUrl={vmUrl}
+              machineId={machineId}
               level={0}
               selectedPath={selectedPath}
               onFileSelect={onFileSelect}

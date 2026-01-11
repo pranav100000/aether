@@ -29,7 +29,7 @@ export function Workspace() {
     updateContent,
     saveFile,
     getFile,
-  } = useEditor(id!)
+  } = useEditor(project?.vm_url || "", project?.fly_machine_id || "")
   const [starting, setStarting] = useState(false)
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(true)
   const [terminalOpen, setTerminalOpen] = useState(false)
@@ -177,12 +177,13 @@ export function Workspace() {
 
       {/* Main content */}
       <main className="flex-1 overflow-hidden">
-        {project.status === "running" ? (
-          <FileTreeProvider projectId={project.id}>
+        {project.status === "running" && project.vm_url && project.fly_machine_id ? (
+          <FileTreeProvider vmUrl={project.vm_url} machineId={project.fly_machine_id}>
             <WorkspaceLayout
               sidebar={
                 <FileTree
-                  projectId={project.id}
+                  vmUrl={project.vm_url}
+                  machineId={project.fly_machine_id}
                   onFileSelect={handleFileSelect}
                   selectedPath={activeFile || undefined}
                 />

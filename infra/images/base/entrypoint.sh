@@ -79,4 +79,10 @@ fi
 # This allows the gateway to reach dev servers that only bind to localhost
 /usr/local/bin/port-forward.sh &
 
+# Start workspace-service in background
+# This handles file operations and agent WebSocket connections
+# Note: We set HOME explicitly because sudo -E preserves HOME=/root
+echo "Starting workspace-service..."
+cd /opt/workspace-service && sudo -u coder HOME=/home/coder -E /usr/local/bin/bun run src/server.ts &
+
 exec /usr/sbin/sshd -D -e

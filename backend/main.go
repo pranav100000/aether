@@ -13,7 +13,6 @@ import (
 	"aether/fly"
 	"aether/handlers"
 	authmw "aether/middleware"
-	"aether/sftp"
 	"aether/ssh"
 
 	"github.com/go-chi/chi/v5"
@@ -42,13 +41,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to load SSH client: %v", err)
 	}
-
-	// Initialize SFTP client (uses same SSH key)
-	sftpClient, err := loadSFTPClient()
-	if err != nil {
-		log.Fatalf("Failed to load SFTP client: %v", err)
-	}
-	defer sftpClient.Close()
 
 	// Initialize database client
 	databaseURL := requireEnv("DATABASE_URL")
@@ -95,7 +87,6 @@ func main() {
 	terminalHandler := handlers.NewTerminalHandler(sshClient, flyClient, dbClient, authMiddleware)
 	agentHandler := handlers.NewAgentHandler(sshClient, flyClient, dbClient, authMiddleware, apiKeysHandler)
 	healthHandler := handlers.NewHealthHandler(dbClient, getEnv("VERSION", "dev"))
-	filesHandler := handlers.NewFilesHandler(sftpClient, flyClient, dbClient)
 	portsHandler := handlers.NewPortsHandler(sshClient, flyClient, dbClient)
 
 	// Start idle project checker
@@ -145,16 +136,6 @@ func main() {
 			r.Delete("/{id}", projectHandler.Delete)
 			r.Post("/{id}/start", projectHandler.Start)
 			r.Post("/{id}/stop", projectHandler.Stop)
-
-			// File operations
-			r.Route("/{id}/files", func(r chi.Router) {
-				r.Get("/", filesHandler.ListOrRead)
-				r.Get("/tree", filesHandler.ListTree)
-				r.Put("/", filesHandler.Write)
-				r.Delete("/", filesHandler.Delete)
-				r.Post("/mkdir", filesHandler.Mkdir)
-				r.Post("/rename", filesHandler.Rename)
-			})
 
 			// Port operations
 			r.Post("/{id}/ports/{port}/kill", portsHandler.KillPort)
@@ -215,25 +196,6 @@ func loadSSHClient() (*ssh.Client, error) {
 	return ssh.NewClient(homeDir+"/.ssh/id_rsa", "coder")
 }
 
-func loadSFTPClient() (*sftp.Client, error) {
-	if keyPath := os.Getenv("SSH_PRIVATE_KEY_PATH"); keyPath != "" {
-		return sftp.NewClient(keyPath, "coder")
-	}
-
-	if keyBase64 := os.Getenv("SSH_PRIVATE_KEY"); keyBase64 != "" {
-		keyBytes, err := base64.StdEncoding.DecodeString(keyBase64)
-		if err != nil {
-			return nil, err
-		}
-		return sftp.NewClientFromKey(keyBytes, "coder")
-	}
-
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return nil, err
-	}
-	return sftp.NewClient(homeDir+"/.ssh/id_rsa", "coder")
-}
 
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
