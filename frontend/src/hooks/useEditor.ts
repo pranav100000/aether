@@ -24,7 +24,7 @@ interface UseEditorReturn {
   getFile: (path: string) => OpenFile | undefined
 }
 
-export function useEditor(projectId: string): UseEditorReturn {
+export function useEditor(vmUrl: string, machineId: string): UseEditorReturn {
   const [openFiles, setOpenFiles] = useState<OpenFile[]>([])
   const [activeFile, setActiveFile] = useState<string | null>(null)
   const saveTimeouts = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
@@ -60,7 +60,7 @@ export function useEditor(projectId: string): UseEditorReturn {
       setActiveFile(path)
 
       try {
-        const fileInfo = await api.readFile(projectId, path)
+        const fileInfo = await api.readFile(vmUrl, machineId, path)
         setOpenFiles((prev) =>
           prev.map((f) =>
             f.path === path
@@ -87,7 +87,7 @@ export function useEditor(projectId: string): UseEditorReturn {
         )
       }
     },
-    [projectId, openFiles]
+    [vmUrl, machineId, openFiles]
   )
 
   const closeFile = useCallback(
@@ -143,7 +143,7 @@ export function useEditor(projectId: string): UseEditorReturn {
       )
 
       try {
-        await api.writeFile(projectId, path, file.content)
+        await api.writeFile(vmUrl, machineId, path, file.content)
         setOpenFiles((prev) =>
           prev.map((f) =>
             f.path === path
@@ -171,7 +171,7 @@ export function useEditor(projectId: string): UseEditorReturn {
         throw err
       }
     },
-    [projectId, openFiles]
+    [vmUrl, machineId, openFiles]
   )
 
   const saveAllFiles = useCallback(async () => {

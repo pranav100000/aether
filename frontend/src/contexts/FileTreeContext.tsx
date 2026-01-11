@@ -30,11 +30,12 @@ export function useFileTreeContext() {
 }
 
 interface FileTreeProviderProps {
-  projectId: string
+  vmUrl: string
+  machineId: string
   children: ReactNode
 }
 
-export function FileTreeProvider({ projectId, children }: FileTreeProviderProps) {
+export function FileTreeProvider({ vmUrl, machineId, children }: FileTreeProviderProps) {
   const [allFiles, setAllFiles] = useState<string[]>([])
   const [directories, setDirectories] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -45,7 +46,7 @@ export function FileTreeProvider({ projectId, children }: FileTreeProviderProps)
     setError(null)
 
     try {
-      const tree = await api.listFilesTree(projectId)
+      const tree = await api.listFilesTree(vmUrl, machineId)
       setAllFiles(tree.paths)
       setDirectories(tree.directories)
     } catch (err) {
@@ -54,7 +55,7 @@ export function FileTreeProvider({ projectId, children }: FileTreeProviderProps)
     } finally {
       setIsLoading(false)
     }
-  }, [projectId])
+  }, [vmUrl, machineId])
 
   // Load file tree on mount
   useEffect(() => {

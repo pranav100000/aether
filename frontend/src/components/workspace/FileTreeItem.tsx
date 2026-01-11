@@ -15,7 +15,8 @@ export interface TreeNode {
 
 interface FileTreeItemProps {
   node: TreeNode
-  projectId: string
+  vmUrl: string
+  machineId: string
   level: number
   selectedPath?: string
   onFileSelect: (path: string) => void
@@ -23,7 +24,8 @@ interface FileTreeItemProps {
 
 export function FileTreeItem({
   node,
-  projectId,
+  vmUrl,
+  machineId,
   level,
   selectedPath,
   onFileSelect,
@@ -66,13 +68,13 @@ export function FileTreeItem({
     if (!confirm(`Delete "${node.name}"?`)) return
 
     try {
-      await api.deleteFile(projectId, node.path)
+      await api.deleteFile(vmUrl, machineId, node.path)
       handleFileChange("delete", node.path, isDirectory)
     } catch (err) {
       console.error("Failed to delete:", err)
       alert("Failed to delete: " + (err instanceof Error ? err.message : "Unknown error"))
     }
-  }, [projectId, node.path, node.name, isDirectory, handleFileChange])
+  }, [vmUrl, machineId, node.path, node.name, isDirectory, handleFileChange])
 
   const handleRename = useCallback(async () => {
     if (!newName || newName === node.name) {
@@ -83,7 +85,7 @@ export function FileTreeItem({
     try {
       const parentPath = dirname(node.path)
       const newPath = join(parentPath, newName)
-      await api.renameFile(projectId, node.path, newPath)
+      await api.renameFile(vmUrl, machineId, node.path, newPath)
       // Delete old path and add new path
       handleFileChange("delete", node.path, isDirectory)
       handleFileChange("create", newPath, isDirectory)
@@ -93,7 +95,7 @@ export function FileTreeItem({
     } finally {
       setRenaming(false)
     }
-  }, [newName, node.name, projectId, node.path, isDirectory, handleFileChange])
+  }, [newName, node.name, vmUrl, machineId, node.path, isDirectory, handleFileChange])
 
   const handleCreate = useCallback(async () => {
     if (!createName || !creating) {
@@ -105,9 +107,9 @@ export function FileTreeItem({
       const createPath = join(node.path, createName)
       const creatingDirectory = creating === "folder"
       if (creatingDirectory) {
-        await api.mkdir(projectId, createPath)
+        await api.mkdir(vmUrl, machineId, createPath)
       } else {
-        await api.writeFile(projectId, createPath, "")
+        await api.writeFile(vmUrl, machineId, createPath, "")
       }
       handleFileChange("create", createPath, creatingDirectory)
       setExpanded(true)
@@ -118,7 +120,7 @@ export function FileTreeItem({
       setCreating(null)
       setCreateName("")
     }
-  }, [createName, creating, projectId, node.path, handleFileChange])
+  }, [createName, creating, vmUrl, machineId, node.path, handleFileChange])
 
   return (
     <div>
@@ -278,7 +280,8 @@ export function FileTreeItem({
             <FileTreeItem
               key={child.path}
               node={child}
-              projectId={projectId}
+              vmUrl={vmUrl}
+              machineId={machineId}
               level={level + 1}
               selectedPath={selectedPath}
               onFileSelect={onFileSelect}

@@ -74,9 +74,9 @@ COPY --chown=coder:coder tmux.conf /home/coder/.tmux.conf
 
 USER root
 
-# Copy and install agent-service
-COPY agent-service /opt/agent-service
-WORKDIR /opt/agent-service
+# Copy and install workspace-service
+COPY workspace-service /opt/workspace-service
+WORKDIR /opt/workspace-service
 RUN bun install --frozen-lockfile --production
 WORKDIR /home/coder
 
@@ -88,6 +88,7 @@ COPY port-forward.sh /usr/local/bin/port-forward.sh
 RUN chmod +x /usr/local/bin/port-forward.sh
 
 EXPOSE 2222
+EXPOSE 3001
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
