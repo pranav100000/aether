@@ -8,7 +8,8 @@ import "@xterm/xterm/css/xterm.css"
 
 interface TerminalInstanceProps {
   sessionId: string
-  projectId: string
+  vmUrl: string
+  machineId: string
   isActive: boolean
   onDisconnect?: () => void
   onFileChange?: (action: string, path: string, isDirectory: boolean) => void
@@ -32,7 +33,7 @@ export interface TerminalInstanceHandle {
 
 export const TerminalInstance = forwardRef<TerminalInstanceHandle, TerminalInstanceProps>(
   function TerminalInstance(
-    { sessionId, projectId, isActive, onDisconnect, onFileChange, onPortChange },
+    { sessionId, vmUrl, machineId, isActive, onDisconnect, onFileChange, onPortChange },
     ref
   ) {
     const containerRef = useRef<HTMLDivElement>(null)
@@ -144,7 +145,7 @@ export const TerminalInstance = forwardRef<TerminalInstanceHandle, TerminalInsta
             throw new Error("Not authenticated")
           }
 
-          const wsUrl = api.getTerminalUrl(projectId)
+          const wsUrl = api.getTerminalUrl(vmUrl, machineId)
           const ws = new WebSocket(wsUrl, ["bearer", session.access_token])
 
           if (cancelled) {
@@ -216,7 +217,7 @@ export const TerminalInstance = forwardRef<TerminalInstanceHandle, TerminalInsta
         wsRef.current?.close()
         terminal.dispose()
       }
-    }, [sessionId, projectId, onDisconnect])
+    }, [sessionId, vmUrl, machineId, onDisconnect])
 
     return (
       <div className="h-full flex flex-col justify-end bg-[#0a0a0a]">

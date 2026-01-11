@@ -80,6 +80,7 @@ export interface Project {
   idle_timeout_minutes?: IdleTimeoutMinutes
   fly_machine_id?: string
   private_ip?: string
+  vm_url?: string
   preview_token?: string
   error_message?: string
   last_accessed_at?: string
@@ -191,6 +192,38 @@ async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T
   return response.json()
 }
 
+// Direct VM request - calls workspace-service on the VM
+async function vmRequest<T>(
+  vmUrl: string,
+  machineId: string,
+  path: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const headers = await getAuthHeaders()
+
+  const response = await fetch(`${vmUrl}${path}`, {
+    ...options,
+    headers: {
+      ...headers,
+      "fly-force-instance-id": machineId,
+      ...options.headers,
+    },
+  })
+
+  if (!response.ok) {
+    const error: ApiError = await response.json().catch(() => ({
+      error: `Request failed with status ${response.status}`,
+    }))
+    throw new Error(error.error)
+  }
+
+  if (response.status === 204) {
+    return undefined as T
+  }
+
+  return response.json()
+}
+
 export const api = {
   async listProjects(): Promise<{ projects: Project[] }> {
     return apiRequest("/projects")
@@ -232,57 +265,58 @@ export const api = {
     })
   },
 
-  getTerminalUrl(projectId: string): string {
-    const wsUrl = API_URL.replace("http", "ws")
-    return `${wsUrl}/projects/${projectId}/terminal`
+  getTerminalUrl(vmUrl: string, machineId: string): string {
+    // Direct to VM via workspace-service
+    const wsUrl = vmUrl.replace("https", "wss").replace("http", "ws")
+    return `${wsUrl}/terminal?fly-force-instance-id=${machineId}`
   },
 
-  getAgentUrl(projectId: string, agent: "claude" | "codex" | "opencode" | "codebuff"): string {
+  getAgentUrl(vmUrl: string, machineId: string, agent: "claude" | "codex" | "opencode" | "codebuff"): string {
     // Local dev mode: direct WebSocket to local agent service
     if (LOCAL_AGENT_URL) {
       return `${LOCAL_AGENT_URL}/agent/${agent}`
     }
 
-    // Production mode: WebSocket to Go backend
-    const wsUrl = API_URL.replace("http", "ws")
-    return `${wsUrl}/projects/${projectId}/agent/${agent}`
+    // Direct to VM via workspace-service
+    const wsUrl = vmUrl.replace("https", "wss").replace("http", "ws")
+    return `${wsUrl}/agent/${agent}?fly-force-instance-id=${machineId}`
   },
 
-  // File system operations
-  async listFiles(projectId: string, path: string = "/"): Promise<DirListing> {
-    return apiRequest(`/projects/${projectId}/files?path=${encodeURIComponent(path)}`)
+  // File system operations - call VM directly via workspace-service
+  async listFiles(vmUrl: string, machineId: string, path: string = "/"): Promise<DirListing> {
+    return vmRequest(`${vmUrl}`, machineId, `/files?path=${encodeURIComponent(path)}`)
   },
 
-  async listFilesTree(projectId: string): Promise<FileTree> {
-    return apiRequest(`/projects/${projectId}/files/tree`)
+  async listFilesTree(vmUrl: string, machineId: string): Promise<FileTree> {
+    return vmRequest(`${vmUrl}`, machineId, `/files/tree`)
   },
 
-  async readFile(projectId: string, path: string): Promise<FileInfo> {
-    return apiRequest(`/projects/${projectId}/files?path=${encodeURIComponent(path)}`)
+  async readFile(vmUrl: string, machineId: string, path: string): Promise<FileInfo> {
+    return vmRequest(`${vmUrl}`, machineId, `/files?path=${encodeURIComponent(path)}`)
   },
 
-  async writeFile(projectId: string, path: string, content: string): Promise<FileInfo> {
-    return apiRequest(`/projects/${projectId}/files?path=${encodeURIComponent(path)}`, {
+  async writeFile(vmUrl: string, machineId: string, path: string, content: string): Promise<FileInfo> {
+    return vmRequest(`${vmUrl}`, machineId, `/files?path=${encodeURIComponent(path)}`, {
       method: "PUT",
       body: JSON.stringify({ content }),
     })
   },
 
-  async mkdir(projectId: string, path: string): Promise<{ path: string }> {
-    return apiRequest(`/projects/${projectId}/files/mkdir`, {
+  async mkdir(vmUrl: string, machineId: string, path: string): Promise<{ path: string }> {
+    return vmRequest(`${vmUrl}`, machineId, `/files/mkdir`, {
       method: "POST",
       body: JSON.stringify({ path }),
     })
   },
 
-  async deleteFile(projectId: string, path: string): Promise<void> {
-    return apiRequest(`/projects/${projectId}/files?path=${encodeURIComponent(path)}`, {
+  async deleteFile(vmUrl: string, machineId: string, path: string): Promise<void> {
+    return vmRequest(`${vmUrl}`, machineId, `/files?path=${encodeURIComponent(path)}`, {
       method: "DELETE",
     })
   },
 
-  async renameFile(projectId: string, oldPath: string, newPath: string): Promise<{ path: string }> {
-    return apiRequest(`/projects/${projectId}/files/rename`, {
+  async renameFile(vmUrl: string, machineId: string, oldPath: string, newPath: string): Promise<{ path: string }> {
+    return vmRequest(`${vmUrl}`, machineId, `/files/rename`, {
       method: "POST",
       body: JSON.stringify({ old_path: oldPath, new_path: newPath }),
     })

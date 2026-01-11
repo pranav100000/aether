@@ -79,6 +79,6 @@ echo "Starting agent service with VM filesystem..."
 echo "PROJECT_CWD=$MOUNT_DIR"
 echo ""
 
-# Run agent service pointing at the mounted VM filesystem
-cd "$(dirname "$0")/../agent-service"
+# Run workspace service pointing at the mounted VM filesystem
+cd "$(dirname "$0")/../workspace-service"
 PROJECT_CWD="$MOUNT_DIR" STORAGE_DIR="$MOUNT_DIR/.aether" bun --watch run src/server.ts

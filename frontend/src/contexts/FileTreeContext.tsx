@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react"
+import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from "react"
 import { api } from "@/lib/api"
+import { supabase } from "@/lib/supabase"
 import { basename, isChildOrEqualPath } from "@/lib/path-utils"
 
 interface FileTreeContextValue {
@@ -30,11 +31,12 @@ export function useFileTreeContext() {
 }
 
 interface FileTreeProviderProps {
-  projectId: string
+  vmUrl: string
+  machineId: string
   children: ReactNode
 }
 
-export function FileTreeProvider({ projectId, children }: FileTreeProviderProps) {
+export function FileTreeProvider({ vmUrl, machineId, children }: FileTreeProviderProps) {
   const [allFiles, setAllFiles] = useState<string[]>([])
   const [directories, setDirectories] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -45,7 +47,7 @@ export function FileTreeProvider({ projectId, children }: FileTreeProviderProps)
     setError(null)
 
     try {
-      const tree = await api.listFilesTree(projectId)
+      const tree = await api.listFilesTree(vmUrl, machineId)
       setAllFiles(tree.paths)
       setDirectories(tree.directories)
     } catch (err) {
@@ -54,12 +56,72 @@ export function FileTreeProvider({ projectId, children }: FileTreeProviderProps)
     } finally {
       setIsLoading(false)
     }
-  }, [projectId])
+  }, [vmUrl, machineId])
 
   // Load file tree on mount
   useEffect(() => {
     loadFileTree()
   }, [loadFileTree])
+
+  // Subscribe to file events from VM
+  const wsRef = useRef<WebSocket | null>(null)
+  const handleFileChangeRef = useRef<typeof handleFileChange | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+
+    const connectEvents = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (cancelled || !session?.access_token) return
+
+      const wsUrl = vmUrl.replace("https", "wss").replace("http", "ws")
+      const ws = new WebSocket(
+        `${wsUrl}/events?fly-force-instance-id=${machineId}`,
+        ["bearer", session.access_token]
+      )
+
+      ws.onopen = () => {
+        console.log("[FileTree] Events WebSocket connected")
+      }
+
+      ws.onmessage = (event) => {
+        if (cancelled) return
+        try {
+          const msg = JSON.parse(event.data)
+          if (msg.type === "file_change" && handleFileChangeRef.current) {
+            // Determine if it's a directory based on path (no extension = likely directory)
+            // We'll do a refresh to get accurate info for creates
+            if (msg.action === "create") {
+              // For creates, refresh the tree to get accurate file/directory info
+              loadFileTree()
+            } else {
+              handleFileChangeRef.current(msg.action, msg.path, false)
+            }
+          }
+        } catch (err) {
+          console.error("[FileTree] Failed to parse events message:", err)
+        }
+      }
+
+      ws.onerror = (err) => {
+        console.error("[FileTree] Events WebSocket error:", err)
+      }
+
+      ws.onclose = () => {
+        console.log("[FileTree] Events WebSocket closed")
+      }
+
+      wsRef.current = ws
+    }
+
+    connectEvents()
+
+    return () => {
+      cancelled = true
+      wsRef.current?.close()
+      wsRef.current = null
+    }
+  }, [vmUrl, machineId, loadFileTree])
 
   const handleFileChange = useCallback((action: string, path: string, isDirectory: boolean) => {
     // Normalize path to ensure it starts with /
@@ -85,6 +147,11 @@ export function FileTreeProvider({ projectId, children }: FileTreeProviderProps)
     }
     // 'modify' doesn't change paths, so we ignore it
   }, [])
+
+  // Keep ref updated for WebSocket callback
+  useEffect(() => {
+    handleFileChangeRef.current = handleFileChange
+  }, [handleFileChange])
 
   const refresh = useCallback(async () => {
     await loadFileTree()

@@ -79,6 +79,7 @@ type ProjectResponse struct {
 	IdleTimeoutMinutes *int                   `json:"idle_timeout_minutes,omitempty"`
 	FlyMachineID       *string                `json:"fly_machine_id,omitempty"`
 	PrivateIP          *string                `json:"private_ip,omitempty"`
+	VmURL              *string                `json:"vm_url,omitempty"`
 	LastAccessedAt     *time.Time             `json:"last_accessed_at,omitempty"`
 	CreatedAt          time.Time              `json:"created_at"`
 	UpdatedAt          time.Time              `json:"updated_at"`
@@ -240,11 +241,19 @@ func (h *ProjectHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	response := projectToResponse(project)
 
-	// Fetch private IP from Fly if machine exists
+	// Fetch machine info from Fly if machine exists
 	if project.FlyMachineID != nil && *project.FlyMachineID != "" {
 		machine, err := h.machines.GetMachine(*project.FlyMachineID)
-		if err == nil && machine.PrivateIP != "" {
-			response.PrivateIP = &machine.PrivateIP
+		if err == nil {
+			if machine.PrivateIP != "" {
+				response.PrivateIP = &machine.PrivateIP
+			}
+			// Include VM URL when machine is running
+			// Frontend uses fly-force-instance-id header to route to specific machine
+			if machine.State == "started" {
+				vmURL := "https://aether-vms.fly.dev"
+				response.VmURL = &vmURL
+			}
 		}
 	}
 
@@ -545,13 +554,22 @@ func (h *ProjectHandler) createMachine(ctx context.Context, project *db.Project,
 		log.Printf("Creating CPU machine with cpu_kind=%s, cpus=%d, memory_mb=%d", project.CPUKind, project.CPUs, project.MemoryMB)
 	}
 
-	// Build environment variables
-	machineEnv := NewEnvBuilder(h.apiKeys).BuildEnv(ctx, project.ID, userID, nil)
+	// Build environment variables (includes derived keys for agents)
+	machineEnv := NewEnvBuilder(h.apiKeys).BuildAgentEnv(ctx, project.ID, userID)
 	log.Printf("Creating machine with %d env vars", len(machineEnv))
 	config := fly.MachineConfig{
 		Image: h.baseImage,
 		Guest: guestConfig,
 		Env:   machineEnv,
+		// Expose workspace-service on port 3001 via Fly's proxy
+		Services: []fly.Service{{
+			InternalPort: 3001,
+			Protocol:     "tcp",
+			Ports: []fly.Port{{
+				Port:     443,
+				Handlers: []string{"tls", "http"},
+			}},
+		}},
 	}
 
 	// Attach volume if exists
