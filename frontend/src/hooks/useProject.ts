@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { api } from "@/lib/api"
 import type { Project } from "@/lib/api"
 
@@ -15,6 +15,7 @@ export function useProject(projectId: string): UseProjectReturn {
   const [project, setProject] = useState<Project | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const pollingRef = useRef<NodeJS.Timeout | null>(null)
 
   const refresh = useCallback(async () => {
     try {
@@ -32,11 +33,47 @@ export function useProject(projectId: string): UseProjectReturn {
     refresh()
   }, [refresh])
 
+  // Poll for status updates when in transitioning state
+  useEffect(() => {
+    const isTransitioning =
+      project?.status === "starting" || project?.status === "stopping"
+
+    if (!isTransitioning) {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current)
+        pollingRef.current = null
+      }
+      return
+    }
+
+    pollingRef.current = setInterval(async () => {
+      try {
+        const updated = await api.getProject(projectId)
+        if (updated.status !== "starting" && updated.status !== "stopping") {
+          setProject(updated)
+          if (pollingRef.current) {
+            clearInterval(pollingRef.current)
+            pollingRef.current = null
+          }
+        }
+      } catch (err) {
+        console.error("Error polling project status:", err)
+      }
+    }, 2000)
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current)
+        pollingRef.current = null
+      }
+    }
+  }, [project?.status, projectId])
+
   const start = useCallback(async () => {
     setProject((prev) => (prev ? { ...prev, status: "starting" } : null))
     try {
       await api.startProject(projectId)
-      await refresh()
+      // Backend returns immediately, polling will handle status updates
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start project")
       await refresh()
@@ -47,7 +84,7 @@ export function useProject(projectId: string): UseProjectReturn {
     setProject((prev) => (prev ? { ...prev, status: "stopping" } : null))
     try {
       await api.stopProject(projectId)
-      await refresh()
+      // Backend returns immediately, polling will handle status updates
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to stop project")
       await refresh()

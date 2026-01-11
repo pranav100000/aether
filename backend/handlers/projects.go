@@ -372,6 +372,20 @@ func (h *ProjectHandler) Start(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Error updating project status: %v", err)
 	}
 
+	// Start machine in background goroutine
+	go h.startMachineAsync(projectID, project, userID)
+
+	// Return immediately
+	WriteJSON(w, http.StatusAccepted, StartResponse{
+		Status:      "starting",
+		TerminalURL: "/projects/" + projectID + "/terminal",
+	})
+}
+
+// startMachineAsync handles machine creation/startup in the background
+func (h *ProjectHandler) startMachineAsync(projectID string, project *db.Project, userID string) {
+	ctx := context.Background()
+
 	// Create volume if it doesn't exist
 	if project.FlyVolumeID == nil || *project.FlyVolumeID == "" {
 		volumeName := "vol_" + projectID[:8]
@@ -384,12 +398,11 @@ func (h *ProjectHandler) Start(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Printf("Error creating volume: %v", err)
 			errMsg := "Failed to create storage volume: " + err.Error()
-			h.store.UpdateProjectStatus(r.Context(), projectID, "error", &errMsg)
-			WriteError(w, http.StatusInternalServerError, "Failed to create storage")
+			h.store.UpdateProjectStatus(ctx, projectID, "error", &errMsg)
 			return
 		}
 
-		if err := h.store.UpdateProjectVolume(r.Context(), projectID, volume.ID); err != nil {
+		if err := h.store.UpdateProjectVolume(ctx, projectID, volume.ID); err != nil {
 			log.Printf("Error updating project volume ID: %v", err)
 		}
 
@@ -399,16 +412,15 @@ func (h *ProjectHandler) Start(w http.ResponseWriter, r *http.Request) {
 
 	// If no machine exists, create one
 	if project.FlyMachineID == nil || *project.FlyMachineID == "" {
-		machine, err := h.createMachine(r.Context(), project, userID)
+		machine, err := h.createMachine(ctx, project, userID)
 		if err != nil {
 			log.Printf("Error creating machine: %v", err)
 			errMsg := err.Error()
-			h.store.UpdateProjectStatus(r.Context(), projectID, "error", &errMsg)
-			WriteError(w, http.StatusInternalServerError, "Failed to create VM")
+			h.store.UpdateProjectStatus(ctx, projectID, "error", &errMsg)
 			return
 		}
 
-		if err := h.store.UpdateProjectMachine(r.Context(), projectID, machine.ID); err != nil {
+		if err := h.store.UpdateProjectMachine(ctx, projectID, machine.ID); err != nil {
 			log.Printf("Error updating project machine ID: %v", err)
 		}
 
@@ -418,8 +430,7 @@ func (h *ProjectHandler) Start(w http.ResponseWriter, r *http.Request) {
 		if err := h.machines.StartMachine(*project.FlyMachineID); err != nil {
 			log.Printf("Error starting machine: %v", err)
 			errMsg := err.Error()
-			h.store.UpdateProjectStatus(r.Context(), projectID, "error", &errMsg)
-			WriteError(w, http.StatusInternalServerError, "Failed to start VM")
+			h.store.UpdateProjectStatus(ctx, projectID, "error", &errMsg)
 			return
 		}
 	}
@@ -428,25 +439,21 @@ func (h *ProjectHandler) Start(w http.ResponseWriter, r *http.Request) {
 	if err := h.machines.WaitForState(*project.FlyMachineID, "started", 60*time.Second); err != nil {
 		log.Printf("Error waiting for machine to start: %v", err)
 		errMsg := err.Error()
-		h.store.UpdateProjectStatus(r.Context(), projectID, "error", &errMsg)
-		WriteError(w, http.StatusInternalServerError, "VM failed to start")
+		h.store.UpdateProjectStatus(ctx, projectID, "error", &errMsg)
 		return
 	}
 
 	// Update status to running
-	if err := h.store.UpdateProjectStatus(r.Context(), projectID, "running", nil); err != nil {
+	if err := h.store.UpdateProjectStatus(ctx, projectID, "running", nil); err != nil {
 		log.Printf("Error updating project status: %v", err)
 	}
 
 	// Update last accessed
-	if err := h.store.UpdateProjectLastAccessed(r.Context(), projectID); err != nil {
+	if err := h.store.UpdateProjectLastAccessed(ctx, projectID); err != nil {
 		log.Printf("Error updating last accessed: %v", err)
 	}
 
-	WriteJSON(w, http.StatusOK, StartResponse{
-		Status:      "running",
-		TerminalURL: "/projects/" + projectID + "/terminal",
-	})
+	log.Printf("Project %s started successfully", projectID)
 }
 
 func (h *ProjectHandler) Stop(w http.ResponseWriter, r *http.Request) {
@@ -482,21 +489,39 @@ func (h *ProjectHandler) Stop(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Error updating project status: %v", err)
 	}
 
+	// Stop machine in background goroutine
+	go h.stopMachineAsync(projectID, *project.FlyMachineID)
+
+	// Return immediately
+	WriteJSON(w, http.StatusAccepted, StopResponse{Status: "stopping"})
+}
+
+// stopMachineAsync handles machine shutdown in the background
+func (h *ProjectHandler) stopMachineAsync(projectID string, machineID string) {
+	ctx := context.Background()
+
 	// Stop the machine
-	if err := h.machines.StopMachine(*project.FlyMachineID); err != nil {
+	if err := h.machines.StopMachine(machineID); err != nil {
 		log.Printf("Error stopping machine: %v", err)
 		errMsg := err.Error()
-		h.store.UpdateProjectStatus(r.Context(), projectID, "error", &errMsg)
-		WriteError(w, http.StatusInternalServerError, "Failed to stop VM")
+		h.store.UpdateProjectStatus(ctx, projectID, "error", &errMsg)
+		return
+	}
+
+	// Wait for machine to be stopped
+	if err := h.machines.WaitForState(machineID, "stopped", 30*time.Second); err != nil {
+		log.Printf("Error waiting for machine to stop: %v", err)
+		errMsg := err.Error()
+		h.store.UpdateProjectStatus(ctx, projectID, "error", &errMsg)
 		return
 	}
 
 	// Update status to stopped
-	if err := h.store.UpdateProjectStatus(r.Context(), projectID, "stopped", nil); err != nil {
+	if err := h.store.UpdateProjectStatus(ctx, projectID, "stopped", nil); err != nil {
 		log.Printf("Error updating project status: %v", err)
 	}
 
-	WriteJSON(w, http.StatusOK, StopResponse{Status: "stopped"})
+	log.Printf("Project %s stopped successfully", projectID)
 }
 
 func (h *ProjectHandler) createMachine(ctx context.Context, project *db.Project, userID string) (*fly.Machine, error) {

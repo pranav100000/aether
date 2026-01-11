@@ -7,6 +7,8 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
+	"strconv"
 	"time"
 )
 
@@ -199,26 +201,37 @@ func (c *Client) ListMachines() ([]Machine, error) {
 }
 
 func (c *Client) WaitForState(machineID string, desiredState string, timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
+	// Use Fly.io's native /wait endpoint instead of polling
+	waitURL, err := url.Parse(baseURL)
+	if err != nil {
+		return fmt.Errorf("failed to parse base URL: %w", err)
+	}
+	waitURL.Path = waitURL.Path + "/apps/" + c.appName + "/machines/" + machineID + "/wait"
+	query := waitURL.Query()
+	query.Set("state", desiredState)
+	query.Set("timeout", strconv.Itoa(int(timeout.Seconds())))
+	waitURL.RawQuery = query.Encode()
 
-	for time.Now().Before(deadline) {
-		machine, err := c.GetMachine(machineID)
-		if err != nil {
-			return err
-		}
+	req, err := http.NewRequest("GET", waitURL.String(), nil)
+	if err != nil {
+		return fmt.Errorf("failed to create wait request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
 
-		if machine.State == desiredState {
-			return nil
-		}
+	// Use a longer timeout for this blocking call
+	client := &http.Client{Timeout: timeout + 10*time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("wait request failed: %w", err)
+	}
+	defer resp.Body.Close()
 
-		if machine.State == "error" {
-			return fmt.Errorf("machine entered error state")
-		}
-
-		time.Sleep(500 * time.Millisecond)
+	if resp.StatusCode == 200 {
+		return nil
 	}
 
-	return fmt.Errorf("timeout waiting for machine to reach state: %s", desiredState)
+	body, _ := io.ReadAll(resp.Body)
+	return fmt.Errorf("wait failed (%d): %s", resp.StatusCode, string(body))
 }
 
 func (c *Client) GetAppName() string {
