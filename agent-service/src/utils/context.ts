@@ -28,9 +28,12 @@ export function buildFileContextSection(
       const selectionInfo = file.selection
         ? ` (lines ${file.selection.startLine}-${file.selection.endLine})`
         : "";
+      const selectionAttr = file.selection
+        ? ` lines="${file.selection.startLine}-${file.selection.endLine}"`
+        : "";
 
       if (options.format === "xml") {
-        section += `<file path="${file.path}"${selectionInfo}>\n${file.content}\n</file>\n\n`;
+        section += `<file path="${file.path}"${selectionAttr}>\n${file.content}\n</file>\n\n`;
       } else {
         section += `File: ${file.path}${selectionInfo}\n\`\`\`\n${file.content}\n\`\`\`\n\n`;
       }
