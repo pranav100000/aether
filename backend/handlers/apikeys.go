@@ -73,14 +73,14 @@ func (h *APIKeysHandler) List(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := middleware.GetUserID(ctx)
 	if userID == "" {
-		apiKeysWriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
 
 	// Get encrypted keys from database
 	encryptedKeys, err := h.db.GetUserAPIKeys(ctx, userID)
 	if err != nil {
-		apiKeysWriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to fetch api keys"})
+		WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to fetch api keys"})
 		return
 	}
 
@@ -107,7 +107,7 @@ func (h *APIKeysHandler) List(w http.ResponseWriter, r *http.Request) {
 		providers = append(providers, cp)
 	}
 
-	apiKeysWriteJSON(w, http.StatusOK, ListProvidersResponse{Providers: providers})
+	WriteJSON(w, http.StatusOK, ListProvidersResponse{Providers: providers})
 }
 
 // Add adds or updates an API key for a provider
@@ -115,33 +115,33 @@ func (h *APIKeysHandler) Add(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := middleware.GetUserID(ctx)
 	if userID == "" {
-		apiKeysWriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
 
 	var req AddKeyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		apiKeysWriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
 
 	// Validate provider
 	req.Provider = strings.ToLower(req.Provider)
 	if _, ok := supportedProviders[req.Provider]; !ok {
-		apiKeysWriteJSON(w, http.StatusBadRequest, map[string]string{"error": "unsupported provider"})
+		WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "unsupported provider"})
 		return
 	}
 
 	// Validate API key is not empty
 	if strings.TrimSpace(req.APIKey) == "" {
-		apiKeysWriteJSON(w, http.StatusBadRequest, map[string]string{"error": "api_key is required"})
+		WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "api_key is required"})
 		return
 	}
 
 	// Get existing keys
 	encryptedKeys, err := h.db.GetUserAPIKeys(ctx, userID)
 	if err != nil {
-		apiKeysWriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to fetch api keys"})
+		WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to fetch api keys"})
 		return
 	}
 
@@ -164,22 +164,22 @@ func (h *APIKeysHandler) Add(w http.ResponseWriter, r *http.Request) {
 	// Encrypt and save
 	keysJSON, err := json.Marshal(storedKeys)
 	if err != nil {
-		apiKeysWriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to serialize keys"})
+		WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to serialize keys"})
 		return
 	}
 
 	encrypted, err := h.encryptor.Encrypt(string(keysJSON), userID)
 	if err != nil {
-		apiKeysWriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to encrypt keys"})
+		WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to encrypt keys"})
 		return
 	}
 
 	if err := h.db.SetUserAPIKeys(ctx, userID, &encrypted); err != nil {
-		apiKeysWriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save api keys"})
+		WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save api keys"})
 		return
 	}
 
-	apiKeysWriteJSON(w, http.StatusOK, ConnectedProvider{
+	WriteJSON(w, http.StatusOK, ConnectedProvider{
 		Provider:  req.Provider,
 		Connected: true,
 		AddedAt:   &now,
@@ -191,7 +191,7 @@ func (h *APIKeysHandler) Remove(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := middleware.GetUserID(ctx)
 	if userID == "" {
-		apiKeysWriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
 
@@ -201,14 +201,14 @@ func (h *APIKeysHandler) Remove(w http.ResponseWriter, r *http.Request) {
 
 	// Validate provider
 	if _, ok := supportedProviders[provider]; !ok {
-		apiKeysWriteJSON(w, http.StatusBadRequest, map[string]string{"error": "unsupported provider"})
+		WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "unsupported provider"})
 		return
 	}
 
 	// Get existing keys
 	encryptedKeys, err := h.db.GetUserAPIKeys(ctx, userID)
 	if err != nil {
-		apiKeysWriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to fetch api keys"})
+		WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to fetch api keys"})
 		return
 	}
 
@@ -223,7 +223,7 @@ func (h *APIKeysHandler) Remove(w http.ResponseWriter, r *http.Request) {
 
 	// Check if provider exists
 	if _, ok := storedKeys.Keys[provider]; !ok {
-		apiKeysWriteJSON(w, http.StatusNotFound, map[string]string{"error": "provider not connected"})
+		WriteJSON(w, http.StatusNotFound, map[string]string{"error": "provider not connected"})
 		return
 	}
 
@@ -235,20 +235,20 @@ func (h *APIKeysHandler) Remove(w http.ResponseWriter, r *http.Request) {
 	if len(storedKeys.Keys) > 0 {
 		keysJSON, err := json.Marshal(storedKeys)
 		if err != nil {
-			apiKeysWriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to serialize keys"})
+			WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to serialize keys"})
 			return
 		}
 
 		enc, err := h.encryptor.Encrypt(string(keysJSON), userID)
 		if err != nil {
-			apiKeysWriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to encrypt keys"})
+			WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to encrypt keys"})
 			return
 		}
 		encrypted = &enc
 	}
 
 	if err := h.db.SetUserAPIKeys(ctx, userID, encrypted); err != nil {
-		apiKeysWriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save api keys"})
+		WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save api keys"})
 		return
 	}
 
@@ -286,11 +286,4 @@ func (h *APIKeysHandler) GetDecryptedKeys(ctx context.Context, userID string) (m
 	}
 
 	return result, nil
-}
-
-// apiKeysWriteJSON writes a JSON response (local helper to avoid conflict)
-func apiKeysWriteJSON(w http.ResponseWriter, status int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
 }

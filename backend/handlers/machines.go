@@ -171,7 +171,7 @@ type ErrorResponse struct {
 func (h *MachineHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req CreateMachineRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid request body"})
+		WriteJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid request body"})
 		return
 	}
 
@@ -200,7 +200,7 @@ func (h *MachineHandler) Create(w http.ResponseWriter, r *http.Request) {
 	flyMachine, err := h.flyClient.CreateMachine(req.Name, config)
 	if err != nil {
 		log.Printf("Error creating machine: %v", err)
-		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to create machine"})
+		WriteJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to create machine"})
 		return
 	}
 
@@ -221,7 +221,7 @@ func (h *MachineHandler) Create(w http.ResponseWriter, r *http.Request) {
 	h.machines[id] = state
 	h.mu.Unlock()
 
-	writeJSON(w, http.StatusCreated, state)
+	WriteJSON(w, http.StatusCreated, state)
 }
 
 func (h *MachineHandler) Get(w http.ResponseWriter, r *http.Request) {
@@ -232,14 +232,14 @@ func (h *MachineHandler) Get(w http.ResponseWriter, r *http.Request) {
 	h.mu.RUnlock()
 
 	if !ok {
-		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "machine not found"})
+		WriteJSON(w, http.StatusNotFound, ErrorResponse{Error: "machine not found"})
 		return
 	}
 
 	flyMachine, err := h.flyClient.GetMachine(state.FlyMachineID)
 	if err != nil {
 		log.Printf("Error getting machine status: %v", err)
-		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to get machine status"})
+		WriteJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to get machine status"})
 		return
 	}
 
@@ -248,7 +248,7 @@ func (h *MachineHandler) Get(w http.ResponseWriter, r *http.Request) {
 	state.PrivateIP = flyMachine.PrivateIP
 	h.mu.Unlock()
 
-	writeJSON(w, http.StatusOK, state)
+	WriteJSON(w, http.StatusOK, state)
 }
 
 func (h *MachineHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -259,7 +259,7 @@ func (h *MachineHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	h.mu.RUnlock()
 
-	writeJSON(w, http.StatusOK, machines)
+	WriteJSON(w, http.StatusOK, machines)
 }
 
 func (h *MachineHandler) Start(w http.ResponseWriter, r *http.Request) {
@@ -270,13 +270,13 @@ func (h *MachineHandler) Start(w http.ResponseWriter, r *http.Request) {
 	h.mu.RUnlock()
 
 	if !ok {
-		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "machine not found"})
+		WriteJSON(w, http.StatusNotFound, ErrorResponse{Error: "machine not found"})
 		return
 	}
 
 	if err := h.flyClient.StartMachine(state.FlyMachineID); err != nil {
 		log.Printf("Error starting machine: %v", err)
-		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to start machine"})
+		WriteJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to start machine"})
 		return
 	}
 
@@ -293,7 +293,7 @@ func (h *MachineHandler) Start(w http.ResponseWriter, r *http.Request) {
 		h.mu.Unlock()
 	}
 
-	writeJSON(w, http.StatusOK, state)
+	WriteJSON(w, http.StatusOK, state)
 }
 
 func (h *MachineHandler) Stop(w http.ResponseWriter, r *http.Request) {
@@ -304,13 +304,13 @@ func (h *MachineHandler) Stop(w http.ResponseWriter, r *http.Request) {
 	h.mu.RUnlock()
 
 	if !ok {
-		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "machine not found"})
+		WriteJSON(w, http.StatusNotFound, ErrorResponse{Error: "machine not found"})
 		return
 	}
 
 	if err := h.flyClient.StopMachine(state.FlyMachineID); err != nil {
 		log.Printf("Error stopping machine: %v", err)
-		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to stop machine"})
+		WriteJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to stop machine"})
 		return
 	}
 
@@ -318,7 +318,7 @@ func (h *MachineHandler) Stop(w http.ResponseWriter, r *http.Request) {
 	state.Status = "stopped"
 	h.mu.Unlock()
 
-	writeJSON(w, http.StatusOK, state)
+	WriteJSON(w, http.StatusOK, state)
 }
 
 func (h *MachineHandler) Delete(w http.ResponseWriter, r *http.Request) {
@@ -329,13 +329,13 @@ func (h *MachineHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	h.mu.RUnlock()
 
 	if !ok {
-		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "machine not found"})
+		WriteJSON(w, http.StatusNotFound, ErrorResponse{Error: "machine not found"})
 		return
 	}
 
 	if err := h.flyClient.DeleteMachine(state.FlyMachineID); err != nil {
 		log.Printf("Error deleting machine: %v", err)
-		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to delete machine"})
+		WriteJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to delete machine"})
 		return
 	}
 
@@ -344,10 +344,4 @@ func (h *MachineHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	h.mu.Unlock()
 
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func writeJSON(w http.ResponseWriter, status int, v interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
 }

@@ -26,14 +26,8 @@ func NewUserSettingsHandler(db UserSettingsStore) *UserSettingsHandler {
 	return &UserSettingsHandler{db: db}
 }
 
-// HardwareSettingsResponse represents hardware config in response
-type HardwareSettingsResponse struct {
-	CPUKind      string  `json:"cpu_kind"`
-	CPUs         int     `json:"cpus"`
-	MemoryMB     int     `json:"memory_mb"`
-	VolumeSizeGB int     `json:"volume_size_gb"`
-	GPUKind      *string `json:"gpu_kind,omitempty"`
-}
+// HardwareSettingsResponse is an alias for the shared HardwareConfig type
+type HardwareSettingsResponse = HardwareConfig
 
 // UserSettingsResponse is the response for GET /user/settings
 type UserSettingsResponse struct {
@@ -61,17 +55,17 @@ func (h *UserSettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := middleware.GetUserID(ctx)
 	if userID == "" {
-		userSettingsWriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
 
 	settings, err := h.db.GetUserSettings(ctx, userID)
 	if err != nil {
-		userSettingsWriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to get user settings"})
+		WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to get user settings"})
 		return
 	}
 
-	userSettingsWriteJSON(w, http.StatusOK, UserSettingsResponse{
+	WriteJSON(w, http.StatusOK, UserSettingsResponse{
 		DefaultHardware: HardwareSettingsResponse{
 			CPUKind:      settings.DefaultCPUKind,
 			CPUs:         settings.DefaultCPUs,
@@ -88,20 +82,20 @@ func (h *UserSettingsHandler) Update(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := middleware.GetUserID(ctx)
 	if userID == "" {
-		userSettingsWriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
 
 	var req UpdateUserSettingsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		userSettingsWriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
 
 	// Get existing settings
 	existing, err := h.db.GetUserSettings(ctx, userID)
 	if err != nil {
-		userSettingsWriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to get user settings"})
+		WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to get user settings"})
 		return
 	}
 
@@ -132,7 +126,7 @@ func (h *UserSettingsHandler) Update(w http.ResponseWriter, r *http.Request) {
 			updated.DefaultGPUKind,
 		)
 		if hwErrors.HasErrors() {
-			userSettingsWriteJSON(w, http.StatusBadRequest, map[string]string{"error": hwErrors.Error()})
+			WriteJSON(w, http.StatusBadRequest, map[string]string{"error": hwErrors.Error()})
 			return
 		}
 	}
@@ -141,7 +135,7 @@ func (h *UserSettingsHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.DefaultIdleTimeoutMinutes != nil {
 		updated.DefaultIdleTimeoutMinutes = req.DefaultIdleTimeoutMinutes
 		if validationErr := validation.ValidateIdleTimeout(updated.DefaultIdleTimeoutMinutes); validationErr != nil {
-			userSettingsWriteJSON(w, http.StatusBadRequest, map[string]string{"error": validationErr.Message})
+			WriteJSON(w, http.StatusBadRequest, map[string]string{"error": validationErr.Message})
 			return
 		}
 	}
@@ -149,11 +143,11 @@ func (h *UserSettingsHandler) Update(w http.ResponseWriter, r *http.Request) {
 	// Save updates
 	result, err := h.db.UpdateUserSettings(ctx, userID, updated)
 	if err != nil {
-		userSettingsWriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update user settings"})
+		WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update user settings"})
 		return
 	}
 
-	userSettingsWriteJSON(w, http.StatusOK, UserSettingsResponse{
+	WriteJSON(w, http.StatusOK, UserSettingsResponse{
 		DefaultHardware: HardwareSettingsResponse{
 			CPUKind:      result.DefaultCPUKind,
 			CPUs:         result.DefaultCPUs,
@@ -163,11 +157,4 @@ func (h *UserSettingsHandler) Update(w http.ResponseWriter, r *http.Request) {
 		},
 		DefaultIdleTimeoutMinutes: result.DefaultIdleTimeoutMinutes,
 	})
-}
-
-// userSettingsWriteJSON writes a JSON response
-func userSettingsWriteJSON(w http.ResponseWriter, status int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
 }
