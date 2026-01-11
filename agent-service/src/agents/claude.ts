@@ -1,5 +1,6 @@
 import { query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentProvider, AgentConfig, AgentMessage, PermissionMode } from "../types";
+import { buildFullPrompt } from "../utils/context";
 
 export class ClaudeProvider implements AgentProvider {
   readonly name = "claude" as const;
@@ -28,26 +29,6 @@ export class ClaudeProvider implements AgentProvider {
     return mode || "default";
   }
 
-  // Helper: build file context section for system prompt
-  private buildFileContextSection(config: AgentConfig): string {
-    if (!config.fileContext || config.fileContext.length === 0) {
-      return "";
-    }
-
-    let section = "The user has provided the following files as context:\n\n";
-    for (const file of config.fileContext) {
-      if (file.content) {
-        const selectionInfo = file.selection
-          ? ` (lines ${file.selection.startLine}-${file.selection.endLine})`
-          : "";
-        section += `<file path="${file.path}"${selectionInfo}>\n${file.content}\n</file>\n\n`;
-      } else {
-        section += `<file path="${file.path}" />\n`;
-      }
-    }
-    return section;
-  }
-
   async *query(
     prompt: string,
     config: AgentConfig
@@ -57,20 +38,13 @@ export class ClaudeProvider implements AgentProvider {
     try {
       const modelId = this.getModelId(config.model);
 
-      // Build file context section
-      const fileContextSection = this.buildFileContextSection(config);
-
-      // Build prompt with file context and conversation history
-      let fullPrompt = prompt;
-      if (fileContextSection) {
-        fullPrompt = `${fileContextSection}\n${prompt}`;
-      }
-      if (config.conversationHistory && config.conversationHistory.length > 0) {
-        const historyText = config.conversationHistory
-          .map((msg) => `${msg.role === "user" ? "Human" : "Assistant"}: ${msg.content}`)
-          .join("\n\n");
-        fullPrompt = `<conversation_history>\n${historyText}\n</conversation_history>\n\nHuman: ${fullPrompt}`;
-      }
+      // Build prompt with file context and conversation history (use XML format for Claude)
+      const fullPrompt = buildFullPrompt(
+        prompt,
+        config.fileContext,
+        config.conversationHistory,
+        "xml"
+      );
 
       // Use the SDK's query function with full options support
       const q = query({

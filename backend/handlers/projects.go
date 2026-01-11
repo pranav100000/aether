@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"time"
 
 	"aether/db"
@@ -56,13 +55,8 @@ type HardwareConfigRequest struct {
 	GPUKind      *string `json:"gpu_kind,omitempty"`
 }
 
-type HardwareConfigResponse struct {
-	CPUKind      string  `json:"cpu_kind"`
-	CPUs         int     `json:"cpus"`
-	MemoryMB     int     `json:"memory_mb"`
-	VolumeSizeGB int     `json:"volume_size_gb"`
-	GPUKind      *string `json:"gpu_kind,omitempty"`
-}
+// HardwareConfigResponse is an alias for the shared HardwareConfig type
+type HardwareConfigResponse = HardwareConfig
 
 type CreateProjectRequest struct {
 	Name               string                 `json:"name"`
@@ -126,16 +120,6 @@ func projectToResponse(p *db.Project) ProjectResponse {
 	}
 }
 
-func respondJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
-}
-
-func respondError(w http.ResponseWriter, status int, message string) {
-	respondJSON(w, status, map[string]string{"error": message})
-}
-
 // Handlers
 
 func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -144,7 +128,7 @@ func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
 	projects, err := h.store.ListProjects(r.Context(), userID)
 	if err != nil {
 		log.Printf("Error listing projects: %v", err)
-		respondError(w, http.StatusInternalServerError, "Failed to list projects")
+		WriteError(w, http.StatusInternalServerError, "Failed to list projects")
 		return
 	}
 
@@ -153,7 +137,7 @@ func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
 		response.Projects[i] = projectToResponse(&p)
 	}
 
-	respondJSON(w, http.StatusOK, response)
+	WriteJSON(w, http.StatusOK, response)
 }
 
 func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -162,7 +146,7 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req CreateProjectRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		log.Printf("Error decoding create project request: %v", err)
-		respondError(w, http.StatusBadRequest, "Invalid request body")
+		WriteError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
@@ -195,7 +179,7 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	// Validate idle timeout
 	if err := validation.ValidateIdleTimeout(idleTimeoutMinutes); err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]any{
+		WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error":  "Validation failed",
 			"errors": []validation.ValidationError{*err},
 		})
@@ -205,7 +189,7 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 	input, errs := validation.ValidateCreateProject(req.Name, req.Description, hwConfig)
 	if errs.HasErrors() {
 		log.Printf("Validation failed for create project: %v", errs)
-		respondJSON(w, http.StatusBadRequest, map[string]any{
+		WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error":  "Validation failed",
 			"errors": errs,
 		})
@@ -224,11 +208,11 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 	project, err := h.store.CreateProject(r.Context(), userID, input.Name, input.Description, h.baseImage, dbHwConfig, idleTimeoutMinutes)
 	if err != nil {
 		log.Printf("Error creating project: %v", err)
-		respondError(w, http.StatusInternalServerError, "Failed to create project")
+		WriteError(w, http.StatusInternalServerError, "Failed to create project")
 		return
 	}
 
-	respondJSON(w, http.StatusCreated, projectToResponse(project))
+	WriteJSON(w, http.StatusCreated, projectToResponse(project))
 }
 
 func (h *ProjectHandler) Get(w http.ResponseWriter, r *http.Request) {
@@ -236,7 +220,7 @@ func (h *ProjectHandler) Get(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "id")
 
 	if err := validation.ValidateUUID(projectID, "id"); err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]any{
+		WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error":  "Validation failed",
 			"errors": []validation.ValidationError{*err},
 		})
@@ -246,11 +230,11 @@ func (h *ProjectHandler) Get(w http.ResponseWriter, r *http.Request) {
 	project, err := h.store.GetProjectByUser(r.Context(), projectID, userID)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
-			respondError(w, http.StatusNotFound, "Project not found")
+			WriteError(w, http.StatusNotFound, "Project not found")
 			return
 		}
 		log.Printf("Error getting project: %v", err)
-		respondError(w, http.StatusInternalServerError, "Failed to get project")
+		WriteError(w, http.StatusInternalServerError, "Failed to get project")
 		return
 	}
 
@@ -264,7 +248,7 @@ func (h *ProjectHandler) Get(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	respondJSON(w, http.StatusOK, response)
+	WriteJSON(w, http.StatusOK, response)
 }
 
 func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
@@ -272,7 +256,7 @@ func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "id")
 
 	if err := validation.ValidateUUID(projectID, "id"); err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]any{
+		WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error":  "Validation failed",
 			"errors": []validation.ValidationError{*err},
 		})
@@ -281,13 +265,13 @@ func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	var req UpdateProjectRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, "Invalid request body")
+		WriteError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
 	input, errs := validation.ValidateUpdateProject(req.Name, req.Description)
 	if errs.HasErrors() {
-		respondJSON(w, http.StatusBadRequest, map[string]any{
+		WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error":  "Validation failed",
 			"errors": errs,
 		})
@@ -297,15 +281,15 @@ func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 	project, err := h.store.UpdateProject(r.Context(), projectID, userID, input.Name, input.Description)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
-			respondError(w, http.StatusNotFound, "Project not found")
+			WriteError(w, http.StatusNotFound, "Project not found")
 			return
 		}
 		log.Printf("Error updating project: %v", err)
-		respondError(w, http.StatusInternalServerError, "Failed to update project")
+		WriteError(w, http.StatusInternalServerError, "Failed to update project")
 		return
 	}
 
-	respondJSON(w, http.StatusOK, projectToResponse(project))
+	WriteJSON(w, http.StatusOK, projectToResponse(project))
 }
 
 func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
@@ -313,7 +297,7 @@ func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "id")
 
 	if err := validation.ValidateUUID(projectID, "id"); err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]any{
+		WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error":  "Validation failed",
 			"errors": []validation.ValidationError{*err},
 		})
@@ -324,11 +308,11 @@ func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	project, err := h.store.GetProjectByUser(r.Context(), projectID, userID)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
-			respondError(w, http.StatusNotFound, "Project not found")
+			WriteError(w, http.StatusNotFound, "Project not found")
 			return
 		}
 		log.Printf("Error getting project for delete: %v", err)
-		respondError(w, http.StatusInternalServerError, "Failed to delete project")
+		WriteError(w, http.StatusInternalServerError, "Failed to delete project")
 		return
 	}
 
@@ -336,7 +320,7 @@ func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	if project.FlyMachineID != nil && *project.FlyMachineID != "" {
 		if err := h.machines.DeleteMachine(*project.FlyMachineID); err != nil {
 			log.Printf("Error: failed to delete Fly machine %s: %v", *project.FlyMachineID, err)
-			respondError(w, http.StatusInternalServerError, "Failed to delete VM from Fly.io")
+			WriteError(w, http.StatusInternalServerError, "Failed to delete VM from Fly.io")
 			return
 		}
 	}
@@ -345,7 +329,7 @@ func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	if project.FlyVolumeID != nil && *project.FlyVolumeID != "" {
 		if err := h.volumes.DeleteVolume(*project.FlyVolumeID); err != nil {
 			log.Printf("Error: failed to delete Fly volume %s: %v", *project.FlyVolumeID, err)
-			respondError(w, http.StatusInternalServerError, "Failed to delete volume from Fly.io")
+			WriteError(w, http.StatusInternalServerError, "Failed to delete volume from Fly.io")
 			return
 		}
 	}
@@ -353,7 +337,7 @@ func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	// Delete from database
 	if err := h.store.DeleteProject(r.Context(), projectID, userID); err != nil {
 		log.Printf("Error deleting project: %v", err)
-		respondError(w, http.StatusInternalServerError, "Failed to delete project")
+		WriteError(w, http.StatusInternalServerError, "Failed to delete project")
 		return
 	}
 
@@ -365,7 +349,7 @@ func (h *ProjectHandler) Start(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "id")
 
 	if err := validation.ValidateUUID(projectID, "id"); err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]any{
+		WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error":  "Validation failed",
 			"errors": []validation.ValidationError{*err},
 		})
@@ -375,11 +359,11 @@ func (h *ProjectHandler) Start(w http.ResponseWriter, r *http.Request) {
 	project, err := h.store.GetProjectByUser(r.Context(), projectID, userID)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
-			respondError(w, http.StatusNotFound, "Project not found")
+			WriteError(w, http.StatusNotFound, "Project not found")
 			return
 		}
 		log.Printf("Error getting project for start: %v", err)
-		respondError(w, http.StatusInternalServerError, "Failed to start project")
+		WriteError(w, http.StatusInternalServerError, "Failed to start project")
 		return
 	}
 
@@ -401,7 +385,7 @@ func (h *ProjectHandler) Start(w http.ResponseWriter, r *http.Request) {
 			log.Printf("Error creating volume: %v", err)
 			errMsg := "Failed to create storage volume: " + err.Error()
 			h.store.UpdateProjectStatus(r.Context(), projectID, "error", &errMsg)
-			respondError(w, http.StatusInternalServerError, "Failed to create storage")
+			WriteError(w, http.StatusInternalServerError, "Failed to create storage")
 			return
 		}
 
@@ -420,7 +404,7 @@ func (h *ProjectHandler) Start(w http.ResponseWriter, r *http.Request) {
 			log.Printf("Error creating machine: %v", err)
 			errMsg := err.Error()
 			h.store.UpdateProjectStatus(r.Context(), projectID, "error", &errMsg)
-			respondError(w, http.StatusInternalServerError, "Failed to create VM")
+			WriteError(w, http.StatusInternalServerError, "Failed to create VM")
 			return
 		}
 
@@ -435,7 +419,7 @@ func (h *ProjectHandler) Start(w http.ResponseWriter, r *http.Request) {
 			log.Printf("Error starting machine: %v", err)
 			errMsg := err.Error()
 			h.store.UpdateProjectStatus(r.Context(), projectID, "error", &errMsg)
-			respondError(w, http.StatusInternalServerError, "Failed to start VM")
+			WriteError(w, http.StatusInternalServerError, "Failed to start VM")
 			return
 		}
 	}
@@ -445,7 +429,7 @@ func (h *ProjectHandler) Start(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Error waiting for machine to start: %v", err)
 		errMsg := err.Error()
 		h.store.UpdateProjectStatus(r.Context(), projectID, "error", &errMsg)
-		respondError(w, http.StatusInternalServerError, "VM failed to start")
+		WriteError(w, http.StatusInternalServerError, "VM failed to start")
 		return
 	}
 
@@ -459,7 +443,7 @@ func (h *ProjectHandler) Start(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Error updating last accessed: %v", err)
 	}
 
-	respondJSON(w, http.StatusOK, StartResponse{
+	WriteJSON(w, http.StatusOK, StartResponse{
 		Status:      "running",
 		TerminalURL: "/projects/" + projectID + "/terminal",
 	})
@@ -470,7 +454,7 @@ func (h *ProjectHandler) Stop(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "id")
 
 	if err := validation.ValidateUUID(projectID, "id"); err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]any{
+		WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error":  "Validation failed",
 			"errors": []validation.ValidationError{*err},
 		})
@@ -480,16 +464,16 @@ func (h *ProjectHandler) Stop(w http.ResponseWriter, r *http.Request) {
 	project, err := h.store.GetProjectByUser(r.Context(), projectID, userID)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
-			respondError(w, http.StatusNotFound, "Project not found")
+			WriteError(w, http.StatusNotFound, "Project not found")
 			return
 		}
 		log.Printf("Error getting project for stop: %v", err)
-		respondError(w, http.StatusInternalServerError, "Failed to stop project")
+		WriteError(w, http.StatusInternalServerError, "Failed to stop project")
 		return
 	}
 
 	if project.FlyMachineID == nil || *project.FlyMachineID == "" {
-		respondError(w, http.StatusBadRequest, "Project has no VM to stop")
+		WriteError(w, http.StatusBadRequest, "Project has no VM to stop")
 		return
 	}
 
@@ -503,7 +487,7 @@ func (h *ProjectHandler) Stop(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Error stopping machine: %v", err)
 		errMsg := err.Error()
 		h.store.UpdateProjectStatus(r.Context(), projectID, "error", &errMsg)
-		respondError(w, http.StatusInternalServerError, "Failed to stop VM")
+		WriteError(w, http.StatusInternalServerError, "Failed to stop VM")
 		return
 	}
 
@@ -512,7 +496,7 @@ func (h *ProjectHandler) Stop(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Error updating project status: %v", err)
 	}
 
-	respondJSON(w, http.StatusOK, StopResponse{Status: "stopped"})
+	WriteJSON(w, http.StatusOK, StopResponse{Status: "stopped"})
 }
 
 func (h *ProjectHandler) createMachine(ctx context.Context, project *db.Project, userID string) (*fly.Machine, error) {
@@ -537,7 +521,7 @@ func (h *ProjectHandler) createMachine(ctx context.Context, project *db.Project,
 	}
 
 	// Build environment variables
-	machineEnv := h.buildMachineEnv(ctx, project.ID, userID)
+	machineEnv := NewEnvBuilder(h.apiKeys).BuildEnv(ctx, project.ID, userID, nil)
 	log.Printf("Creating machine with %d env vars", len(machineEnv))
 	config := fly.MachineConfig{
 		Image: h.baseImage,
@@ -555,32 +539,6 @@ func (h *ProjectHandler) createMachine(ctx context.Context, project *db.Project,
 
 	machineName := "aether-" + project.ID[:8]
 	return h.machines.CreateMachine(machineName, config)
-}
-
-// buildMachineEnv builds the environment variables for a machine
-func (h *ProjectHandler) buildMachineEnv(ctx context.Context, projectID, userID string) map[string]string {
-	env := map[string]string{
-		"PROJECT_ID": projectID,
-	}
-
-	// Inject platform-level API keys (not user-specific)
-	if codebuffKey := os.Getenv("CODEBUFF_API_KEY"); codebuffKey != "" {
-		env["CODEBUFF_API_KEY"] = codebuffKey
-	}
-
-	// Inject user's API keys if available
-	if h.apiKeys != nil {
-		apiKeys, err := h.apiKeys.GetDecryptedKeys(ctx, userID)
-		if err != nil {
-			log.Printf("Warning: failed to get API keys for user %s: %v", userID, err)
-		} else if apiKeys != nil {
-			for envName, key := range apiKeys {
-				env[envName] = key
-			}
-		}
-	}
-
-	return env
 }
 
 // StartIdleChecker starts background goroutine to stop idle projects

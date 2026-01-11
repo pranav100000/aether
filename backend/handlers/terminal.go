@@ -94,7 +94,7 @@ func (h *TerminalHandler) HandleTerminal(w http.ResponseWriter, r *http.Request)
 
 	// If no user ID in context, try to extract from WebSocket subprotocol
 	if userID == "" {
-		token := extractTokenFromRequest(r)
+		token := ExtractTokenFromRequest(r)
 		if token == "" {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
@@ -235,31 +235,6 @@ func (h *TerminalHandler) HandleTerminal(w http.ResponseWriter, r *http.Request)
 	wg.Wait()
 
 	log.Printf("Terminal session ended for project: %s", projectID)
-}
-
-func extractTokenFromRequest(r *http.Request) string {
-	// Try Authorization header first
-	authHeader := r.Header.Get("Authorization")
-	if authHeader != "" {
-		parts := strings.Split(authHeader, " ")
-		if len(parts) == 2 && strings.ToLower(parts[0]) == "bearer" {
-			return parts[1]
-		}
-	}
-
-	// Try WebSocket subprotocol
-	// Client sends: Sec-WebSocket-Protocol: bearer, <token>
-	protocols := r.Header.Get("Sec-WebSocket-Protocol")
-	if protocols != "" {
-		parts := strings.Split(protocols, ", ")
-		for i, p := range parts {
-			if p == "bearer" && i+1 < len(parts) {
-				return parts[i+1]
-			}
-		}
-	}
-
-	return ""
 }
 
 func (h *TerminalHandler) readFromSSH(conn *websocket.Conn, session *ssh.Session, done chan struct{}, closeDone func(), projectID string, wsMu *sync.Mutex) {

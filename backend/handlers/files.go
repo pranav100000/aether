@@ -57,7 +57,7 @@ func (h *FilesHandler) ListTree(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[FILES] ListTree: projectID=%s, userID=%s", projectID, userID)
 
 	if err := validation.ValidateUUID(projectID, "id"); err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]any{
+		WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error":  "Validation failed",
 			"errors": []validation.ValidationError{*err},
 		})
@@ -68,22 +68,22 @@ func (h *FilesHandler) ListTree(w http.ResponseWriter, r *http.Request) {
 	project, err := h.db.GetProjectByUser(r.Context(), projectID, userID)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
-			respondError(w, http.StatusNotFound, "Project not found")
+			WriteError(w, http.StatusNotFound, "Project not found")
 			return
 		}
 		log.Printf("Error getting project: %v", err)
-		respondError(w, http.StatusInternalServerError, "Failed to get project")
+		WriteError(w, http.StatusInternalServerError, "Failed to get project")
 		return
 	}
 
 	// Verify project is running
 	if project.Status != "running" {
-		respondError(w, http.StatusBadRequest, "Project is not running")
+		WriteError(w, http.StatusBadRequest, "Project is not running")
 		return
 	}
 
 	if project.FlyMachineID == nil || *project.FlyMachineID == "" {
-		respondError(w, http.StatusBadRequest, "Project has no VM")
+		WriteError(w, http.StatusBadRequest, "Project has no VM")
 		return
 	}
 
@@ -91,12 +91,12 @@ func (h *FilesHandler) ListTree(w http.ResponseWriter, r *http.Request) {
 	machine, err := h.fly.GetMachine(*project.FlyMachineID)
 	if err != nil {
 		log.Printf("Error getting machine: %v", err)
-		respondError(w, http.StatusInternalServerError, "Failed to get VM")
+		WriteError(w, http.StatusInternalServerError, "Failed to get VM")
 		return
 	}
 
 	if machine.State != "started" {
-		respondError(w, http.StatusServiceUnavailable, "VM is not running")
+		WriteError(w, http.StatusServiceUnavailable, "VM is not running")
 		return
 	}
 
@@ -104,11 +104,11 @@ func (h *FilesHandler) ListTree(w http.ResponseWriter, r *http.Request) {
 	tree, err := h.sftp.ListAllFiles(machine.PrivateIP, SSHPort)
 	if err != nil {
 		log.Printf("Error listing all files: %v", err)
-		respondError(w, http.StatusInternalServerError, "Failed to list files")
+		WriteError(w, http.StatusInternalServerError, "Failed to list files")
 		return
 	}
 
-	respondJSON(w, http.StatusOK, tree)
+	WriteJSON(w, http.StatusOK, tree)
 }
 
 // ListOrRead handles both directory listing and file reading based on the path
@@ -120,7 +120,7 @@ func (h *FilesHandler) ListOrRead(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[FILES] ListOrRead: projectID=%s, userID=%s, path=%s", projectID, userID, r.URL.Query().Get("path"))
 
 	if err := validation.ValidateUUID(projectID, "id"); err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]any{
+		WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error":  "Validation failed",
 			"errors": []validation.ValidationError{*err},
 		})
@@ -134,7 +134,7 @@ func (h *FilesHandler) ListOrRead(w http.ResponseWriter, r *http.Request) {
 
 	// Validate file path
 	if err := validation.ValidateFilePath(path); err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]any{
+		WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error":  "Validation failed",
 			"errors": []validation.ValidationError{*err},
 		})
@@ -145,22 +145,22 @@ func (h *FilesHandler) ListOrRead(w http.ResponseWriter, r *http.Request) {
 	project, err := h.db.GetProjectByUser(r.Context(), projectID, userID)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
-			respondError(w, http.StatusNotFound, "Project not found")
+			WriteError(w, http.StatusNotFound, "Project not found")
 			return
 		}
 		log.Printf("Error getting project: %v", err)
-		respondError(w, http.StatusInternalServerError, "Failed to get project")
+		WriteError(w, http.StatusInternalServerError, "Failed to get project")
 		return
 	}
 
 	// Verify project is running
 	if project.Status != "running" {
-		respondError(w, http.StatusBadRequest, "Project is not running")
+		WriteError(w, http.StatusBadRequest, "Project is not running")
 		return
 	}
 
 	if project.FlyMachineID == nil || *project.FlyMachineID == "" {
-		respondError(w, http.StatusBadRequest, "Project has no VM")
+		WriteError(w, http.StatusBadRequest, "Project has no VM")
 		return
 	}
 
@@ -168,13 +168,13 @@ func (h *FilesHandler) ListOrRead(w http.ResponseWriter, r *http.Request) {
 	machine, err := h.fly.GetMachine(*project.FlyMachineID)
 	if err != nil {
 		log.Printf("Error getting machine: %v", err)
-		respondError(w, http.StatusInternalServerError, "Failed to get VM")
+		WriteError(w, http.StatusInternalServerError, "Failed to get VM")
 		return
 	}
 
 	// Check if machine is actually running (database status might be stale)
 	if machine.State != "started" {
-		respondError(w, http.StatusServiceUnavailable, "VM is not running")
+		WriteError(w, http.StatusServiceUnavailable, "VM is not running")
 		return
 	}
 
@@ -183,11 +183,11 @@ func (h *FilesHandler) ListOrRead(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Check if it's a "not found" error
 		if strings.Contains(err.Error(), "not exist") || strings.Contains(err.Error(), "no such file") {
-			respondError(w, http.StatusNotFound, "Path not found")
+			WriteError(w, http.StatusNotFound, "Path not found")
 			return
 		}
 		log.Printf("Error stating path: %v", err)
-		respondError(w, http.StatusInternalServerError, "Failed to access path")
+		WriteError(w, http.StatusInternalServerError, "Failed to access path")
 		return
 	}
 
@@ -197,7 +197,7 @@ func (h *FilesHandler) ListOrRead(w http.ResponseWriter, r *http.Request) {
 	listing, err := h.sftp.List(machine.PrivateIP, SSHPort, path)
 	if err == nil {
 		// It's a directory, return listing
-		respondJSON(w, http.StatusOK, listing)
+		WriteJSON(w, http.StatusOK, listing)
 		return
 	}
 
@@ -205,7 +205,7 @@ func (h *FilesHandler) ListOrRead(w http.ResponseWriter, r *http.Request) {
 	fileInfo, err := h.sftp.Read(machine.PrivateIP, SSHPort, path)
 	if err != nil {
 		if strings.Contains(err.Error(), "too large") {
-			respondJSON(w, http.StatusBadRequest, map[string]any{
+			WriteJSON(w, http.StatusBadRequest, map[string]any{
 				"error":    "File too large",
 				"size":     info.Size,
 				"max_size": sftp.MaxFileSize,
@@ -213,15 +213,15 @@ func (h *FilesHandler) ListOrRead(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if strings.Contains(err.Error(), "binary") {
-			respondError(w, http.StatusBadRequest, "Binary files cannot be edited")
+			WriteError(w, http.StatusBadRequest, "Binary files cannot be edited")
 			return
 		}
 		log.Printf("Error reading file: %v", err)
-		respondError(w, http.StatusInternalServerError, "Failed to read file")
+		WriteError(w, http.StatusInternalServerError, "Failed to read file")
 		return
 	}
 
-	respondJSON(w, http.StatusOK, fileInfo)
+	WriteJSON(w, http.StatusOK, fileInfo)
 }
 
 // Write handles file creation and updates
@@ -231,7 +231,7 @@ func (h *FilesHandler) Write(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "id")
 
 	if err := validation.ValidateUUID(projectID, "id"); err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]any{
+		WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error":  "Validation failed",
 			"errors": []validation.ValidationError{*err},
 		})
@@ -240,12 +240,12 @@ func (h *FilesHandler) Write(w http.ResponseWriter, r *http.Request) {
 
 	path := r.URL.Query().Get("path")
 	if path == "" {
-		respondError(w, http.StatusBadRequest, "Path is required")
+		WriteError(w, http.StatusBadRequest, "Path is required")
 		return
 	}
 
 	if err := validation.ValidateFilePath(path); err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]any{
+		WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error":  "Validation failed",
 			"errors": []validation.ValidationError{*err},
 		})
@@ -254,7 +254,7 @@ func (h *FilesHandler) Write(w http.ResponseWriter, r *http.Request) {
 
 	var req WriteFileRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, "Invalid request body")
+		WriteError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
@@ -262,51 +262,51 @@ func (h *FilesHandler) Write(w http.ResponseWriter, r *http.Request) {
 	project, err := h.db.GetProjectByUser(r.Context(), projectID, userID)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
-			respondError(w, http.StatusNotFound, "Project not found")
+			WriteError(w, http.StatusNotFound, "Project not found")
 			return
 		}
 		log.Printf("Error getting project: %v", err)
-		respondError(w, http.StatusInternalServerError, "Failed to get project")
+		WriteError(w, http.StatusInternalServerError, "Failed to get project")
 		return
 	}
 
 	if project.Status != "running" {
-		respondError(w, http.StatusBadRequest, "Project is not running")
+		WriteError(w, http.StatusBadRequest, "Project is not running")
 		return
 	}
 
 	if project.FlyMachineID == nil || *project.FlyMachineID == "" {
-		respondError(w, http.StatusBadRequest, "Project has no VM")
+		WriteError(w, http.StatusBadRequest, "Project has no VM")
 		return
 	}
 
 	machine, err := h.fly.GetMachine(*project.FlyMachineID)
 	if err != nil {
 		log.Printf("Error getting machine: %v", err)
-		respondError(w, http.StatusInternalServerError, "Failed to get VM")
+		WriteError(w, http.StatusInternalServerError, "Failed to get VM")
 		return
 	}
 
 	if machine.State != "started" {
-		respondError(w, http.StatusServiceUnavailable, "VM is not running")
+		WriteError(w, http.StatusServiceUnavailable, "VM is not running")
 		return
 	}
 
 	fileInfo, err := h.sftp.Write(machine.PrivateIP, SSHPort, path, []byte(req.Content))
 	if err != nil {
 		if strings.Contains(err.Error(), "too large") {
-			respondJSON(w, http.StatusBadRequest, map[string]any{
+			WriteJSON(w, http.StatusBadRequest, map[string]any{
 				"error":    "Content too large",
 				"max_size": sftp.MaxFileSize,
 			})
 			return
 		}
 		log.Printf("Error writing file: %v", err)
-		respondError(w, http.StatusInternalServerError, "Failed to write file")
+		WriteError(w, http.StatusInternalServerError, "Failed to write file")
 		return
 	}
 
-	respondJSON(w, http.StatusOK, fileInfo)
+	WriteJSON(w, http.StatusOK, fileInfo)
 }
 
 // Mkdir creates a directory
@@ -316,7 +316,7 @@ func (h *FilesHandler) Mkdir(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "id")
 
 	if err := validation.ValidateUUID(projectID, "id"); err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]any{
+		WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error":  "Validation failed",
 			"errors": []validation.ValidationError{*err},
 		})
@@ -325,17 +325,17 @@ func (h *FilesHandler) Mkdir(w http.ResponseWriter, r *http.Request) {
 
 	var req MkdirRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, "Invalid request body")
+		WriteError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
 	if req.Path == "" {
-		respondError(w, http.StatusBadRequest, "Path is required")
+		WriteError(w, http.StatusBadRequest, "Path is required")
 		return
 	}
 
 	if err := validation.ValidateFilePath(req.Path); err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]any{
+		WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error":  "Validation failed",
 			"errors": []validation.ValidationError{*err},
 		})
@@ -345,43 +345,43 @@ func (h *FilesHandler) Mkdir(w http.ResponseWriter, r *http.Request) {
 	project, err := h.db.GetProjectByUser(r.Context(), projectID, userID)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
-			respondError(w, http.StatusNotFound, "Project not found")
+			WriteError(w, http.StatusNotFound, "Project not found")
 			return
 		}
 		log.Printf("Error getting project: %v", err)
-		respondError(w, http.StatusInternalServerError, "Failed to get project")
+		WriteError(w, http.StatusInternalServerError, "Failed to get project")
 		return
 	}
 
 	if project.Status != "running" {
-		respondError(w, http.StatusBadRequest, "Project is not running")
+		WriteError(w, http.StatusBadRequest, "Project is not running")
 		return
 	}
 
 	if project.FlyMachineID == nil || *project.FlyMachineID == "" {
-		respondError(w, http.StatusBadRequest, "Project has no VM")
+		WriteError(w, http.StatusBadRequest, "Project has no VM")
 		return
 	}
 
 	machine, err := h.fly.GetMachine(*project.FlyMachineID)
 	if err != nil {
 		log.Printf("Error getting machine: %v", err)
-		respondError(w, http.StatusInternalServerError, "Failed to get VM")
+		WriteError(w, http.StatusInternalServerError, "Failed to get VM")
 		return
 	}
 
 	if machine.State != "started" {
-		respondError(w, http.StatusServiceUnavailable, "VM is not running")
+		WriteError(w, http.StatusServiceUnavailable, "VM is not running")
 		return
 	}
 
 	if err := h.sftp.Mkdir(machine.PrivateIP, SSHPort, req.Path); err != nil {
 		log.Printf("Error creating directory: %v", err)
-		respondError(w, http.StatusInternalServerError, "Failed to create directory")
+		WriteError(w, http.StatusInternalServerError, "Failed to create directory")
 		return
 	}
 
-	respondJSON(w, http.StatusCreated, map[string]string{
+	WriteJSON(w, http.StatusCreated, map[string]string{
 		"path": filepath.Join(sftp.WorkingDir, strings.TrimPrefix(req.Path, "/")),
 	})
 }
@@ -393,7 +393,7 @@ func (h *FilesHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "id")
 
 	if err := validation.ValidateUUID(projectID, "id"); err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]any{
+		WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error":  "Validation failed",
 			"errors": []validation.ValidationError{*err},
 		})
@@ -402,12 +402,12 @@ func (h *FilesHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	path := r.URL.Query().Get("path")
 	if path == "" {
-		respondError(w, http.StatusBadRequest, "Path is required")
+		WriteError(w, http.StatusBadRequest, "Path is required")
 		return
 	}
 
 	if err := validation.ValidateFilePath(path); err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]any{
+		WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error":  "Validation failed",
 			"errors": []validation.ValidationError{*err},
 		})
@@ -417,43 +417,43 @@ func (h *FilesHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	project, err := h.db.GetProjectByUser(r.Context(), projectID, userID)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
-			respondError(w, http.StatusNotFound, "Project not found")
+			WriteError(w, http.StatusNotFound, "Project not found")
 			return
 		}
 		log.Printf("Error getting project: %v", err)
-		respondError(w, http.StatusInternalServerError, "Failed to get project")
+		WriteError(w, http.StatusInternalServerError, "Failed to get project")
 		return
 	}
 
 	if project.Status != "running" {
-		respondError(w, http.StatusBadRequest, "Project is not running")
+		WriteError(w, http.StatusBadRequest, "Project is not running")
 		return
 	}
 
 	if project.FlyMachineID == nil || *project.FlyMachineID == "" {
-		respondError(w, http.StatusBadRequest, "Project has no VM")
+		WriteError(w, http.StatusBadRequest, "Project has no VM")
 		return
 	}
 
 	machine, err := h.fly.GetMachine(*project.FlyMachineID)
 	if err != nil {
 		log.Printf("Error getting machine: %v", err)
-		respondError(w, http.StatusInternalServerError, "Failed to get VM")
+		WriteError(w, http.StatusInternalServerError, "Failed to get VM")
 		return
 	}
 
 	if machine.State != "started" {
-		respondError(w, http.StatusServiceUnavailable, "VM is not running")
+		WriteError(w, http.StatusServiceUnavailable, "VM is not running")
 		return
 	}
 
 	if err := h.sftp.Delete(machine.PrivateIP, SSHPort, path); err != nil {
 		if strings.Contains(err.Error(), "not exist") || strings.Contains(err.Error(), "no such file") {
-			respondError(w, http.StatusNotFound, "Path not found")
+			WriteError(w, http.StatusNotFound, "Path not found")
 			return
 		}
 		log.Printf("Error deleting: %v", err)
-		respondError(w, http.StatusInternalServerError, "Failed to delete")
+		WriteError(w, http.StatusInternalServerError, "Failed to delete")
 		return
 	}
 
@@ -467,7 +467,7 @@ func (h *FilesHandler) Rename(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "id")
 
 	if err := validation.ValidateUUID(projectID, "id"); err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]any{
+		WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error":  "Validation failed",
 			"errors": []validation.ValidationError{*err},
 		})
@@ -476,17 +476,17 @@ func (h *FilesHandler) Rename(w http.ResponseWriter, r *http.Request) {
 
 	var req RenameRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, "Invalid request body")
+		WriteError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
 	if req.OldPath == "" || req.NewPath == "" {
-		respondError(w, http.StatusBadRequest, "Both old_path and new_path are required")
+		WriteError(w, http.StatusBadRequest, "Both old_path and new_path are required")
 		return
 	}
 
 	if err := validation.ValidateFilePath(req.OldPath); err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]any{
+		WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error":  "Validation failed",
 			"errors": []validation.ValidationError{*err},
 		})
@@ -494,7 +494,7 @@ func (h *FilesHandler) Rename(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := validation.ValidateFilePath(req.NewPath); err != nil {
-		respondJSON(w, http.StatusBadRequest, map[string]any{
+		WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error":  "Validation failed",
 			"errors": []validation.ValidationError{*err},
 		})
@@ -504,47 +504,47 @@ func (h *FilesHandler) Rename(w http.ResponseWriter, r *http.Request) {
 	project, err := h.db.GetProjectByUser(r.Context(), projectID, userID)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
-			respondError(w, http.StatusNotFound, "Project not found")
+			WriteError(w, http.StatusNotFound, "Project not found")
 			return
 		}
 		log.Printf("Error getting project: %v", err)
-		respondError(w, http.StatusInternalServerError, "Failed to get project")
+		WriteError(w, http.StatusInternalServerError, "Failed to get project")
 		return
 	}
 
 	if project.Status != "running" {
-		respondError(w, http.StatusBadRequest, "Project is not running")
+		WriteError(w, http.StatusBadRequest, "Project is not running")
 		return
 	}
 
 	if project.FlyMachineID == nil || *project.FlyMachineID == "" {
-		respondError(w, http.StatusBadRequest, "Project has no VM")
+		WriteError(w, http.StatusBadRequest, "Project has no VM")
 		return
 	}
 
 	machine, err := h.fly.GetMachine(*project.FlyMachineID)
 	if err != nil {
 		log.Printf("Error getting machine: %v", err)
-		respondError(w, http.StatusInternalServerError, "Failed to get VM")
+		WriteError(w, http.StatusInternalServerError, "Failed to get VM")
 		return
 	}
 
 	if machine.State != "started" {
-		respondError(w, http.StatusServiceUnavailable, "VM is not running")
+		WriteError(w, http.StatusServiceUnavailable, "VM is not running")
 		return
 	}
 
 	if err := h.sftp.Rename(machine.PrivateIP, SSHPort, req.OldPath, req.NewPath); err != nil {
 		if strings.Contains(err.Error(), "not exist") || strings.Contains(err.Error(), "no such file") {
-			respondError(w, http.StatusNotFound, "Source path not found")
+			WriteError(w, http.StatusNotFound, "Source path not found")
 			return
 		}
 		log.Printf("Error renaming: %v", err)
-		respondError(w, http.StatusInternalServerError, "Failed to rename")
+		WriteError(w, http.StatusInternalServerError, "Failed to rename")
 		return
 	}
 
-	respondJSON(w, http.StatusOK, map[string]string{
+	WriteJSON(w, http.StatusOK, map[string]string{
 		"path": filepath.Join(sftp.WorkingDir, strings.TrimPrefix(req.NewPath, "/")),
 	})
 }
