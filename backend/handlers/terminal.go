@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"aether/db"
-	"aether/fly"
 	authmw "aether/middleware"
 	"aether/ssh"
 
@@ -39,21 +38,23 @@ var upgrader = websocket.Upgrader{
 }
 
 type TerminalHandler struct {
-	sshClient        *ssh.Client
-	fly              *fly.Client
+	terminalProvider TerminalProvider
+	resolver         ConnectionResolver
 	db               *db.Client
 	authMiddleware   *authmw.AuthMiddleware
+	sshClient        *ssh.Client // For file/port watchers
 	lastAccessedMu   sync.Mutex
 	lastAccessedTime map[string]time.Time
 }
 
-func NewTerminalHandler(sshClient *ssh.Client, fly *fly.Client, db *db.Client, authMiddleware *authmw.AuthMiddleware) *TerminalHandler {
+func NewTerminalHandler(terminalProvider TerminalProvider, resolver ConnectionResolver, db *db.Client, authMiddleware *authmw.AuthMiddleware, sshClient *ssh.Client) *TerminalHandler {
 	return &TerminalHandler{
-		sshClient:        sshClient,
-		fly:              fly,
+		terminalProvider: terminalProvider,
+		resolver:         resolver,
 		db:               db,
+		authMiddleware:   authMiddleware,
+		sshClient:        sshClient,
 		lastAccessedTime: make(map[string]time.Time),
-		authMiddleware: authMiddleware,
 	}
 }
 
@@ -126,21 +127,11 @@ func (h *TerminalHandler) HandleTerminal(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if project.FlyMachineID == nil || *project.FlyMachineID == "" {
-		http.Error(w, "Project has no VM", http.StatusBadRequest)
-		return
-	}
-
-	// Get machine details from Fly
-	machine, err := h.fly.GetMachine(*project.FlyMachineID)
+	// Get connection info
+	connInfo, err := h.resolver.GetConnectionInfo(project)
 	if err != nil {
-		log.Printf("Error getting machine: %v", err)
-		http.Error(w, "Failed to get machine info", http.StatusInternalServerError)
-		return
-	}
-
-	if machine.PrivateIP == "" {
-		http.Error(w, "Machine has no IP address", http.StatusInternalServerError)
+		log.Printf("Error getting connection info: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -159,22 +150,22 @@ func (h *TerminalHandler) HandleTerminal(w http.ResponseWriter, r *http.Request)
 
 	log.Printf("WebSocket connected for project: %s", projectID)
 
-	// Connect to SSH
-	sshSession, err := h.sshClient.ConnectWithRetry(machine.PrivateIP, 2222, 5, 2*time.Second)
+	// Create terminal session
+	session, err := h.terminalProvider.CreateSessionWithRetry(connInfo.Host, connInfo.Port, 5, 2*time.Second)
 	if err != nil {
-		log.Printf("SSH connection error: %v", err)
+		log.Printf("Terminal connection error: %v", err)
 		sendError(conn, "Failed to connect to machine: "+err.Error())
 		return
 	}
-	defer sshSession.Close()
+	defer session.Close()
 
-	if err := sshSession.RequestPTY("xterm-256color", 80, 24); err != nil {
+	if err := session.RequestPTY("xterm-256color", 80, 24); err != nil {
 		log.Printf("PTY request error: %v", err)
 		sendError(conn, "Failed to allocate terminal")
 		return
 	}
 
-	if err := sshSession.StartShell(); err != nil {
+	if err := session.StartShell(); err != nil {
 		log.Printf("Shell start error: %v", err)
 		sendError(conn, "Failed to start shell")
 		return
@@ -191,24 +182,24 @@ func (h *TerminalHandler) HandleTerminal(w http.ResponseWriter, r *http.Request)
 		})
 	}
 
-	go sshSession.KeepAlive(30*time.Second, done)
+	go session.KeepAlive(30*time.Second, done)
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		h.readFromSSH(conn, sshSession, done, closeDone, projectID, &wsMu)
+		h.readFromSession(conn, session, done, closeDone, projectID, &wsMu)
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		h.readFromSSHStderr(conn, sshSession, done, &wsMu)
+		h.readFromSessionStderr(conn, session, done, &wsMu)
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		h.readFromWebSocket(conn, sshSession, done, closeDone, projectID)
+		h.readFromWebSocketToSession(conn, session, done, closeDone, projectID)
 	}()
 
 	wg.Add(1)
@@ -217,19 +208,20 @@ func (h *TerminalHandler) HandleTerminal(w http.ResponseWriter, r *http.Request)
 		h.pingLoop(conn, done, &wsMu)
 	}()
 
-	// Start file watcher
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		h.startFileWatcher(conn, machine.PrivateIP, done, &wsMu)
-	}()
+	// Start file watcher and port watcher
+	if h.sshClient != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			h.startFileWatcher(conn, connInfo.Host, done, &wsMu)
+		}()
 
-	// Start port watcher
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		h.startPortWatcher(conn, machine.PrivateIP, done, &wsMu)
-	}()
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			h.startPortWatcher(conn, connInfo.Host, done, &wsMu)
+		}()
+	}
 
 	<-done
 	wg.Wait()
@@ -237,7 +229,7 @@ func (h *TerminalHandler) HandleTerminal(w http.ResponseWriter, r *http.Request)
 	log.Printf("Terminal session ended for project: %s", projectID)
 }
 
-func (h *TerminalHandler) readFromSSH(conn *websocket.Conn, session *ssh.Session, done chan struct{}, closeDone func(), projectID string, wsMu *sync.Mutex) {
+func (h *TerminalHandler) readFromSession(conn *websocket.Conn, session TerminalSession, done chan struct{}, closeDone func(), projectID string, wsMu *sync.Mutex) {
 	buf := make([]byte, 4096)
 
 	for {
@@ -250,7 +242,7 @@ func (h *TerminalHandler) readFromSSH(conn *websocket.Conn, session *ssh.Session
 		n, err := session.Read(buf)
 		if err != nil {
 			if err != io.EOF {
-				log.Printf("SSH read error: %v", err)
+				log.Printf("Session read error: %v", err)
 			}
 			closeDone()
 			return
@@ -279,7 +271,7 @@ func (h *TerminalHandler) readFromSSH(conn *websocket.Conn, session *ssh.Session
 	}
 }
 
-func (h *TerminalHandler) readFromSSHStderr(conn *websocket.Conn, session *ssh.Session, done chan struct{}, wsMu *sync.Mutex) {
+func (h *TerminalHandler) readFromSessionStderr(conn *websocket.Conn, session TerminalSession, done chan struct{}, wsMu *sync.Mutex) {
 	buf := make([]byte, 4096)
 	stderr := session.Stderr()
 
@@ -293,7 +285,7 @@ func (h *TerminalHandler) readFromSSHStderr(conn *websocket.Conn, session *ssh.S
 		n, err := stderr.Read(buf)
 		if err != nil {
 			if err != io.EOF {
-				log.Printf("SSH stderr read error: %v", err)
+				log.Printf("Session stderr read error: %v", err)
 			}
 			return
 		}
@@ -317,7 +309,7 @@ func (h *TerminalHandler) readFromSSHStderr(conn *websocket.Conn, session *ssh.S
 	}
 }
 
-func (h *TerminalHandler) readFromWebSocket(conn *websocket.Conn, session *ssh.Session, done chan struct{}, closeDone func(), projectID string) {
+func (h *TerminalHandler) readFromWebSocketToSession(conn *websocket.Conn, session TerminalSession, done chan struct{}, closeDone func(), projectID string) {
 	conn.SetReadLimit(maxMessageSize)
 	conn.SetReadDeadline(time.Now().Add(pongWait))
 	conn.SetPongHandler(func(string) error {
@@ -597,237 +589,6 @@ func (h *TerminalHandler) startPortWatcher(conn *websocket.Conn, privateIP strin
 					return
 				}
 			}
-		}
-	}
-}
-
-// Legacy handler for backward compatibility with /machines endpoint
-type LegacyTerminalHandler struct {
-	sshClient      *ssh.Client
-	machineHandler *MachineHandler
-}
-
-func NewLegacyTerminalHandler(sshClient *ssh.Client, machineHandler *MachineHandler) *LegacyTerminalHandler {
-	return &LegacyTerminalHandler{
-		sshClient:      sshClient,
-		machineHandler: machineHandler,
-	}
-}
-
-func (h *LegacyTerminalHandler) HandleTerminal(w http.ResponseWriter, r *http.Request) {
-	machineID := chi.URLParam(r, "id")
-
-	state := h.machineHandler.GetMachineState(machineID)
-	if state == nil {
-		http.Error(w, "Machine not found", http.StatusNotFound)
-		return
-	}
-
-	// Refresh status from Fly API
-	h.machineHandler.RefreshMachineStatus(machineID)
-	state = h.machineHandler.GetMachineState(machineID)
-
-	if state.Status != "started" && state.Status != "running" {
-		log.Printf("Machine %s is not running, status: %s", machineID, state.Status)
-		http.Error(w, "Machine is not running", http.StatusBadRequest)
-		return
-	}
-
-	if state.PrivateIP == "" {
-		http.Error(w, "Machine has no IP address", http.StatusInternalServerError)
-		return
-	}
-
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Printf("WebSocket upgrade error: %v", err)
-		return
-	}
-	defer conn.Close()
-
-	log.Printf("WebSocket connected for machine: %s", machineID)
-
-	sshSession, err := h.sshClient.ConnectWithRetry(state.PrivateIP, 2222, 5, 2*time.Second)
-	if err != nil {
-		log.Printf("SSH connection error: %v", err)
-		sendError(conn, "Failed to connect to machine: "+err.Error())
-		return
-	}
-	defer sshSession.Close()
-
-	if err := sshSession.RequestPTY("xterm-256color", 80, 24); err != nil {
-		log.Printf("PTY request error: %v", err)
-		sendError(conn, "Failed to allocate terminal")
-		return
-	}
-
-	if err := sshSession.StartShell(); err != nil {
-		log.Printf("Shell start error: %v", err)
-		sendError(conn, "Failed to start shell")
-		return
-	}
-
-	done := make(chan struct{})
-	var wg sync.WaitGroup
-
-	go sshSession.KeepAlive(30*time.Second, done)
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		h.readFromSSH(conn, sshSession, done, machineID)
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		h.readFromSSHStderr(conn, sshSession, done)
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		h.readFromWebSocket(conn, sshSession, done, machineID)
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		h.pingLoop(conn, done)
-	}()
-
-	<-done
-	wg.Wait()
-
-	log.Printf("Terminal session ended for machine: %s", machineID)
-}
-
-func (h *LegacyTerminalHandler) readFromSSH(conn *websocket.Conn, session *ssh.Session, done chan struct{}, machineID string) {
-	buf := make([]byte, 4096)
-
-	for {
-		select {
-		case <-done:
-			return
-		default:
-		}
-
-		n, err := session.Read(buf)
-		if err != nil {
-			if err != io.EOF {
-				log.Printf("SSH read error: %v", err)
-			}
-			close(done)
-			return
-		}
-
-		if n > 0 {
-			h.machineHandler.UpdateActivity(machineID)
-
-			msg := WSMessage{
-				Type: "output",
-				Data: string(buf[:n]),
-			}
-
-			conn.SetWriteDeadline(time.Now().Add(writeWait))
-			if err := conn.WriteJSON(msg); err != nil {
-				log.Printf("WebSocket write error: %v", err)
-				close(done)
-				return
-			}
-		}
-	}
-}
-
-func (h *LegacyTerminalHandler) readFromSSHStderr(conn *websocket.Conn, session *ssh.Session, done chan struct{}) {
-	buf := make([]byte, 4096)
-	stderr := session.Stderr()
-
-	for {
-		select {
-		case <-done:
-			return
-		default:
-		}
-
-		n, err := stderr.Read(buf)
-		if err != nil {
-			if err != io.EOF {
-				log.Printf("SSH stderr read error: %v", err)
-			}
-			return
-		}
-
-		if n > 0 {
-			msg := WSMessage{
-				Type: "output",
-				Data: string(buf[:n]),
-			}
-
-			conn.SetWriteDeadline(time.Now().Add(writeWait))
-			if err := conn.WriteJSON(msg); err != nil {
-				log.Printf("WebSocket write error: %v", err)
-				return
-			}
-		}
-	}
-}
-
-func (h *LegacyTerminalHandler) readFromWebSocket(conn *websocket.Conn, session *ssh.Session, done chan struct{}, machineID string) {
-	conn.SetReadLimit(maxMessageSize)
-	conn.SetReadDeadline(time.Now().Add(pongWait))
-	conn.SetPongHandler(func(string) error {
-		conn.SetReadDeadline(time.Now().Add(pongWait))
-		return nil
-	})
-
-	for {
-		select {
-		case <-done:
-			return
-		default:
-		}
-
-		var msg WSMessage
-		if err := conn.ReadJSON(&msg); err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("WebSocket read error: %v", err)
-			}
-			return
-		}
-
-		h.machineHandler.UpdateActivity(machineID)
-
-		switch msg.Type {
-		case "input":
-			if _, err := session.Write([]byte(msg.Data)); err != nil {
-				log.Printf("SSH write error: %v", err)
-				return
-			}
-
-		case "resize":
-			if msg.Cols > 0 && msg.Rows > 0 {
-				if err := session.Resize(msg.Cols, msg.Rows); err != nil {
-					log.Printf("Terminal resize error: %v", err)
-				}
-			}
-		}
-	}
-}
-
-func (h *LegacyTerminalHandler) pingLoop(conn *websocket.Conn, done chan struct{}) {
-	ticker := time.NewTicker(pingPeriod)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			conn.SetWriteDeadline(time.Now().Add(writeWait))
-			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-				return
-			}
-		case <-done:
-			return
 		}
 	}
 }

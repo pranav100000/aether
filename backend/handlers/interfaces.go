@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"io"
 	"time"
 
 	"aether/db"
@@ -39,4 +40,35 @@ type VolumeManager interface {
 	CreateVolume(name string, sizeGB int, region string) (*fly.Volume, error)
 	GetVolume(volumeID string) (*fly.Volume, error)
 	DeleteVolume(volumeID string) error
+}
+
+// TerminalSession defines the interface for terminal sessions (SSH or local PTY)
+type TerminalSession interface {
+	RequestPTY(term string, cols, rows int) error
+	StartShell() error
+	Resize(cols, rows int) error
+	Write(data []byte) (int, error)
+	Read(buf []byte) (int, error)
+	Stderr() io.Reader
+	Close() error
+	Start(cmd string) error
+	KeepAlive(interval time.Duration, done <-chan struct{})
+}
+
+// TerminalProvider creates terminal sessions
+type TerminalProvider interface {
+	CreateSession(host string, port int) (TerminalSession, error)
+	CreateSessionWithRetry(host string, port int, maxRetries int, retryDelay time.Duration) (TerminalSession, error)
+}
+
+// ConnectionInfo contains connection details for a project's VM
+type ConnectionInfo struct {
+	Host string
+	Port int
+}
+
+// ConnectionResolver resolves project → connection details
+// This abstracts away the difference between local Docker containers and Fly VMs
+type ConnectionResolver interface {
+	GetConnectionInfo(project *db.Project) (*ConnectionInfo, error)
 }

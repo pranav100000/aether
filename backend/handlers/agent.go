@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"aether/db"
-	"aether/fly"
 	authmw "aether/middleware"
 	"aether/ssh"
 
@@ -23,16 +22,16 @@ import (
 
 type AgentHandler struct {
 	sshClient      *ssh.Client
-	fly            *fly.Client
+	resolver       ConnectionResolver
 	db             *db.Client
 	authMiddleware *authmw.AuthMiddleware
 	apiKeys        APIKeysGetter
 }
 
-func NewAgentHandler(sshClient *ssh.Client, fly *fly.Client, db *db.Client, authMiddleware *authmw.AuthMiddleware, apiKeys APIKeysGetter) *AgentHandler {
+func NewAgentHandler(sshClient *ssh.Client, resolver ConnectionResolver, db *db.Client, authMiddleware *authmw.AuthMiddleware, apiKeys APIKeysGetter) *AgentHandler {
 	return &AgentHandler{
 		sshClient:      sshClient,
-		fly:            fly,
+		resolver:       resolver,
 		db:             db,
 		authMiddleware: authMiddleware,
 		apiKeys:        apiKeys,
@@ -142,21 +141,11 @@ func (h *AgentHandler) HandleAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if project.FlyMachineID == nil || *project.FlyMachineID == "" {
-		http.Error(w, "Project has no VM", http.StatusBadRequest)
-		return
-	}
-
-	// Get machine details from Fly
-	machine, err := h.fly.GetMachine(*project.FlyMachineID)
+	// Get connection info
+	connInfo, err := h.resolver.GetConnectionInfo(project)
 	if err != nil {
-		log.Printf("Error getting machine: %v", err)
-		http.Error(w, "Failed to get machine info", http.StatusInternalServerError)
-		return
-	}
-
-	if machine.PrivateIP == "" {
-		http.Error(w, "Machine has no IP address", http.StatusInternalServerError)
+		log.Printf("Error getting connection info: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -181,7 +170,7 @@ func (h *AgentHandler) HandleAgent(w http.ResponseWriter, r *http.Request) {
 	encodedEnv := base64.StdEncoding.EncodeToString([]byte(envContent))
 
 	// Connect to SSH
-	sshSession, err := h.sshClient.ConnectWithRetry(machine.PrivateIP, 2222, 5, 2*time.Second)
+	sshSession, err := h.sshClient.ConnectWithRetry(connInfo.Host, connInfo.Port, 5, 2*time.Second)
 	if err != nil {
 		log.Printf("SSH connection error: %v", err)
 		sendAgentError(conn, "Failed to connect to machine: "+err.Error())
@@ -193,7 +182,7 @@ func (h *AgentHandler) HandleAgent(w http.ResponseWriter, r *http.Request) {
 	// Write env vars via base64 (avoids shell escaping issues), then source and run
 	// Use "." instead of "source" for POSIX shell compatibility
 	// cd to project directory so agent runs in correct context
-	cmd := fmt.Sprintf("echo %s | base64 -d > ~/.aether_env && . ~/.aether_env && cd /home/coder/project && exec /usr/local/bin/bun /opt/agent-service/src/cli.ts %s", encodedEnv, agentType)
+	cmd := fmt.Sprintf("echo %s | base64 -d > ~/.aether_env && . ~/.aether_env && cd /home/coder/project && exec /usr/local/bin/bun /opt/workspace-service/src/cli.ts %s", encodedEnv, agentType)
 	log.Printf("Starting agent for project %s", projectID)
 	if err := sshSession.Start(cmd); err != nil {
 		log.Printf("Agent start error: %v", err)

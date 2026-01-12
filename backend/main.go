@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"aether/config"
 	"aether/crypto"
 	"aether/db"
 	"aether/fly"
@@ -15,6 +16,7 @@ import (
 	authmw "aether/middleware"
 	"aether/sftp"
 	"aether/ssh"
+	"aether/workspace"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -29,11 +31,26 @@ func main() {
 			log.Println("No .env file found, using environment variables")
 		}
 	}
-	port := getEnv("PORT", "8080")
-	flyToken := requireEnv("FLY_API_TOKEN")
-	flyAppName := requireEnv("FLY_VMS_APP_NAME")
-	flyRegion := getEnv("FLY_REGION", "sjc")
-	baseImage := getEnv("BASE_IMAGE", "registry.fly.io/"+flyAppName+"/base:latest")
+	port := getEnv("API_PORT", "8080")
+
+	// Initialize config (checks LOCAL_MODE env var)
+	cfg := config.Get()
+
+	// Fly.io config (not required in local mode)
+	var flyToken, flyAppName, flyRegion, baseImage string
+	if !cfg.LocalMode {
+		flyToken = requireEnv("FLY_API_TOKEN")
+		flyAppName = requireEnv("FLY_VMS_APP_NAME")
+		flyRegion = getEnv("FLY_REGION", "sjc")
+		baseImage = getEnv("BASE_IMAGE", "registry.fly.io/"+flyAppName+"/base:latest")
+	} else {
+		flyToken = os.Getenv("FLY_API_TOKEN")
+		flyAppName = os.Getenv("FLY_VMS_APP_NAME")
+		flyRegion = getEnv("FLY_REGION", "sjc")
+		baseImage = getEnv("BASE_IMAGE", "")
+		log.Println("LOCAL_MODE enabled - Fly.io VM operations will be skipped")
+		log.Printf("Local project directory: %s", cfg.LocalProjectDir)
+	}
 	idleTimeoutMin := getEnvInt("IDLE_TIMEOUT_MINUTES", 10)
 
 	flyClient := fly.NewClient(flyToken, flyAppName, flyRegion)
@@ -61,7 +78,8 @@ func main() {
 
 	// Initialize auth middleware
 	supabaseURL := requireEnv("SUPABASE_URL")
-	authMiddleware, err := authmw.NewAuthMiddleware(supabaseURL)
+	jwtSecret := os.Getenv("SUPABASE_JWT_SECRET") // Optional for local dev (HS256 fallback)
+	authMiddleware, err := authmw.NewAuthMiddleware(supabaseURL, jwtSecret)
 	if err != nil {
 		log.Fatalf("Failed to initialize auth middleware: %v", err)
 	}
@@ -83,20 +101,16 @@ func main() {
 
 	idleTimeout := time.Duration(idleTimeoutMin) * time.Minute
 
-	// Legacy machine handler (for backward compatibility)
-	machineHandler := handlers.NewMachineHandler(flyClient, baseImage, idleTimeout)
-	defer machineHandler.Close()
-
-	// Legacy terminal handler (for /machines endpoint)
-	legacyTerminalHandler := handlers.NewLegacyTerminalHandler(sshClient, machineHandler)
+	// Create workspace factory (returns local or Fly implementations based on LOCAL_MODE)
+	wsFactory := workspace.NewFactory(flyClient, sshClient)
 
 	// New project-based handlers
-	projectHandler := handlers.NewProjectHandler(dbClient, flyClient, flyClient, apiKeysHandler, baseImage, flyRegion, idleTimeout)
-	terminalHandler := handlers.NewTerminalHandler(sshClient, flyClient, dbClient, authMiddleware)
-	agentHandler := handlers.NewAgentHandler(sshClient, flyClient, dbClient, authMiddleware, apiKeysHandler)
+	projectHandler := handlers.NewProjectHandler(dbClient, wsFactory.MachineManager(), wsFactory.VolumeManager(), apiKeysHandler, baseImage, flyRegion, idleTimeout)
+	terminalHandler := handlers.NewTerminalHandler(wsFactory.TerminalProvider(), wsFactory.ConnectionResolver(), dbClient, authMiddleware, sshClient)
+	agentHandler := handlers.NewAgentHandler(sshClient, wsFactory.ConnectionResolver(), dbClient, authMiddleware, apiKeysHandler)
 	healthHandler := handlers.NewHealthHandler(dbClient, getEnv("VERSION", "dev"))
-	filesHandler := handlers.NewFilesHandler(sftpClient, flyClient, dbClient)
-	portsHandler := handlers.NewPortsHandler(sshClient, flyClient, dbClient)
+	filesHandler := handlers.NewFilesHandler(sftpClient, wsFactory.ConnectionResolver(), dbClient)
+	portsHandler := handlers.NewPortsHandler(sshClient, wsFactory.ConnectionResolver(), dbClient)
 
 	// Start idle project checker
 	projectHandler.StartIdleChecker(1 * time.Minute)
@@ -121,17 +135,6 @@ func main() {
 	r.Get("/health", healthHandler.Health)
 	r.Get("/healthz", healthHandler.Liveness)
 	r.Get("/ready", healthHandler.Readiness)
-
-	// Legacy machine routes (no auth, for backward compatibility)
-	r.Route("/machines", func(r chi.Router) {
-		r.Get("/", machineHandler.List)
-		r.Post("/", machineHandler.Create)
-		r.Get("/{id}", machineHandler.Get)
-		r.Post("/{id}/start", machineHandler.Start)
-		r.Post("/{id}/stop", machineHandler.Stop)
-		r.Delete("/{id}", machineHandler.Delete)
-		r.Get("/{id}/terminal", legacyTerminalHandler.HandleTerminal)
-	})
 
 	// Protected project routes (require auth)
 	r.Group(func(r chi.Router) {

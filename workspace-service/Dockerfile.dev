@@ -1,0 +1,36 @@
+# Development container that mimics the VM environment
+FROM oven/bun:1.1.38-debian
+
+# Install common development tools (similar to VM)
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    wget \
+    vim \
+    ripgrep \
+    fd-find \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create coder user (same as VM)
+RUN useradd -m -s /bin/bash coder
+
+# Set up app directory
+WORKDIR /app
+
+# Copy package files and install dependencies
+COPY package.json bun.lockb* ./
+RUN bun install --frozen-lockfile
+
+# Source will be mounted as volume for live reload
+# Copy as fallback
+COPY src ./src
+
+# Create project directory
+RUN mkdir -p /home/coder/project && chown -R coder:coder /home/coder
+
+USER coder
+
+EXPOSE 3001
+
+# Run with watch mode for auto-restart on changes
+CMD ["bun", "--watch", "run", "src/server.ts"]

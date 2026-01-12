@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"aether/db"
-	"aether/fly"
 	authmw "aether/middleware"
 	"aether/ssh"
 
@@ -19,14 +18,14 @@ const sshRetryDelay = 2 * time.Second
 
 type PortsHandler struct {
 	sshClient *ssh.Client
-	flyClient *fly.Client
+	resolver  ConnectionResolver
 	db        *db.Client
 }
 
-func NewPortsHandler(sshClient *ssh.Client, flyClient *fly.Client, dbClient *db.Client) *PortsHandler {
+func NewPortsHandler(sshClient *ssh.Client, resolver ConnectionResolver, dbClient *db.Client) *PortsHandler {
 	return &PortsHandler{
 		sshClient: sshClient,
-		flyClient: flyClient,
+		resolver:  resolver,
 		db:        dbClient,
 	}
 }
@@ -70,21 +69,11 @@ func (h *PortsHandler) KillPort(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if project.FlyMachineID == nil {
-		http.Error(w, "Project has no machine", http.StatusBadRequest)
-		return
-	}
-
-	// Get machine private IP
-	machine, err := h.flyClient.GetMachine(*project.FlyMachineID)
+	// Get connection info
+	connInfo, err := h.resolver.GetConnectionInfo(project)
 	if err != nil {
-		log.Printf("Failed to get machine: %v", err)
-		http.Error(w, "Failed to get machine info", http.StatusInternalServerError)
-		return
-	}
-
-	if machine.PrivateIP == "" {
-		http.Error(w, "Machine has no private IP", http.StatusInternalServerError)
+		log.Printf("Failed to get connection info: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -93,7 +82,7 @@ func (h *PortsHandler) KillPort(w http.ResponseWriter, r *http.Request) {
 	cmd := fmt.Sprintf("fuser -k %d/tcp 2>&1 || echo 'no process on port'", port)
 	log.Printf("Kill port %d: running command: %s", port, cmd)
 
-	output, err := h.sshClient.ExecWithRetry(machine.PrivateIP, 2222, cmd, 3, sshRetryDelay)
+	output, err := h.sshClient.ExecWithRetry(connInfo.Host, connInfo.Port, cmd, 3, sshRetryDelay)
 	if err != nil {
 		log.Printf("Kill port %d: SSH error: %v", port, err)
 		http.Error(w, "Failed to execute kill command", http.StatusInternalServerError)
