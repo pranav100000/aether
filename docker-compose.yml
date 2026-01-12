@@ -49,25 +49,6 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
-  # ===========================================
-  # Agent Service (Cloud AI Orchestrator)
-  # ===========================================
-  agent:
-    build:
-      context: ./agent-service
-      dockerfile: Dockerfile.dev
-    ports:
-      - "4000:4000"
-    volumes:
-      - ./agent-service/src:/app/src:ro
-    env_file:
-      - ./agent-service/.env
-    environment:
-      - PORT=4000
-      - SUPABASE_URL=http://host.docker.internal:54321
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
 volumes:
   go_mod_cache:
   workspace_data:

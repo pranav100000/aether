@@ -24,9 +24,6 @@ services:
       - CODEBUFF_API_KEY
       - CODEBUFF_BYOK_OPENROUTER
       - OPENROUTER_API_KEY
-      # For connecting to local agent-service (run with: bun run dev in agent-service/)
-      - AGENT_SERVICE_URL=${AGENT_SERVICE_URL:-http://host.docker.internal:8080}
-      - AGENT_SESSION_TOKEN
     working_dir: /app
     extra_hosts:
       - "host.docker.internal:host-gateway"

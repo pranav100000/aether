@@ -65,19 +65,6 @@ func (b *EnvBuilder) BuildAgentEnv(ctx context.Context, projectID, userID string
 		env["CODEBUFF_BYOK_OPENROUTER"] = openrouterKey
 	}
 
-	// Add agent service configuration for centralized LLM calls
-	if agentServiceURL := os.Getenv("AGENT_SERVICE_URL"); agentServiceURL != "" {
-		env["AGENT_SERVICE_URL"] = agentServiceURL
-
-		// Generate session token for agent service authentication
-		sessionToken, err := GenerateSessionToken(userID, projectID)
-		if err != nil {
-			log.Printf("Warning: failed to generate session token: %v", err)
-		} else if sessionToken != "" {
-			env["AGENT_SESSION_TOKEN"] = sessionToken
-		}
-	}
-
 	return env
 }
 

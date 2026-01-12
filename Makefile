@@ -53,10 +53,6 @@ setup: check
 		cp workspace-service/.env.example workspace-service/.env; \
 		echo "  Created workspace-service/.env"; \
 	fi
-	@if [ ! -f agent-service/.env ]; then \
-		cp agent-service/.env.example agent-service/.env; \
-		echo "  Created agent-service/.env"; \
-	fi
 	@echo ""
 	@echo "Installing dependencies..."
 	@cd frontend && pnpm install
@@ -89,7 +85,6 @@ dev-services:
 	@echo "Services started:"
 	@echo "  - Backend:   http://localhost:8080"
 	@echo "  - Workspace: ws://localhost:3001"
-	@echo "  - Agent:     http://localhost:4000"
 	@echo ""
 	@echo "Run 'make logs' to see logs"
 
@@ -152,6 +147,3 @@ logs-backend:
 
 logs-workspace:
 	docker compose logs -f workspace
-
-logs-agent:
-	docker compose logs -f agent
