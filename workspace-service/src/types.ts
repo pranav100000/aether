@@ -1,123 +1,137 @@
-export type AgentType = "claude" | "codex" | "codebuff" | "opencode";
+// =============================================================================
+// Agent Types
+// =============================================================================
 
-export type PermissionMode = "default" | "acceptEdits" | "plan" | "bypassPermissions";
+export type AgentType = "claude" | "codex" | "codebuff" | "opencode"
 
-// File context for @files references
-export interface FileContext {
-  path: string; // Relative path from project root
-  content?: string; // File content (populated by CLI when include: true)
-  selection?: {
-    startLine: number;
-    endLine: number;
-  };
+export type PermissionMode = "default" | "acceptEdits" | "plan" | "bypassPermissions"
+
+// =============================================================================
+// Provider Interface
+// =============================================================================
+
+/** Options for initializing a provider session */
+export interface ProviderConfig {
+  cwd: string
 }
 
-// Binary attachments (images, documents)
-export interface Attachment {
-  filename: string;
-  mediaType: string;
-  data: string; // Base64 encoded content
+/** Options for a single query */
+export interface QueryOptions {
+  model?: string
+  autoApprove: boolean
+  thinkingTokens?: number
 }
 
-export interface AgentConfig {
-  cwd: string;
-  autoApprove: boolean;
-  model?: string;
-  permissionMode?: PermissionMode;
-  extendedThinking?: boolean;
-  conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>;
-  // File context passed with prompt
-  fileContext?: FileContext[];
-  // Binary attachments (images, PDFs)
-  attachments?: Attachment[];
-}
-
-export interface AgentMessage {
-  type:
-    | "init"
-    | "history"
-    | "text"
-    | "tool_use"
-    | "tool_result"
-    | "thinking"
-    | "done"
-    | "error";
-  sessionId?: string;
-  history?: Array<{
-    id: string;
-    timestamp: number;
-    role: "user" | "assistant" | "system";
-    content: string;
-    tool?: {
-      id: string;
-      name: string;
-      input: Record<string, unknown>;
-      status: string;
-      result?: string;
-      error?: string;
-    };
-  }>;
-  content?: string;
-  streaming?: boolean;
+/** Events emitted by providers */
+export interface AgentEvent {
+  type: "text" | "thinking" | "tool_use" | "tool_result" | "done" | "error"
+  content?: string
+  streaming?: boolean
   tool?: {
-    id: string;
-    name: string;
-    input: Record<string, unknown>;
-    status: "pending" | "running" | "complete";
-  };
-  toolId?: string;
-  result?: string;
+    id: string
+    name: string
+    input: Record<string, unknown>
+    status: "pending" | "running" | "complete"
+  }
+  toolId?: string
+  result?: string
+  error?: string
   usage?: {
-    inputTokens: number;
-    outputTokens: number;
-    cost: number;
-  };
-  error?: string;
+    inputTokens: number
+    outputTokens: number
+  }
 }
 
-export interface AgentSettings {
-  model?: string;
-  permissionMode?: PermissionMode;
-  extendedThinking?: boolean;
-}
-
-// Context sent with prompts from the frontend
-export interface PromptContext {
-  // File references from @files autocomplete
-  files?: Array<{
-    path: string; // Relative path from project root
-    include: boolean; // Whether to read file content
-    selection?: {
-      startLine: number;
-      endLine: number;
-    };
-  }>;
-  // Binary attachments (images, documents)
-  attachments?: Array<{
-    filename: string;
-    mediaType: string;
-    data: string; // Base64 encoded content
-  }>;
-}
-
-export interface ClientMessage {
-  type: "prompt" | "abort" | "approve" | "reject" | "settings";
-  prompt?: string;
-  toolId?: string;
-  settings?: AgentSettings;
-  // Context attached to the prompt
-  context?: PromptContext;
-}
-
+/** Provider interface - all agent implementations must satisfy this */
 export interface AgentProvider {
-  readonly name: AgentType;
+  readonly name: AgentType
+  isConfigured(): boolean
+  query(prompt: string, options: QueryOptions): AsyncIterable<AgentEvent>
+  abort(): void
+}
 
-  isConfigured(): boolean;
+/** Factory function type for creating providers */
+export type ProviderFactory = (config: ProviderConfig) => AgentProvider
 
-  query(prompt: string, config: AgentConfig): AsyncIterable<AgentMessage>;
+// =============================================================================
+// WebSocket Protocol
+// =============================================================================
 
-  approveToolUse?(toolId: string): void;
-  rejectToolUse?(toolId: string): void;
+/** Server -> Client messages (extends AgentEvent with server-only types) */
+export interface ServerMessage {
+  type: AgentEvent["type"] | "init" | "history"
+  sessionId?: string
+  history?: StoredMessage[]
+  agent?: AgentType
+  // From AgentEvent
+  content?: string
+  streaming?: boolean
+  tool?: AgentEvent["tool"]
+  toolId?: string
+  result?: string
+  error?: string
+  usage?: AgentEvent["usage"]
+}
 
-  abort(): void;
+/** Agent settings from client */
+export interface AgentSettings {
+  model?: string
+  permissionMode?: PermissionMode
+  extendedThinking?: boolean
+}
+
+/** File reference in prompt context */
+export interface FileReference {
+  path: string
+  include: boolean
+  selection?: { startLine: number; endLine: number }
+}
+
+/** Binary attachment */
+export interface Attachment {
+  filename: string
+  mediaType: string
+  data: string
+}
+
+/** Context sent with prompt */
+export interface PromptContext {
+  files?: FileReference[]
+  attachments?: Attachment[]
+}
+
+/** Client -> Server messages */
+export interface ClientMessage {
+  type: "prompt" | "abort" | "approve" | "reject" | "settings"
+  prompt?: string
+  toolId?: string
+  settings?: AgentSettings
+  context?: PromptContext
+}
+
+// =============================================================================
+// Storage
+// =============================================================================
+
+export interface StoredMessage {
+  id: string
+  timestamp: number
+  role: "user" | "assistant" | "system"
+  content: string
+  tool?: {
+    id: string
+    name: string
+    input: Record<string, unknown>
+    status: string
+    result?: string
+    error?: string
+  }
+}
+
+export interface ChatHistory {
+  agent: AgentType
+  sessionId: string
+  createdAt: number
+  updatedAt: number
+  messages: StoredMessage[]
 }

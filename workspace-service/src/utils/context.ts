@@ -1,52 +1,50 @@
-import type { FileContext } from "../types";
+export type FileContextFormat = "xml" | "markdown"
 
-export type FileContextFormat = "xml" | "markdown";
+interface FileContext {
+  path: string
+  content?: string
+  selection?: { startLine: number; endLine: number }
+}
 
 interface FormatOptions {
-  format: FileContextFormat;
+  format: FileContextFormat
 }
 
 /**
  * Build a file context section for an agent prompt
- *
- * Supports two formats:
- * - "xml": Uses XML-like tags (e.g., <file path="...">content</file>) - preferred for Claude
- * - "markdown": Uses markdown code blocks (e.g., File: path\n```\ncontent\n```) - preferred for other LLMs
  */
 export function buildFileContextSection(
   fileContext: FileContext[] | undefined,
   options: FormatOptions = { format: "markdown" }
 ): string {
-  if (!fileContext || fileContext.length === 0) {
-    return "";
-  }
+  if (!fileContext || fileContext.length === 0) return ""
 
-  let section = "The user has provided the following files as context:\n\n";
+  let section = "The user has provided the following files as context:\n\n"
 
   for (const file of fileContext) {
     if (file.content) {
       const selectionInfo = file.selection
         ? ` (lines ${file.selection.startLine}-${file.selection.endLine})`
-        : "";
+        : ""
       const selectionAttr = file.selection
         ? ` lines="${file.selection.startLine}-${file.selection.endLine}"`
-        : "";
+        : ""
 
       if (options.format === "xml") {
-        section += `<file path="${file.path}"${selectionAttr}>\n${file.content}\n</file>\n\n`;
+        section += `<file path="${file.path}"${selectionAttr}>\n${file.content}\n</file>\n\n`
       } else {
-        section += `File: ${file.path}${selectionInfo}\n\`\`\`\n${file.content}\n\`\`\`\n\n`;
+        section += `File: ${file.path}${selectionInfo}\n\`\`\`\n${file.content}\n\`\`\`\n\n`
       }
     } else {
       if (options.format === "xml") {
-        section += `<file path="${file.path}" />\n`;
+        section += `<file path="${file.path}" />\n`
       } else {
-        section += `File reference: ${file.path}\n\n`;
+        section += `File reference: ${file.path}\n\n`
       }
     }
   }
 
-  return section;
+  return section
 }
 
 /**
@@ -55,15 +53,13 @@ export function buildFileContextSection(
 export function buildConversationHistorySection(
   history: Array<{ role: "user" | "assistant"; content: string }> | undefined
 ): string {
-  if (!history || history.length === 0) {
-    return "";
-  }
+  if (!history || history.length === 0) return ""
 
   const historyText = history
     .map((msg) => `${msg.role === "user" ? "Human" : "Assistant"}: ${msg.content}`)
-    .join("\n\n");
+    .join("\n\n")
 
-  return `<conversation_history>\n${historyText}\n</conversation_history>\n\n`;
+  return `<conversation_history>\n${historyText}\n</conversation_history>\n\n`
 }
 
 /**
@@ -75,18 +71,18 @@ export function buildFullPrompt(
   history: Array<{ role: "user" | "assistant"; content: string }> | undefined,
   format: FileContextFormat = "markdown"
 ): string {
-  const fileContextSection = buildFileContextSection(fileContext, { format });
-  const historySection = buildConversationHistorySection(history);
+  const fileContextSection = buildFileContextSection(fileContext, { format })
+  const historySection = buildConversationHistorySection(history)
 
-  let fullPrompt = prompt;
+  let fullPrompt = prompt
 
   if (fileContextSection) {
-    fullPrompt = `${fileContextSection}\n${prompt}`;
+    fullPrompt = `${fileContextSection}\n${prompt}`
   }
 
   if (historySection) {
-    fullPrompt = `${historySection}Human: ${fullPrompt}`;
+    fullPrompt = `${historySection}Human: ${fullPrompt}`
   }
 
-  return fullPrompt;
+  return fullPrompt
 }

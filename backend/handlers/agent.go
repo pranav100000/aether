@@ -53,7 +53,27 @@ type AgentMessage struct {
 	Prompt    string                 `json:"prompt,omitempty"`
 	Settings  map[string]interface{} `json:"settings,omitempty"`
 	Context   *PromptContext         `json:"context,omitempty"`
+	History   []StoredMessage        `json:"history,omitempty"`
 	Extra     map[string]interface{} `json:"-"` // For any additional fields
+}
+
+// StoredMessage represents a message from chat history
+type StoredMessage struct {
+	ID        string       `json:"id"`
+	Timestamp int64        `json:"timestamp"`
+	Role      string       `json:"role"`
+	Content   string       `json:"content"`
+	Tool      *ToolMessage `json:"tool,omitempty"`
+}
+
+// ToolMessage represents tool use in a stored message
+type ToolMessage struct {
+	ID     string                 `json:"id"`
+	Name   string                 `json:"name"`
+	Input  map[string]interface{} `json:"input"`
+	Status string                 `json:"status"`
+	Result string                 `json:"result,omitempty"`
+	Error  string                 `json:"error,omitempty"`
 }
 
 // PromptContext contains file references and attachments sent with prompts

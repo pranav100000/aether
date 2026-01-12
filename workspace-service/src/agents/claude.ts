@@ -1,143 +1,101 @@
-import { query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentProvider, AgentConfig, AgentMessage, PermissionMode } from "../types";
-import { buildFullPrompt } from "../utils/context";
+import { query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk"
+import type { AgentProvider, AgentEvent, QueryOptions, ProviderConfig } from "../types"
 
 export class ClaudeProvider implements AgentProvider {
-  readonly name = "claude" as const;
-  private sessionId: string | null = null;
-  private abortController: AbortController | null = null;
+  readonly name = "claude" as const
+  private cwd: string
+  private sessionId: string | null = null
+  private abortController: AbortController | null = null
+
+  constructor(config: ProviderConfig) {
+    this.cwd = config.cwd
+  }
 
   isConfigured(): boolean {
-    return !!process.env.ANTHROPIC_API_KEY;
+    return !!process.env.ANTHROPIC_API_KEY
   }
 
   private getModelId(model?: string): string {
-    // Map short names to full model IDs
     switch (model) {
       case "opus":
-        return "claude-opus-4-5-20250929";
+        return "claude-opus-4-5-20250929"
       case "sonnet":
-        return "claude-sonnet-4-5-20250929";
+        return "claude-sonnet-4-5-20250929"
       case "haiku":
-        return "claude-haiku-3-5-20250929";
+        return "claude-haiku-3-5-20250929"
       default:
-        return model || "claude-sonnet-4-5-20250929";
+        return model || "claude-sonnet-4-5-20250929"
     }
   }
 
-  private mapPermissionMode(mode?: PermissionMode): "default" | "acceptEdits" | "plan" | "bypassPermissions" {
-    return mode || "default";
-  }
-
-  async *query(
-    prompt: string,
-    config: AgentConfig
-  ): AsyncIterable<AgentMessage> {
-    this.abortController = new AbortController();
+  async *query(prompt: string, options: QueryOptions): AsyncIterable<AgentEvent> {
+    this.abortController = new AbortController()
 
     try {
-      const modelId = this.getModelId(config.model);
-
-      // Build prompt with file context and conversation history (use XML format for Claude)
-      const fullPrompt = buildFullPrompt(
-        prompt,
-        config.fileContext,
-        config.conversationHistory,
-        "xml"
-      );
-
-      // Use the SDK's query function with full options support
       const q = query({
-        prompt: fullPrompt,
+        prompt,
         options: {
-          model: modelId,
-          cwd: config.cwd,
-          permissionMode: config.autoApprove ? "bypassPermissions" : this.mapPermissionMode(config.permissionMode),
+          model: this.getModelId(options.model),
+          cwd: this.cwd,
+          permissionMode: options.autoApprove ? "bypassPermissions" : "default",
           abortController: this.abortController,
-          // Enable extended thinking if requested
-          ...(config.extendedThinking ? { maxThinkingTokens: 10000 } : {}),
-          // Resume session if we have a session ID
+          ...(options.thinkingTokens ? { maxThinkingTokens: options.thinkingTokens } : {}),
           ...(this.sessionId ? { resume: this.sessionId } : {}),
-          // Allow all tools for full agent capabilities
-          allowedTools: [
-            "Read",
-            "Write",
-            "Edit",
-            "Bash",
-            "Glob",
-            "Grep",
-            "WebSearch",
-            "WebFetch",
-            "TodoWrite",
-            "Task",
-          ],
+          allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch", "TodoWrite", "Task"],
         },
-      });
+      })
 
-      // Stream messages from the query
       for await (const msg of q) {
-        // Capture session ID for future resumption
         if (msg.session_id && !this.sessionId) {
-          this.sessionId = msg.session_id;
+          this.sessionId = msg.session_id
         }
 
-        const mapped = this.mapSDKMessage(msg, config);
-        if (mapped) {
-          yield mapped;
-        }
+        const event = this.mapMessage(msg, options.autoApprove)
+        if (event) yield event
       }
 
-      yield { type: "done" };
+      yield { type: "done" }
     } catch (err) {
-      yield {
-        type: "error",
-        error: err instanceof Error ? err.message : String(err),
-      };
+      yield { type: "error", error: err instanceof Error ? err.message : String(err) }
     }
   }
 
-  private mapSDKMessage(msg: SDKMessage, config: AgentConfig): AgentMessage | null {
+  private mapMessage(msg: SDKMessage, autoApprove: boolean): AgentEvent | null {
     switch (msg.type) {
-      case "system": {
-        // System init message - could emit session info
-        if ("subtype" in msg && msg.subtype === "init") {
-          return null; // We handle session ID capture in the main loop
-        }
-        return null;
-      }
+      case "system":
+        return null
 
       case "assistant": {
-        // Extract content from assistant message
         type ContentBlock = {
-          type: string;
-          text?: string;
-          thinking?: string;
-          id?: string;
-          name?: string;
-          input?: unknown;
-        };
-        const content = msg.message.content as ContentBlock[];
+          type: string
+          text?: string
+          thinking?: string
+          id?: string
+          name?: string
+          input?: unknown
+        }
+        const content = msg.message.content as ContentBlock[]
 
-        // Check for thinking blocks first (extended thinking)
+        // Check for thinking blocks
         for (const block of content) {
           if (block.type === "thinking" && block.thinking) {
-            return { type: "thinking", content: block.thinking, streaming: false };
+            return { type: "thinking", content: block.thinking, streaming: false }
           }
         }
 
-        // Then collect text content
+        // Collect text content
         const textContent = content
-          .filter((block: ContentBlock): block is ContentBlock & { type: "text"; text: string } =>
-            block.type === "text" && typeof block.text === "string"
+          .filter((b): b is ContentBlock & { type: "text"; text: string } =>
+            b.type === "text" && typeof b.text === "string"
           )
-          .map((block) => block.text)
-          .join("");
+          .map((b) => b.text)
+          .join("")
 
         if (textContent) {
-          return { type: "text", content: textContent, streaming: false };
+          return { type: "text", content: textContent, streaming: false }
         }
 
-        // Handle tool use blocks
+        // Handle tool use
         for (const block of content) {
           if (block.type === "tool_use" && block.id && block.name) {
             return {
@@ -146,66 +104,51 @@ export class ClaudeProvider implements AgentProvider {
                 id: block.id,
                 name: block.name,
                 input: (block.input || {}) as Record<string, unknown>,
-                status: config.autoApprove ? "running" : "pending",
+                status: autoApprove ? "running" : "pending",
               },
-            };
+            }
           }
         }
 
-        return null;
+        return null
       }
 
       case "result": {
-        // Result message contains usage stats and final status
-        // Don't emit the result text - it duplicates what came in assistant messages
-        const resultMsg = msg as {
-          type: "result";
-          subtype: string;
-          errors?: string[];
-        };
-
-        // Only emit errors, not success (content already came in assistant messages)
+        const resultMsg = msg as { type: "result"; subtype: string; errors?: string[] }
         if (resultMsg.subtype.startsWith("error") && resultMsg.errors) {
-          return { type: "error", error: resultMsg.errors.join("; ") };
+          return { type: "error", error: resultMsg.errors.join("; ") }
         }
-
-        return null;
+        return null
       }
 
       case "stream_event": {
-        // Handle streaming events for real-time content (partial messages)
-        // This is SDKPartialAssistantMessage type
         if ("event" in msg) {
           const event = msg.event as {
-            type?: string;
-            delta?: { type?: string; text?: string; thinking?: string };
-          };
+            type?: string
+            delta?: { type?: string; text?: string; thinking?: string }
+          }
           if (event.type === "content_block_delta") {
-            // Handle text streaming
             if (event.delta?.type === "text_delta" && event.delta.text) {
-              return { type: "text", content: event.delta.text, streaming: true };
+              return { type: "text", content: event.delta.text, streaming: true }
             }
-            // Handle thinking streaming
             if (event.delta?.type === "thinking_delta" && event.delta.thinking) {
-              return { type: "thinking", content: event.delta.thinking, streaming: true };
+              return { type: "thinking", content: event.delta.thinking, streaming: true }
             }
           }
         }
-        return null;
+        return null
       }
 
-      case "user": {
-        // User messages are replays, we don't need to emit them
-        return null;
-      }
+      case "user":
+        return null
 
       default:
-        return null;
+        return null
     }
   }
 
   abort(): void {
-    this.abortController?.abort();
-    this.abortController = null;
+    this.abortController?.abort()
+    this.abortController = null
   }
 }

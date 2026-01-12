@@ -1,5 +1,5 @@
-import { AgentHandler } from "./handler";
-import type { AgentType, ClientMessage, AgentMessage } from "./types";
+import { AgentHandler } from "./handler"
+import type { AgentType, ClientMessage, ServerMessage } from "./types"
 
 const agent = process.argv[2] as AgentType;
 
@@ -8,8 +8,8 @@ if (!agent) {
   process.exit(1);
 }
 
-function send(msg: AgentMessage) {
-  console.log(JSON.stringify({ ...msg, agent }));
+function send(msg: ServerMessage) {
+  console.log(JSON.stringify({ ...msg, agent }))
 }
 
 let handler: AgentHandler;

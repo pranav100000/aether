@@ -11,7 +11,7 @@ help:
 	@echo ""
 	@echo "Development (local):"
 	@echo "  make dev            - Start everything (supabase + services + frontend)"
-	@echo "  make dev-services   - Start Docker services (backend, workspace)"
+	@echo "  make dev-services   - Start Docker services (backend)"
 	@echo "  make dev-frontend   - Start frontend (Vite)"
 	@echo "  make dev-backend    - Start backend (native Go, local mode)"
 	@echo "  make dev-real       - Start backend against real Fly VMs + Supabase"
@@ -83,8 +83,7 @@ dev-services:
 	docker compose up -d --build
 	@echo ""
 	@echo "Services started:"
-	@echo "  - Backend:   http://localhost:8080"
-	@echo "  - Workspace: ws://localhost:3001"
+	@echo "  - Backend: http://localhost:8080"
 	@echo ""
 	@echo "Run 'make logs' to see logs"
 
@@ -144,6 +143,3 @@ logs:
 
 logs-backend:
 	docker compose logs -f backend
-
-logs-workspace:
-	docker compose logs -f workspace

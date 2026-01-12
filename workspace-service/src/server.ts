@@ -1,6 +1,6 @@
-import { AgentHandler } from "./handler";
-import type { AgentType, ClientMessage, AgentMessage } from "./types";
-import type { ServerWebSocket } from "bun";
+import { AgentHandler } from "./handler"
+import type { AgentType, ClientMessage, ServerMessage } from "./types"
+import type { ServerWebSocket } from "bun"
 
 const PORT = parseInt(process.env.AGENT_PORT || "3001");
 const VALID_AGENTS = ["claude", "codex", "codebuff", "opencode"];
@@ -40,10 +40,10 @@ const server = Bun.serve<WSData>({
 
       try {
         const handler = new AgentHandler(agent, {
-          send: (msg: AgentMessage) => {
-            ws.send(JSON.stringify({ ...msg, agent }));
+          send: (msg: ServerMessage) => {
+            ws.send(JSON.stringify({ ...msg, agent }))
           },
-        });
+        })
 
         ws.data.handler = handler;
         await handler.initialize();
