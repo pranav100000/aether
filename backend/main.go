@@ -98,6 +98,8 @@ func main() {
 	} else {
 		log.Println("Warning: ENCRYPTION_MASTER_KEY not set, API keys feature disabled")
 	}
+	// Convert to interface safely (avoids Go's typed-nil interface gotcha)
+	apiKeysGetter := asAPIKeysGetter(apiKeysHandler)
 
 	idleTimeout := time.Duration(idleTimeoutMin) * time.Minute
 
@@ -105,9 +107,9 @@ func main() {
 	wsFactory := workspace.NewFactory(flyClient, sshClient)
 
 	// New project-based handlers
-	projectHandler := handlers.NewProjectHandler(dbClient, wsFactory.MachineManager(), wsFactory.VolumeManager(), apiKeysHandler, baseImage, flyRegion, idleTimeout)
+	projectHandler := handlers.NewProjectHandler(dbClient, wsFactory.MachineManager(), wsFactory.VolumeManager(), apiKeysGetter, baseImage, flyRegion, idleTimeout)
 	terminalHandler := handlers.NewTerminalHandler(wsFactory.TerminalProvider(), wsFactory.ConnectionResolver(), dbClient, authMiddleware, sshClient)
-	agentHandler := handlers.NewAgentHandler(sshClient, wsFactory.ConnectionResolver(), dbClient, authMiddleware, apiKeysHandler)
+	agentHandler := handlers.NewAgentHandler(sshClient, wsFactory.ConnectionResolver(), dbClient, authMiddleware, apiKeysGetter)
 	healthHandler := handlers.NewHealthHandler(dbClient, getEnv("VERSION", "dev"))
 	filesHandler := handlers.NewFilesHandler(sftpClient, wsFactory.ConnectionResolver(), dbClient)
 	portsHandler := handlers.NewPortsHandler(sshClient, wsFactory.ConnectionResolver(), dbClient)
@@ -260,4 +262,14 @@ func getEnvInt(key string, defaultValue int) int {
 		}
 	}
 	return defaultValue
+}
+
+// asAPIKeysGetter safely converts *APIKeysHandler to APIKeysGetter interface.
+// This avoids Go's typed-nil interface gotcha where a nil concrete pointer
+// assigned to an interface makes the interface non-nil.
+func asAPIKeysGetter(h *handlers.APIKeysHandler) handlers.APIKeysGetter {
+	if h == nil {
+		return nil
+	}
+	return h
 }

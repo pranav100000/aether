@@ -8,23 +8,23 @@ import (
 	"time"
 
 	"aether/config"
-	"aether/fly"
+	"aether/handlers"
 )
 
 // VolumeManager implements handlers.VolumeManager for local development.
 // It creates local directories instead of Fly.io volumes.
 type VolumeManager struct {
 	mu      sync.RWMutex
-	volumes map[string]*fly.Volume
+	volumes map[string]*handlers.Volume
 }
 
 func NewVolumeManager() *VolumeManager {
 	return &VolumeManager{
-		volumes: make(map[string]*fly.Volume),
+		volumes: make(map[string]*handlers.Volume),
 	}
 }
 
-func (v *VolumeManager) CreateVolume(name string, sizeGB int, region string) (*fly.Volume, error) {
+func (v *VolumeManager) CreateVolume(name string, sizeGB int, region string) (*handlers.Volume, error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
@@ -36,7 +36,7 @@ func (v *VolumeManager) CreateVolume(name string, sizeGB int, region string) (*f
 		return nil, err
 	}
 
-	volume := &fly.Volume{
+	volume := &handlers.Volume{
 		ID:        id,
 		Name:      name,
 		SizeGB:    sizeGB,
@@ -48,7 +48,7 @@ func (v *VolumeManager) CreateVolume(name string, sizeGB int, region string) (*f
 	return volume, nil
 }
 
-func (v *VolumeManager) GetVolume(volumeID string) (*fly.Volume, error) {
+func (v *VolumeManager) GetVolume(volumeID string) (*handlers.Volume, error) {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 

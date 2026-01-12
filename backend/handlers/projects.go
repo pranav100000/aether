@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"aether/db"
-	"aether/fly"
 	authmw "aether/middleware"
 	"aether/validation"
 
@@ -524,12 +523,12 @@ func (h *ProjectHandler) stopMachineAsync(projectID string, machineID string) {
 	log.Printf("Project %s stopped successfully", projectID)
 }
 
-func (h *ProjectHandler) createMachine(ctx context.Context, project *db.Project, userID string) (*fly.Machine, error) {
-	var guestConfig fly.GuestConfig
+func (h *ProjectHandler) createMachine(ctx context.Context, project *db.Project, userID string) (*Machine, error) {
+	var guestConfig GuestConfig
 
 	// GPU machines require cpu_kind and cpus, but Fly.io determines actual compute from gpu_kind
 	if project.GPUKind != nil && *project.GPUKind != "" {
-		guestConfig = fly.GuestConfig{
+		guestConfig = GuestConfig{
 			CPUKind:  "performance",
 			CPUs:     8,
 			MemoryMB: 16384,
@@ -537,7 +536,7 @@ func (h *ProjectHandler) createMachine(ctx context.Context, project *db.Project,
 		}
 		log.Printf("Creating GPU machine with gpu_kind=%s", *project.GPUKind)
 	} else {
-		guestConfig = fly.GuestConfig{
+		guestConfig = GuestConfig{
 			CPUKind:  project.CPUKind,
 			CPUs:     project.CPUs,
 			MemoryMB: project.MemoryMB,
@@ -548,7 +547,7 @@ func (h *ProjectHandler) createMachine(ctx context.Context, project *db.Project,
 	// Build environment variables
 	machineEnv := NewEnvBuilder(h.apiKeys).BuildEnv(ctx, project.ID, userID, nil)
 	log.Printf("Creating machine with %d env vars", len(machineEnv))
-	config := fly.MachineConfig{
+	config := MachineConfig{
 		Image: h.baseImage,
 		Guest: guestConfig,
 		Env:   machineEnv,
@@ -556,7 +555,7 @@ func (h *ProjectHandler) createMachine(ctx context.Context, project *db.Project,
 
 	// Attach volume if exists
 	if project.FlyVolumeID != nil && *project.FlyVolumeID != "" {
-		config.Mounts = []fly.Mount{{
+		config.Mounts = []Mount{{
 			Volume: *project.FlyVolumeID,
 			Path:   "/home/coder/project",
 		}}

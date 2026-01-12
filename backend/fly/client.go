@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strconv"
 	"time"
+
+	"aether/handlers"
 )
 
 var baseURL = "https://api.machines.dev/v1"
@@ -131,17 +133,35 @@ func (c *Client) doRequest(method, path string, body interface{}) ([]byte, error
 	return respBody, nil
 }
 
-func (c *Client) CreateMachine(name string, config MachineConfig) (*Machine, error) {
+func (c *Client) CreateMachine(name string, config handlers.MachineConfig) (*handlers.Machine, error) {
 	region := c.region
 	// GPU machines must be created in ord region
 	if config.Guest.GPUKind != "" {
 		region = "ord"
 	}
 
+	// Convert handlers config to Fly API config
+	flyConfig := MachineConfig{
+		Image: config.Image,
+		Guest: GuestConfig{
+			CPUKind:  config.Guest.CPUKind,
+			CPUs:     config.Guest.CPUs,
+			MemoryMB: config.Guest.MemoryMB,
+			GPUKind:  config.Guest.GPUKind,
+		},
+		Env: config.Env,
+	}
+	for _, m := range config.Mounts {
+		flyConfig.Mounts = append(flyConfig.Mounts, Mount{
+			Volume: m.Volume,
+			Path:   m.Path,
+		})
+	}
+
 	req := CreateMachineRequest{
 		Name:   name,
 		Region: region,
-		Config: config,
+		Config: flyConfig,
 	}
 
 	respBody, err := c.doRequest("POST", "/machines", req)
@@ -154,10 +174,10 @@ func (c *Client) CreateMachine(name string, config MachineConfig) (*Machine, err
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
-	return &machine, nil
+	return machineToHandler(&machine), nil
 }
 
-func (c *Client) GetMachine(machineID string) (*Machine, error) {
+func (c *Client) GetMachine(machineID string) (*handlers.Machine, error) {
 	respBody, err := c.doRequest("GET", "/machines/"+machineID, nil)
 	if err != nil {
 		return nil, err
@@ -168,7 +188,19 @@ func (c *Client) GetMachine(machineID string) (*Machine, error) {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
-	return &machine, nil
+	return machineToHandler(&machine), nil
+}
+
+// machineToHandler converts a Fly API Machine to a handlers.Machine
+func machineToHandler(m *Machine) *handlers.Machine {
+	return &handlers.Machine{
+		ID:        m.ID,
+		Name:      m.Name,
+		State:     m.State,
+		Region:    m.Region,
+		PrivateIP: m.PrivateIP,
+		CreatedAt: m.CreatedAt,
+	}
 }
 
 func (c *Client) StartMachine(machineID string) error {
@@ -267,7 +299,7 @@ type CreateVolumeRequest struct {
 	FSType            string `json:"fstype,omitempty"`
 }
 
-func (c *Client) CreateVolume(name string, sizeGB int, region string) (*Volume, error) {
+func (c *Client) CreateVolume(name string, sizeGB int, region string) (*handlers.Volume, error) {
 	req := CreateVolumeRequest{
 		Name:      name,
 		Region:    region,
@@ -286,10 +318,10 @@ func (c *Client) CreateVolume(name string, sizeGB int, region string) (*Volume, 
 		return nil, fmt.Errorf("failed to parse volume response: %w", err)
 	}
 
-	return &volume, nil
+	return volumeToHandler(&volume), nil
 }
 
-func (c *Client) GetVolume(volumeID string) (*Volume, error) {
+func (c *Client) GetVolume(volumeID string) (*handlers.Volume, error) {
 	respBody, err := c.doRequest("GET", "/volumes/"+volumeID, nil)
 	if err != nil {
 		return nil, err
@@ -300,7 +332,19 @@ func (c *Client) GetVolume(volumeID string) (*Volume, error) {
 		return nil, fmt.Errorf("failed to parse volume response: %w", err)
 	}
 
-	return &volume, nil
+	return volumeToHandler(&volume), nil
+}
+
+// volumeToHandler converts a Fly API Volume to a handlers.Volume
+func volumeToHandler(v *Volume) *handlers.Volume {
+	return &handlers.Volume{
+		ID:        v.ID,
+		Name:      v.Name,
+		SizeGB:    v.SizeGB,
+		Region:    v.Region,
+		State:     v.State,
+		CreatedAt: v.CreatedAt,
+	}
 }
 
 func (c *Client) DeleteVolume(volumeID string) error {

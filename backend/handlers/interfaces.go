@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"aether/db"
-	"aether/fly"
 )
 
 // ProjectStore defines the database operations needed by ProjectHandler
@@ -25,20 +24,22 @@ type ProjectStore interface {
 	GetUserSettings(ctx context.Context, userID string) (*db.UserSettings, error)
 }
 
-// MachineManager defines the Fly.io operations needed by ProjectHandler
+// MachineManager defines operations for managing compute instances.
+// Implementations include Fly.io VMs and local Docker containers.
 type MachineManager interface {
-	CreateMachine(name string, config fly.MachineConfig) (*fly.Machine, error)
-	GetMachine(machineID string) (*fly.Machine, error)
+	CreateMachine(name string, config MachineConfig) (*Machine, error)
+	GetMachine(machineID string) (*Machine, error)
 	StartMachine(machineID string) error
 	StopMachine(machineID string) error
 	DeleteMachine(machineID string) error
 	WaitForState(machineID string, state string, timeout time.Duration) error
 }
 
-// VolumeManager defines the Fly.io volume operations needed by ProjectHandler
+// VolumeManager defines operations for managing persistent storage.
+// Implementations include Fly.io volumes and local directories.
 type VolumeManager interface {
-	CreateVolume(name string, sizeGB int, region string) (*fly.Volume, error)
-	GetVolume(volumeID string) (*fly.Volume, error)
+	CreateVolume(name string, sizeGB int, region string) (*Volume, error)
+	GetVolume(volumeID string) (*Volume, error)
 	DeleteVolume(volumeID string) error
 }
 

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"aether/config"
-	"aether/fly"
+	"aether/handlers"
 )
 
 // MachineManager implements handlers.MachineManager for local development using Docker.
@@ -31,7 +31,7 @@ func NewMachineManager() *MachineManager {
 	}
 }
 
-func (m *MachineManager) CreateMachine(name string, cfg fly.MachineConfig) (*fly.Machine, error) {
+func (m *MachineManager) CreateMachine(name string, cfg handlers.MachineConfig) (*handlers.Machine, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -54,14 +54,26 @@ func (m *MachineManager) CreateMachine(name string, cfg fly.MachineConfig) (*fly
 	}
 
 	// Create and start Docker container
-	// Mount project directory to /home/coder/project
 	// Use -p 0:2222 to let Docker auto-assign an available host port
 	// The ConnectionResolver queries Docker for the actual port
 	args := []string{
 		"run", "-d",
 		"--name", id,
 		"-p", "0:2222",
-		"-v", fmt.Sprintf("%s:/home/coder/project", projectDir),
+	}
+
+	// Mount volumes from config (each project has its own volume directory)
+	if len(cfg.Mounts) > 0 {
+		for _, mount := range cfg.Mounts {
+			// Volume ID is "local-vol-{name}", extract the name to get the directory
+			volumeName := strings.TrimPrefix(mount.Volume, "local-vol-")
+			volumeDir := fmt.Sprintf("%s/%s", projectDir, volumeName)
+			args = append(args, "-v", fmt.Sprintf("%s:%s", volumeDir, mount.Path))
+			log.Printf("[LOCAL] Mounting volume %s -> %s", volumeDir, mount.Path)
+		}
+	} else {
+		// Fallback: mount base project directory (for backwards compatibility)
+		args = append(args, "-v", fmt.Sprintf("%s:/home/coder/project", projectDir))
 	}
 
 	// Mount workspace-service for local development (agent CLI)
@@ -94,7 +106,7 @@ func (m *MachineManager) CreateMachine(name string, cfg fly.MachineConfig) (*fly
 	}
 	m.machines[id] = state
 
-	return &fly.Machine{
+	return &handlers.Machine{
 		ID:        id,
 		Name:      name,
 		State:     "started",
@@ -138,7 +150,7 @@ func isHexString(s string) bool {
 	return true
 }
 
-func (m *MachineManager) GetMachine(machineID string) (*fly.Machine, error) {
+func (m *MachineManager) GetMachine(machineID string) (*handlers.Machine, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -147,7 +159,7 @@ func (m *MachineManager) GetMachine(machineID string) (*fly.Machine, error) {
 		return nil, fmt.Errorf("machine %s not found in local manager", machineID)
 	}
 
-	return &fly.Machine{
+	return &handlers.Machine{
 		ID:        state.ID,
 		Name:      state.ID,
 		State:     state.State,
