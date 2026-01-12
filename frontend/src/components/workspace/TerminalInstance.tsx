@@ -88,7 +88,7 @@ export const TerminalInstance = forwardRef<TerminalInstanceHandle, TerminalInsta
     useEffect(() => {
       if (!containerRef.current) return
 
-      let cancelled = false
+      let canceled = false
 
       const terminal = new XTerm({
         cursorBlink: true,
@@ -138,7 +138,7 @@ export const TerminalInstance = forwardRef<TerminalInstanceHandle, TerminalInsta
             data: { session },
           } = await supabase.auth.getSession()
 
-          if (cancelled) return
+          if (canceled) return
 
           if (!session?.access_token) {
             throw new Error("Not authenticated")
@@ -147,13 +147,13 @@ export const TerminalInstance = forwardRef<TerminalInstanceHandle, TerminalInsta
           const wsUrl = api.getTerminalUrl(projectId)
           const ws = new WebSocket(wsUrl, ["bearer", session.access_token])
 
-          if (cancelled) {
+          if (canceled) {
             ws.close()
             return
           }
 
           ws.onopen = () => {
-            if (cancelled) return
+            if (canceled) return
             if (isActiveRef.current) {
               terminal.focus()
             }
@@ -166,7 +166,7 @@ export const TerminalInstance = forwardRef<TerminalInstanceHandle, TerminalInsta
           }
 
           ws.onmessage = (event) => {
-            if (cancelled) return
+            if (canceled) return
             try {
               const message: WSMessage = JSON.parse(event.data)
               if (message.type === "output" && message.data) {
@@ -188,7 +188,7 @@ export const TerminalInstance = forwardRef<TerminalInstanceHandle, TerminalInsta
           }
 
           ws.onclose = () => {
-            if (cancelled) return
+            if (canceled) return
             onDisconnect?.()
           }
 
@@ -201,7 +201,7 @@ export const TerminalInstance = forwardRef<TerminalInstanceHandle, TerminalInsta
             }
           })
         } catch (err) {
-          if (cancelled) return
+          if (canceled) return
           terminal.write(
             `\r\n\x1b[31mError: ${err instanceof Error ? err.message : "Failed to connect"}\x1b[0m\r\n`
           )
@@ -211,7 +211,7 @@ export const TerminalInstance = forwardRef<TerminalInstanceHandle, TerminalInsta
       connect()
 
       return () => {
-        cancelled = true
+        canceled = true
         window.removeEventListener("resize", handleResize)
         wsRef.current?.close()
         terminal.dispose()

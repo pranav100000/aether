@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"aether/db"
-	"aether/fly"
 	authmw "aether/middleware"
 
 	"github.com/go-chi/chi/v5"
@@ -21,7 +20,7 @@ import (
 type mockProjectStore struct {
 	projects       map[string]*db.Project
 	listProjectsFn func(ctx context.Context, userID string) ([]db.Project, error)
-	createFn       func(ctx context.Context, userID, name string, description *string, baseImage string, hw *db.HardwareConfig) (*db.Project, error)
+	createFn       func(ctx context.Context, userID, name string, description *string, baseImage string, hw *db.HardwareConfig, idleTimeoutMinutes *int) (*db.Project, error)
 	getFn          func(ctx context.Context, projectID, userID string) (*db.Project, error)
 	updateFn       func(ctx context.Context, projectID, userID string, name, description *string) (*db.Project, error)
 	deleteFn       func(ctx context.Context, projectID, userID string) error
@@ -63,9 +62,9 @@ func (m *mockProjectStore) GetProjectByUser(ctx context.Context, projectID, user
 	return nil, db.ErrNotFound
 }
 
-func (m *mockProjectStore) CreateProject(ctx context.Context, userID, name string, description *string, baseImage string, hw *db.HardwareConfig) (*db.Project, error) {
+func (m *mockProjectStore) CreateProject(ctx context.Context, userID, name string, description *string, baseImage string, hw *db.HardwareConfig, idleTimeoutMinutes *int) (*db.Project, error) {
 	if m.createFn != nil {
-		return m.createFn(ctx, userID, name, description, baseImage, hw)
+		return m.createFn(ctx, userID, name, description, baseImage, hw, idleTimeoutMinutes)
 	}
 	// Default hardware config
 	cpuKind := "shared"
@@ -151,7 +150,11 @@ func (m *mockProjectStore) UpdateProjectLastAccessed(ctx context.Context, projec
 	return nil
 }
 
-func (m *mockProjectStore) GetIdleRunningProjects(ctx context.Context, timeout time.Duration) ([]db.Project, error) {
+func (m *mockProjectStore) GetRunningProjects(ctx context.Context) ([]db.Project, error) {
+	return nil, nil
+}
+
+func (m *mockProjectStore) GetUserSettings(ctx context.Context, userID string) (*db.UserSettings, error) {
 	return nil, nil
 }
 
@@ -164,8 +167,8 @@ func (m *mockProjectStore) UpdateProjectVolume(ctx context.Context, projectID, v
 }
 
 type mockVolumeManager struct {
-	createFn func(name string, sizeGB int, region string) (*fly.Volume, error)
-	getFn    func(volumeID string) (*fly.Volume, error)
+	createFn func(name string, sizeGB int, region string) (*Volume, error)
+	getFn    func(volumeID string) (*Volume, error)
 	deleteFn func(volumeID string) error
 }
 
@@ -173,18 +176,18 @@ func newMockVolumeManager() *mockVolumeManager {
 	return &mockVolumeManager{}
 }
 
-func (m *mockVolumeManager) CreateVolume(name string, sizeGB int, region string) (*fly.Volume, error) {
+func (m *mockVolumeManager) CreateVolume(name string, sizeGB int, region string) (*Volume, error) {
 	if m.createFn != nil {
 		return m.createFn(name, sizeGB, region)
 	}
-	return &fly.Volume{ID: "vol-123", Name: name, SizeGB: sizeGB, Region: region, State: "created"}, nil
+	return &Volume{ID: "vol-123", Name: name, SizeGB: sizeGB, Region: region, State: "created"}, nil
 }
 
-func (m *mockVolumeManager) GetVolume(volumeID string) (*fly.Volume, error) {
+func (m *mockVolumeManager) GetVolume(volumeID string) (*Volume, error) {
 	if m.getFn != nil {
 		return m.getFn(volumeID)
 	}
-	return &fly.Volume{ID: volumeID, State: "created"}, nil
+	return &Volume{ID: volumeID, State: "created"}, nil
 }
 
 func (m *mockVolumeManager) DeleteVolume(volumeID string) error {
@@ -195,8 +198,8 @@ func (m *mockVolumeManager) DeleteVolume(volumeID string) error {
 }
 
 type mockMachineManager struct {
-	createFn    func(name string, config fly.MachineConfig) (*fly.Machine, error)
-	getFn       func(machineID string) (*fly.Machine, error)
+	createFn    func(name string, config MachineConfig) (*Machine, error)
+	getFn       func(machineID string) (*Machine, error)
 	startFn     func(machineID string) error
 	stopFn      func(machineID string) error
 	deleteFn    func(machineID string) error
@@ -207,18 +210,18 @@ func newMockMachineManager() *mockMachineManager {
 	return &mockMachineManager{}
 }
 
-func (m *mockMachineManager) CreateMachine(name string, config fly.MachineConfig) (*fly.Machine, error) {
+func (m *mockMachineManager) CreateMachine(name string, config MachineConfig) (*Machine, error) {
 	if m.createFn != nil {
 		return m.createFn(name, config)
 	}
-	return &fly.Machine{ID: "machine-123", Name: name, State: "created"}, nil
+	return &Machine{ID: "machine-123", Name: name, State: "created"}, nil
 }
 
-func (m *mockMachineManager) GetMachine(machineID string) (*fly.Machine, error) {
+func (m *mockMachineManager) GetMachine(machineID string) (*Machine, error) {
 	if m.getFn != nil {
 		return m.getFn(machineID)
 	}
-	return &fly.Machine{ID: machineID, State: "stopped"}, nil
+	return &Machine{ID: machineID, State: "stopped"}, nil
 }
 
 func (m *mockMachineManager) StartMachine(machineID string) error {

@@ -1,5 +1,5 @@
 {
-  "name": "agent-service",
+  "name": "workspace-service",
   "version": "1.0.0",
   "type": "module",
   "scripts": {

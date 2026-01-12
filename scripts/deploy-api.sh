@@ -6,53 +6,42 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 cd "$PROJECT_ROOT"
 
-ENV_FILE=".env"
 APP_NAME="aether-api"
 
-if [ ! -f "$ENV_FILE" ]; then
-    echo "Error: $ENV_FILE not found"
-    exit 1
-fi
+echo "Deploying backend using Infisical secrets..."
 
-echo "Syncing secrets from $ENV_FILE to Fly app: $APP_NAME"
-
-# Build secrets array
-declare -a SECRETS_ARGS
-
-while IFS='=' read -r key value || [ -n "$key" ]; do
-    # Skip empty lines and comments
-    [[ -z "$key" || "$key" =~ ^#.* ]] && continue
-
-    # Trim whitespace
-    key=$(echo "$key" | xargs)
-
-    # Skip if key is empty after trim
+# Export secrets from Infisical and set on Fly
+infisical export --env=prod --path=/backend --format=dotenv | while IFS='=' read -r key value; do
     [ -z "$key" ] && continue
+    echo "  Setting $key"
+done
 
-    # Remove surrounding quotes from value
-    value="${value%\"}"
-    value="${value#\"}"
-    value="${value%\'}"
-    value="${value#\'}"
+# Set Fly secrets using infisical (FLY_API_TOKEN uses local auth, not Infisical)
+infisical run --env=prod --path=/backend -- bash -c "
+    unset FLY_API_TOKEN
+    fly secrets set \\
+        API_PORT=\"\$API_PORT\" \\
+        DATABASE_URL=\"\$DATABASE_URL\" \\
+        ENCRYPTION_MASTER_KEY=\"\$ENCRYPTION_MASTER_KEY\" \\
+        FLY_REGION=\"\$FLY_REGION\" \\
+        FLY_VMS_APP_NAME=\"\$FLY_VMS_APP_NAME\" \\
+        SUPABASE_URL=\"\$SUPABASE_URL\" \\
+        SUPABASE_ANON_KEY=\"\$SUPABASE_ANON_KEY\" \\
+        SUPABASE_SERVICE_KEY=\"\$SUPABASE_SERVICE_KEY\" \\
+        SUPABASE_JWT_SECRET=\"\$SUPABASE_JWT_SECRET\" \\
+        -a $APP_NAME
+"
 
-    # Skip path-based secrets (won't work on Fly)
-    [[ "$key" == "SSH_PRIVATE_KEY_PATH" ]] && continue
+# Set FLY_API_TOKEN from local .env (not Infisical)
+source .env
+fly secrets set FLY_API_TOKEN="$FLY_API_TOKEN" -a "$APP_NAME"
 
-    # Skip commented out keys
-    [[ "$key" =~ ^#.* ]] && continue
-
-    SECRETS_ARGS+=("$key=$value")
-done < "$ENV_FILE"
-
-# Add SSH key as base64
+# Add SSH key as base64 (from local file)
 if [ -f ".keys/aether_rsa" ]; then
     SSH_KEY_B64=$(base64 < .keys/aether_rsa | tr -d '\n')
-    SECRETS_ARGS+=("SSH_PRIVATE_KEY=$SSH_KEY_B64")
-    echo "Added SSH_PRIVATE_KEY from .keys/aether_rsa"
+    fly secrets set SSH_PRIVATE_KEY="$SSH_KEY_B64" -a "$APP_NAME"
+    echo "Added SSH_PRIVATE_KEY"
 fi
-
-echo "Setting ${#SECRETS_ARGS[@]} secrets..."
-fly secrets set "${SECRETS_ARGS[@]}" -a "$APP_NAME"
 
 echo ""
 echo "Deploying backend..."

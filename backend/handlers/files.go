@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"aether/db"
-	"aether/fly"
 	"aether/sftp"
 	authmw "aether/middleware"
 	"aether/validation"
@@ -17,19 +16,17 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-const SSHPort = 2222
-
 type FilesHandler struct {
-	sftp    *sftp.Client
-	fly     *fly.Client
-	db      *db.Client
+	sftp     *sftp.Client
+	resolver ConnectionResolver
+	db       *db.Client
 }
 
-func NewFilesHandler(sftpClient *sftp.Client, flyClient *fly.Client, dbClient *db.Client) *FilesHandler {
+func NewFilesHandler(sftpClient *sftp.Client, resolver ConnectionResolver, dbClient *db.Client) *FilesHandler {
 	return &FilesHandler{
-		sftp: sftpClient,
-		fly:  flyClient,
-		db:   dbClient,
+		sftp:     sftpClient,
+		resolver: resolver,
+		db:       dbClient,
 	}
 }
 
@@ -82,26 +79,16 @@ func (h *FilesHandler) ListTree(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if project.FlyMachineID == nil || *project.FlyMachineID == "" {
-		WriteError(w, http.StatusBadRequest, "Project has no VM")
-		return
-	}
-
-	// Get machine and check actual state
-	machine, err := h.fly.GetMachine(*project.FlyMachineID)
+	// Get connection info
+	connInfo, err := h.resolver.GetConnectionInfo(project)
 	if err != nil {
-		log.Printf("Error getting machine: %v", err)
-		WriteError(w, http.StatusInternalServerError, "Failed to get VM")
-		return
-	}
-
-	if machine.State != "started" {
-		WriteError(w, http.StatusServiceUnavailable, "VM is not running")
+		log.Printf("Error getting connection info: %v", err)
+		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	// Get all files
-	tree, err := h.sftp.ListAllFiles(machine.PrivateIP, SSHPort)
+	tree, err := h.sftp.ListAllFiles(connInfo.Host, connInfo.Port)
 	if err != nil {
 		log.Printf("Error listing all files: %v", err)
 		WriteError(w, http.StatusInternalServerError, "Failed to list files")
@@ -159,27 +146,16 @@ func (h *FilesHandler) ListOrRead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if project.FlyMachineID == nil || *project.FlyMachineID == "" {
-		WriteError(w, http.StatusBadRequest, "Project has no VM")
-		return
-	}
-
-	// Get machine and check actual state
-	machine, err := h.fly.GetMachine(*project.FlyMachineID)
+	// Get connection info
+	connInfo, err := h.resolver.GetConnectionInfo(project)
 	if err != nil {
-		log.Printf("Error getting machine: %v", err)
-		WriteError(w, http.StatusInternalServerError, "Failed to get VM")
-		return
-	}
-
-	// Check if machine is actually running (database status might be stale)
-	if machine.State != "started" {
-		WriteError(w, http.StatusServiceUnavailable, "VM is not running")
+		log.Printf("Error getting connection info: %v", err)
+		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	// Try to stat the path first to determine if it's a file or directory
-	info, err := h.sftp.Stat(machine.PrivateIP, SSHPort, path)
+	info, err := h.sftp.Stat(connInfo.Host, connInfo.Port, path)
 	if err != nil {
 		// Check if it's a "not found" error
 		if strings.Contains(err.Error(), "not exist") || strings.Contains(err.Error(), "no such file") {
@@ -194,7 +170,7 @@ func (h *FilesHandler) ListOrRead(w http.ResponseWriter, r *http.Request) {
 	// If it's a file (has content), read it
 	// We detect this by checking if the path ends with a file extension or stat size > 0
 	// Better approach: try to list as directory first
-	listing, err := h.sftp.List(machine.PrivateIP, SSHPort, path)
+	listing, err := h.sftp.List(connInfo.Host, connInfo.Port, path)
 	if err == nil {
 		// It's a directory, return listing
 		WriteJSON(w, http.StatusOK, listing)
@@ -202,7 +178,7 @@ func (h *FilesHandler) ListOrRead(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Not a directory, must be a file - read it
-	fileInfo, err := h.sftp.Read(machine.PrivateIP, SSHPort, path)
+	fileInfo, err := h.sftp.Read(connInfo.Host, connInfo.Port, path)
 	if err != nil {
 		if strings.Contains(err.Error(), "too large") {
 			WriteJSON(w, http.StatusBadRequest, map[string]any{
@@ -275,24 +251,15 @@ func (h *FilesHandler) Write(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if project.FlyMachineID == nil || *project.FlyMachineID == "" {
-		WriteError(w, http.StatusBadRequest, "Project has no VM")
-		return
-	}
-
-	machine, err := h.fly.GetMachine(*project.FlyMachineID)
+	// Get connection info
+	connInfo, err := h.resolver.GetConnectionInfo(project)
 	if err != nil {
-		log.Printf("Error getting machine: %v", err)
-		WriteError(w, http.StatusInternalServerError, "Failed to get VM")
+		log.Printf("Error getting connection info: %v", err)
+		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	if machine.State != "started" {
-		WriteError(w, http.StatusServiceUnavailable, "VM is not running")
-		return
-	}
-
-	fileInfo, err := h.sftp.Write(machine.PrivateIP, SSHPort, path, []byte(req.Content))
+	fileInfo, err := h.sftp.Write(connInfo.Host, connInfo.Port, path, []byte(req.Content))
 	if err != nil {
 		if strings.Contains(err.Error(), "too large") {
 			WriteJSON(w, http.StatusBadRequest, map[string]any{
@@ -358,24 +325,15 @@ func (h *FilesHandler) Mkdir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if project.FlyMachineID == nil || *project.FlyMachineID == "" {
-		WriteError(w, http.StatusBadRequest, "Project has no VM")
-		return
-	}
-
-	machine, err := h.fly.GetMachine(*project.FlyMachineID)
+	// Get connection info
+	connInfo, err := h.resolver.GetConnectionInfo(project)
 	if err != nil {
-		log.Printf("Error getting machine: %v", err)
-		WriteError(w, http.StatusInternalServerError, "Failed to get VM")
+		log.Printf("Error getting connection info: %v", err)
+		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	if machine.State != "started" {
-		WriteError(w, http.StatusServiceUnavailable, "VM is not running")
-		return
-	}
-
-	if err := h.sftp.Mkdir(machine.PrivateIP, SSHPort, req.Path); err != nil {
+	if err := h.sftp.Mkdir(connInfo.Host, connInfo.Port, req.Path); err != nil {
 		log.Printf("Error creating directory: %v", err)
 		WriteError(w, http.StatusInternalServerError, "Failed to create directory")
 		return
@@ -430,24 +388,15 @@ func (h *FilesHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if project.FlyMachineID == nil || *project.FlyMachineID == "" {
-		WriteError(w, http.StatusBadRequest, "Project has no VM")
-		return
-	}
-
-	machine, err := h.fly.GetMachine(*project.FlyMachineID)
+	// Get connection info
+	connInfo, err := h.resolver.GetConnectionInfo(project)
 	if err != nil {
-		log.Printf("Error getting machine: %v", err)
-		WriteError(w, http.StatusInternalServerError, "Failed to get VM")
+		log.Printf("Error getting connection info: %v", err)
+		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	if machine.State != "started" {
-		WriteError(w, http.StatusServiceUnavailable, "VM is not running")
-		return
-	}
-
-	if err := h.sftp.Delete(machine.PrivateIP, SSHPort, path); err != nil {
+	if err := h.sftp.Delete(connInfo.Host, connInfo.Port, path); err != nil {
 		if strings.Contains(err.Error(), "not exist") || strings.Contains(err.Error(), "no such file") {
 			WriteError(w, http.StatusNotFound, "Path not found")
 			return
@@ -517,24 +466,15 @@ func (h *FilesHandler) Rename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if project.FlyMachineID == nil || *project.FlyMachineID == "" {
-		WriteError(w, http.StatusBadRequest, "Project has no VM")
-		return
-	}
-
-	machine, err := h.fly.GetMachine(*project.FlyMachineID)
+	// Get connection info
+	connInfo, err := h.resolver.GetConnectionInfo(project)
 	if err != nil {
-		log.Printf("Error getting machine: %v", err)
-		WriteError(w, http.StatusInternalServerError, "Failed to get VM")
+		log.Printf("Error getting connection info: %v", err)
+		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	if machine.State != "started" {
-		WriteError(w, http.StatusServiceUnavailable, "VM is not running")
-		return
-	}
-
-	if err := h.sftp.Rename(machine.PrivateIP, SSHPort, req.OldPath, req.NewPath); err != nil {
+	if err := h.sftp.Rename(connInfo.Host, connInfo.Port, req.OldPath, req.NewPath); err != nil {
 		if strings.Contains(err.Error(), "not exist") || strings.Contains(err.Error(), "no such file") {
 			WriteError(w, http.StatusNotFound, "Source path not found")
 			return

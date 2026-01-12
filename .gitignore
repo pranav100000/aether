@@ -16,6 +16,8 @@ backend/aether
 .env
 .env.local
 .env.*.local
+.env.secrets
+**/.env.secrets
 
 # Keys and secrets
 .keys/

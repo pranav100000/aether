@@ -74,9 +74,9 @@ COPY --chown=coder:coder tmux.conf /home/coder/.tmux.conf
 
 USER root
 
-# Copy and install agent-service
-COPY agent-service /opt/agent-service
-WORKDIR /opt/agent-service
+# Copy and install workspace-service (runs in VM, handles agent tools)
+COPY workspace-service /opt/workspace-service
+WORKDIR /opt/workspace-service
 RUN bun install --frozen-lockfile --production
 WORKDIR /home/coder
 

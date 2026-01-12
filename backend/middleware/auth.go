@@ -15,10 +15,11 @@ type contextKey string
 const UserIDKey contextKey = "user_id"
 
 type AuthMiddleware struct {
-	jwks keyfunc.Keyfunc
+	jwks      keyfunc.Keyfunc
+	jwtSecret []byte
 }
 
-func NewAuthMiddleware(supabaseURL string) (*AuthMiddleware, error) {
+func NewAuthMiddleware(supabaseURL string, jwtSecret string) (*AuthMiddleware, error) {
 	// Supabase JWKS endpoint
 	jwksURL := supabaseURL + "/auth/v1/.well-known/jwks.json"
 
@@ -29,7 +30,8 @@ func NewAuthMiddleware(supabaseURL string) (*AuthMiddleware, error) {
 	}
 
 	return &AuthMiddleware{
-		jwks: jwks,
+		jwks:      jwks,
+		jwtSecret: []byte(jwtSecret),
 	}, nil
 }
 
@@ -51,8 +53,8 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 
 		tokenString := parts[1]
 
-		// Parse and validate token using JWKS
-		token, err := jwt.Parse(tokenString, m.jwks.Keyfunc)
+		// Parse and validate token - try JWKS first, fall back to HS256 secret
+		token, err := m.parseToken(tokenString)
 		if err != nil {
 			writeAuthError(w, "invalid token: "+err.Error())
 			return
@@ -117,7 +119,7 @@ func ExtractTokenFromRequest(r *http.Request) string {
 
 // ValidateToken validates a JWT and returns the user ID
 func (m *AuthMiddleware) ValidateToken(tokenString string) (string, error) {
-	token, err := jwt.Parse(tokenString, m.jwks.Keyfunc)
+	token, err := m.parseToken(tokenString)
 	if err != nil {
 		return "", fmt.Errorf("invalid token: %w", err)
 	}
@@ -137,6 +139,30 @@ func (m *AuthMiddleware) ValidateToken(tokenString string) (string, error) {
 	}
 
 	return userID, nil
+}
+
+// parseToken tries JWKS first, then falls back to HS256 secret (for local Supabase)
+func (m *AuthMiddleware) parseToken(tokenString string) (*jwt.Token, error) {
+	// Try JWKS first (production Supabase with asymmetric keys)
+	token, err := jwt.Parse(tokenString, m.jwks.Keyfunc)
+	if err == nil && token.Valid {
+		return token, nil
+	}
+
+	// Fall back to HS256 secret (local Supabase uses shared secret)
+	if len(m.jwtSecret) > 0 {
+		token, err = jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+			}
+			return m.jwtSecret, nil
+		})
+		if err == nil && token.Valid {
+			return token, nil
+		}
+	}
+
+	return nil, fmt.Errorf("token validation failed")
 }
 
 func writeAuthError(w http.ResponseWriter, message string) {

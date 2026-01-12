@@ -1,0 +1,54 @@
+services:
+  # ===========================================
+  # Backend (Go API)
+  # ===========================================
+  # Note: Requires local Supabase running (make supabase-start)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./backend:/app
+      - ./.keys:/app/.keys:ro
+      - go_mod_cache:/go/pkg/mod
+      - /var/run/docker.sock:/var/run/docker.sock
+    env_file:
+      - ./backend/.env
+    environment:
+      # Override to use Supabase's Postgres via host network
+      - DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:54322/postgres?sslmode=disable
+      # Override Supabase URL to use host network
+      - SUPABASE_URL=http://host.docker.internal:54321
+      # LOCAL_MODE paths are read from backend/.env
+      # They must be absolute host paths for Docker-in-Docker volume mounts
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # ===========================================
+  # Workspace Service (Agent Handler)
+  # ===========================================
+  workspace:
+    build:
+      context: ./workspace-service
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./workspace-service/src:/app/src:ro
+      - ${TEST_PROJECT_DIR:-./workspace-service/test-project}:/home/coder/project
+      - workspace_data:/home/coder/project/.aether
+    env_file:
+      - ./workspace-service/.env
+    environment:
+      # Server config (set here, not in .env)
+      - AGENT_PORT=3001
+      - PROJECT_CWD=/home/coder/project
+      - STORAGE_DIR=/home/coder/project/.aether
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  go_mod_cache:
+  workspace_data:
