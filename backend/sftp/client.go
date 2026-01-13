@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -316,9 +317,9 @@ func (c *Client) ListAllFiles(host string, port int) (*FileTree, error) {
 
 // walkDirectoryParallel walks the directory tree using parallel goroutines
 func (c *Client) walkDirectoryParallel(sftpClient *sftp.Client, basePath string) (*FileTree, error) {
-	// Use make() to ensure empty arrays serialize as [] not null
-	paths := make([]string, 0)
-	directories := make([]string, 0)
+	// Use sets to detect duplicates
+	pathSet := make(map[string]struct{})
+	dirSet := make(map[string]struct{})
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
@@ -354,17 +355,19 @@ func (c *Client) walkDirectoryParallel(sftpClient *sftp.Client, basePath string)
 		for _, entry := range entries {
 			name := entry.Name()
 
-			// Skip hidden entries
+			// Skip hidden directories (starting with .) and other excluded entries
 			if HiddenEntries[name] {
+				continue
+			}
+			if entry.IsDir() && strings.HasPrefix(name, ".") {
 				continue
 			}
 
 			// Build relative path (what frontend expects)
-			var entryRelPath string
-			if relativePath == "" {
-				entryRelPath = "/" + name
-			} else {
-				entryRelPath = filepath.Join(relativePath, name)
+			// Use path.Join for consistent forward slashes (not filepath.Join which uses OS separators)
+			entryRelPath := path.Join(relativePath, name)
+			if !strings.HasPrefix(entryRelPath, "/") {
+				entryRelPath = "/" + entryRelPath
 			}
 
 			if entry.IsDir() {
@@ -375,10 +378,20 @@ func (c *Client) walkDirectoryParallel(sftpClient *sftp.Client, basePath string)
 			}
 		}
 
-		// Append results under lock
+		// Add to sets under lock, check for duplicates
 		mu.Lock()
-		paths = append(paths, localFiles...)
-		directories = append(directories, localDirs...)
+		for _, f := range localFiles {
+			if _, exists := pathSet[f]; exists {
+				errOnce.Do(func() { walkErr = fmt.Errorf("duplicate file path detected: %s", f) })
+			}
+			pathSet[f] = struct{}{}
+		}
+		for _, d := range localDirs {
+			if _, exists := dirSet[d]; exists {
+				errOnce.Do(func() { walkErr = fmt.Errorf("duplicate directory path detected: %s", d) })
+			}
+			dirSet[d] = struct{}{}
+		}
 		mu.Unlock()
 
 		// Process subdirectories in parallel
@@ -397,6 +410,16 @@ func (c *Client) walkDirectoryParallel(sftpClient *sftp.Client, basePath string)
 
 	if walkErr != nil {
 		return nil, walkErr
+	}
+
+	// Convert sets to slices
+	paths := make([]string, 0, len(pathSet))
+	for p := range pathSet {
+		paths = append(paths, p)
+	}
+	directories := make([]string, 0, len(dirSet))
+	for d := range dirSet {
+		directories = append(directories, d)
 	}
 
 	return &FileTree{

@@ -92,8 +92,10 @@ export function useAgentConnection({
         if (!session?.access_token) {
           throw new Error("Not authenticated")
         }
-        // Append token as query param for reconnection support
-        return `${wsUrl}?token=${session.access_token}`
+        // Use URL constructor to properly handle existing query params
+        const url = new URL(wsUrl)
+        url.searchParams.set("token", session.access_token)
+        return url.toString()
       }
 
       const ws = new ReconnectingWebSocket(urlProvider, [], {
