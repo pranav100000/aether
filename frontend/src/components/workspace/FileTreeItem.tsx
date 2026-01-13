@@ -5,13 +5,7 @@ import { cn } from "@/lib/utils"
 import { useFileTreeContext } from "@/contexts/FileTreeContext"
 import { FileIcon } from "@/components/icons/FileIcon"
 import { dirname, join } from "@/lib/path-utils"
-
-export interface TreeNode {
-  name: string
-  path: string
-  type: "file" | "directory"
-  children?: TreeNode[]
-}
+import type { TreeNode } from "@/lib/file-tree-utils"
 
 interface FileTreeItemProps {
   node: TreeNode

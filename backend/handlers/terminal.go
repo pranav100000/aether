@@ -213,13 +213,13 @@ func (h *TerminalHandler) HandleTerminal(w http.ResponseWriter, r *http.Request)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			h.startFileWatcher(conn, connInfo.Host, done, &wsMu)
+			h.startFileWatcher(conn, connInfo, done, &wsMu)
 		}()
 
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			h.startPortWatcher(conn, connInfo.Host, done, &wsMu)
+			h.startPortWatcher(conn, connInfo, done, &wsMu)
 		}()
 	}
 
@@ -384,9 +384,9 @@ func sendError(conn *websocket.Conn, message string) {
 	conn.WriteMessage(websocket.TextMessage, data)
 }
 
-func (h *TerminalHandler) startFileWatcher(conn *websocket.Conn, privateIP string, done chan struct{}, wsMu *sync.Mutex) {
+func (h *TerminalHandler) startFileWatcher(conn *websocket.Conn, connInfo *ConnectionInfo, done chan struct{}, wsMu *sync.Mutex) {
 	// Connect to SSH for file watching
-	watchSession, err := h.sshClient.ConnectWithRetry(privateIP, 2222, 3, 2*time.Second)
+	watchSession, err := h.sshClient.ConnectWithRetry(connInfo.Host, connInfo.Port, 3, 2*time.Second)
 	if err != nil {
 		log.Printf("File watcher SSH connection error: %v", err)
 		return
@@ -484,11 +484,11 @@ func (h *TerminalHandler) startFileWatcher(conn *websocket.Conn, privateIP strin
 	}
 }
 
-func (h *TerminalHandler) startPortWatcher(conn *websocket.Conn, privateIP string, done chan struct{}, wsMu *sync.Mutex) {
-	log.Printf("Port watcher: starting for %s", privateIP)
+func (h *TerminalHandler) startPortWatcher(conn *websocket.Conn, connInfo *ConnectionInfo, done chan struct{}, wsMu *sync.Mutex) {
+	log.Printf("Port watcher: starting for %s:%d", connInfo.Host, connInfo.Port)
 
 	// Connect to SSH for port watching
-	watchSession, err := h.sshClient.ConnectWithRetry(privateIP, 2222, 3, 2*time.Second)
+	watchSession, err := h.sshClient.ConnectWithRetry(connInfo.Host, connInfo.Port, 3, 2*time.Second)
 	if err != nil {
 		log.Printf("Port watcher SSH connection error: %v", err)
 		return

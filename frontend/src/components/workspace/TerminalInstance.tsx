@@ -93,7 +93,7 @@ export const TerminalInstance = forwardRef<TerminalInstanceHandle, TerminalInsta
       const terminal = new XTerm({
         cursorBlink: true,
         fontSize: 14,
-        fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+        fontFamily: "JetBrains Mono",
         theme: {
           background: "#0a0a0a",
           foreground: "#e5e5e5",

@@ -23,7 +23,7 @@ export function Layout() {
       <header className="border-b">
         <div className="container mx-auto flex h-14 items-center justify-between px-4">
           <Link to="/" className="text-xl font-bold">
-            Aether
+            æther
           </Link>
 
           {user && (

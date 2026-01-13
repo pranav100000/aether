@@ -98,7 +98,10 @@ export class AgentHandler {
         break
 
       case "prompt":
-        await this.handlePrompt(msg)
+        // Don't await - process in background so abort can interrupt
+        this.handlePrompt(msg).catch((err) => {
+          this.sender.send({ type: "error", error: String(err) })
+        })
         break
 
       case "abort":

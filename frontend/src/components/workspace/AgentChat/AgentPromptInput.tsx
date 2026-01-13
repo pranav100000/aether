@@ -20,6 +20,7 @@ import getCaretCoordinates from "textarea-caret"
 
 export interface AgentPromptInputProps {
   onSubmit: (text: string, attachedFiles: string[]) => void
+  onStop?: () => void
   disabled: boolean
   status: ChatStatus
   agentIcon: LucideIcon
@@ -30,6 +31,7 @@ export interface AgentPromptInputProps {
 
 export function AgentPromptInput({
   onSubmit,
+  onStop,
   disabled,
   status,
   agentIcon: AgentIcon,
@@ -134,7 +136,17 @@ export function AgentPromptInput({
     setAttachedFiles([])
   }, [onSubmit, attachedFiles])
 
-  const isSubmitDisabled = disabled || !input.trim() || status === "streaming" || status === "submitted"
+  const isProcessing = status === "submitted" || status === "streaming"
+
+  const handleStopClick = useCallback((e: React.MouseEvent) => {
+    if (isProcessing && onStop) {
+      e.preventDefault()
+      onStop()
+    }
+  }, [isProcessing, onStop])
+
+  // Button is clickable during processing (for stop), disabled only when no input and not processing
+  const isSubmitDisabled = disabled || (!input.trim() && !isProcessing)
 
   return (
     <div ref={containerRef} className="relative w-full px-4 pb-4">
@@ -154,7 +166,7 @@ export function AgentPromptInput({
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             placeholder={disabled ? "Connecting..." : placeholder}
-            disabled={disabled || status === "streaming" || status === "submitted"}
+            disabled={disabled || isProcessing}
           />
         </PromptInputBody>
         <PromptInputFooter>
@@ -168,6 +180,7 @@ export function AgentPromptInput({
           <PromptInputSubmit
             disabled={isSubmitDisabled}
             status={status === "ready" ? undefined : status}
+            onClick={handleStopClick}
           />
         </PromptInputFooter>
       </PromptInput>

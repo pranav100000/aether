@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	MaxFileSize   = 1 * 1024 * 1024 // 1MB
+	MaxFileSize   = 100 * 1024 * 1024 // 100MB
 	WorkingDir    = "/home/coder/project"
 	ConnectionTTL = 5 * time.Minute
 )

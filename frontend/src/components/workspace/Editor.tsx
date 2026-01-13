@@ -116,7 +116,7 @@ export function Editor({ file, onContentChange, onSave }: EditorProps) {
           overflow: "auto",
         },
         ".cm-content": {
-          fontFamily: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
+          fontFamily: "JetBrains Mono",
         },
         ".cm-gutters": {
           backgroundColor: "#1a1a1a",

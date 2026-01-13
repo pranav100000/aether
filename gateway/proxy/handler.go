@@ -11,22 +11,22 @@ import (
 	"time"
 
 	"aether/db"
-	"aether/fly"
+	"aether/handlers"
 )
 
 // Handler handles all incoming proxy requests
 type Handler struct {
 	db            *db.Client
-	flyClient     *fly.Client
+	machines      handlers.MachineManager
 	previewDomain string
 	cache         *ProjectCache
 }
 
 // NewHandler creates a new proxy handler
-func NewHandler(dbClient *db.Client, flyClient *fly.Client, previewDomain string) *Handler {
+func NewHandler(dbClient *db.Client, machines handlers.MachineManager, previewDomain string) *Handler {
 	return &Handler{
 		db:            dbClient,
-		flyClient:     flyClient,
+		machines:      machines,
 		previewDomain: previewDomain,
 		cache:         NewProjectCache(30 * time.Second),
 	}
@@ -95,7 +95,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	machine, err := h.flyClient.GetMachine(*project.FlyMachineID)
+	machine, err := h.machines.GetMachine(*project.FlyMachineID)
 	if err != nil {
 		log.Printf("Failed to get machine %s: %v", *project.FlyMachineID, err)
 		http.Error(w, "Failed to connect to project", http.StatusBadGateway)

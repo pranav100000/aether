@@ -1,4 +1,4 @@
-.PHONY: help setup dev dev-services dev-frontend dev-backend stop clean logs check
+.PHONY: help setup dev dev-services dev-frontend dev-backend stop clean clean-vms logs check
 .PHONY: supabase-start supabase-stop supabase-status supabase-reset db-shell
 
 # Default target
@@ -25,6 +25,7 @@ help:
 	@echo "Utilities:"
 	@echo "  make stop           - Stop all services"
 	@echo "  make clean          - Stop all and remove volumes"
+	@echo "  make clean-vms      - Remove local VM containers"
 	@echo "  make logs           - Tail Docker logs"
 
 # ===========================================
@@ -84,6 +85,7 @@ dev-services:
 	@echo ""
 	@echo "Services started:"
 	@echo "  - Backend: http://localhost:8080"
+	@echo "  - Gateway: http://localhost:8081 (preview URLs)"
 	@echo ""
 	@echo "Run 'make logs' to see logs"
 
@@ -137,6 +139,11 @@ clean:
 	docker compose down -v
 	supabase stop
 	@echo "All services stopped and volumes removed"
+
+clean-vms:
+	@echo "Removing local VM containers..."
+	@docker ps -a --filter "name=local-aether-" --format "{{.Names}}" | xargs -r docker rm -f 2>/dev/null || true
+	@echo "Done"
 
 logs:
 	docker compose logs -f

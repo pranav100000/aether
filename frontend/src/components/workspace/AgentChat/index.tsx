@@ -93,6 +93,7 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
     status: connectionStatus,
     connect,
     sendPrompt,
+    sendAbort,
   } = useAgentConnection({
     projectId,
     agent,
@@ -138,6 +139,11 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
     )
   }, [isConnected, addUserMessage, sendPrompt, settings])
 
+  const handleStop = useCallback(() => {
+    sendAbort()
+    setStatus("ready")
+  }, [sendAbort, setStatus])
+
   return (
     <div className="relative flex size-full flex-col divide-y divide-zinc-800 overflow-hidden bg-zinc-950">
       <AgentHeader
@@ -153,6 +159,7 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
       <AgentMessageList
         messages={messages}
         status={status}
+        agent={agent}
         agentIcon={currentAgentConfig.icon}
         agentName={currentAgentConfig.name}
         agentColor={currentAgentConfig.color}
@@ -167,6 +174,7 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
       <div className="grid shrink-0 gap-4 pt-4">
         <AgentPromptInput
           onSubmit={handleSubmit}
+          onStop={handleStop}
           disabled={!isConnected}
           status={status}
           agentIcon={currentAgentConfig.icon}
