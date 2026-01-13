@@ -287,18 +287,14 @@ func (c *Client) List(host string, port int, path string) (*DirListing, error) {
 }
 
 // ListAllFiles recursively walks the directory tree and returns all file and directory paths
+// Uses parallel directory walking for better performance
 func (c *Client) ListAllFiles(host string, port int) (*FileTree, error) {
 	sftpClient, err := c.getOrCreateConnection(host, port)
 	if err != nil {
 		return nil, err
 	}
 
-	result := &FileTree{
-		Paths:       make([]string, 0),
-		Directories: make([]string, 0),
-	}
-
-	err = c.walkDirectory(sftpClient, WorkingDir, "", result)
+	result, err := c.walkDirectoryParallel(sftpClient, WorkingDir)
 	if err != nil {
 		// Retry once if connection error
 		if isConnectionError(err) {
@@ -306,10 +302,7 @@ func (c *Client) ListAllFiles(host string, port int) (*FileTree, error) {
 			if err != nil {
 				return nil, err
 			}
-			// Reset and retry
-			result.Paths = make([]string, 0)
-			result.Directories = make([]string, 0)
-			err = c.walkDirectory(sftpClient, WorkingDir, "", result)
+			result, err = c.walkDirectoryParallel(sftpClient, WorkingDir)
 			if err != nil {
 				return nil, fmt.Errorf("failed to walk directory: %w", err)
 			}
@@ -321,47 +314,95 @@ func (c *Client) ListAllFiles(host string, port int) (*FileTree, error) {
 	return result, nil
 }
 
-// walkDirectory recursively walks a directory and collects file/directory paths
-func (c *Client) walkDirectory(sftpClient *sftp.Client, basePath string, relativePath string, result *FileTree) error {
-	fullPath := basePath
-	if relativePath != "" {
-		fullPath = filepath.Join(basePath, relativePath)
-	}
+// walkDirectoryParallel walks the directory tree using parallel goroutines
+func (c *Client) walkDirectoryParallel(sftpClient *sftp.Client, basePath string) (*FileTree, error) {
+	// Use make() to ensure empty arrays serialize as [] not null
+	paths := make([]string, 0)
+	directories := make([]string, 0)
+	var mu sync.Mutex
+	var wg sync.WaitGroup
 
-	entries, err := sftpClient.ReadDir(fullPath)
-	if err != nil {
-		return err
-	}
+	// Semaphore to limit concurrent ReadDir calls
+	sem := make(chan struct{}, 10)
 
-	for _, entry := range entries {
-		name := entry.Name()
+	var walkErr error
+	var errOnce sync.Once
 
-		// Skip hidden entries
-		if HiddenEntries[name] {
-			continue
+	var walk func(relativePath string)
+	walk = func(relativePath string) {
+		defer wg.Done()
+
+		// Acquire semaphore
+		sem <- struct{}{}
+		defer func() { <-sem }()
+
+		fullPath := basePath
+		if relativePath != "" {
+			fullPath = filepath.Join(basePath, relativePath)
 		}
 
-		// Build relative path (what frontend expects)
-		var entryRelPath string
-		if relativePath == "" {
-			entryRelPath = "/" + name
-		} else {
-			entryRelPath = filepath.Join(relativePath, name)
+		entries, err := sftpClient.ReadDir(fullPath)
+		if err != nil {
+			errOnce.Do(func() { walkErr = err })
+			return
 		}
 
-		if entry.IsDir() {
-			result.Directories = append(result.Directories, entryRelPath)
-			// Recurse into subdirectory
-			if err := c.walkDirectory(sftpClient, basePath, entryRelPath, result); err != nil {
-				// Log but continue on errors in subdirectories
+		var localFiles []string
+		var localDirs []string
+		var subDirs []string
+
+		for _, entry := range entries {
+			name := entry.Name()
+
+			// Skip hidden entries
+			if HiddenEntries[name] {
 				continue
 			}
-		} else {
-			result.Paths = append(result.Paths, entryRelPath)
+
+			// Build relative path (what frontend expects)
+			var entryRelPath string
+			if relativePath == "" {
+				entryRelPath = "/" + name
+			} else {
+				entryRelPath = filepath.Join(relativePath, name)
+			}
+
+			if entry.IsDir() {
+				localDirs = append(localDirs, entryRelPath)
+				subDirs = append(subDirs, entryRelPath)
+			} else {
+				localFiles = append(localFiles, entryRelPath)
+			}
+		}
+
+		// Append results under lock
+		mu.Lock()
+		paths = append(paths, localFiles...)
+		directories = append(directories, localDirs...)
+		mu.Unlock()
+
+		// Process subdirectories in parallel
+		for _, subDir := range subDirs {
+			wg.Add(1)
+			go walk(subDir)
 		}
 	}
 
-	return nil
+	// Start with root directory
+	wg.Add(1)
+	go walk("")
+
+	// Wait for all walks to complete
+	wg.Wait()
+
+	if walkErr != nil {
+		return nil, walkErr
+	}
+
+	return &FileTree{
+		Paths:       paths,
+		Directories: directories,
+	}, nil
 }
 
 // Read returns the contents of a file

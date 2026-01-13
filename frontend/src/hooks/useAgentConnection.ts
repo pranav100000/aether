@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react"
+import ReconnectingWebSocket from "reconnecting-websocket"
 import { supabase } from "@/lib/supabase"
 import { api } from "@/lib/api"
 import type {
@@ -41,7 +42,7 @@ export function useAgentConnection({
   const [status, setStatus] = useState<ConnectionStatus>("disconnected")
   const [error, setError] = useState<string | null>(null)
 
-  const wsRef = useRef<WebSocket | null>(null)
+  const wsRef = useRef<ReconnectingWebSocket | null>(null)
   const connectionIdRef = useRef(0)
 
   const updateStatus = useCallback((newStatus: ConnectionStatus) => {
@@ -82,24 +83,24 @@ export function useAgentConnection({
       const wsUrl = api.getAgentUrl(projectId, agent)
       const isLocalMode = !!import.meta.env.VITE_LOCAL_AGENT_URL
 
-      let ws: WebSocket
-
-      if (isLocalMode) {
-        // Local dev mode: no authentication needed
-        ws = new WebSocket(wsUrl)
-      } else {
-        // Production mode: authenticate via Supabase
+      // URL provider that refreshes auth token on each reconnect
+      const urlProvider = async () => {
+        if (isLocalMode) {
+          return wsUrl
+        }
         const { data: { session } } = await supabase.auth.getSession()
-
-        // Check if this connection attempt is still valid
-        if (connectionIdRef.current !== thisConnectionId) return
-
         if (!session?.access_token) {
           throw new Error("Not authenticated")
         }
-
-        ws = new WebSocket(wsUrl, ["bearer", session.access_token])
+        // Append token as query param for reconnection support
+        return `${wsUrl}?token=${session.access_token}`
       }
+
+      const ws = new ReconnectingWebSocket(urlProvider, [], {
+        maxRetries: 10,
+        connectionTimeout: 10000,
+        maxReconnectionDelay: 10000,
+      })
 
       // Check if this connection attempt is still valid
       if (connectionIdRef.current !== thisConnectionId) {
@@ -116,7 +117,7 @@ export function useAgentConnection({
       ws.onmessage = (event) => {
         if (connectionIdRef.current !== thisConnectionId) return
         try {
-          const message: ServerMessage = JSON.parse(event.data)
+          const message: ServerMessage = JSON.parse(event.data as string)
           onMessage(message)
         } catch (e) {
           console.error("[useAgentConnection] Failed to parse message:", event.data, e)

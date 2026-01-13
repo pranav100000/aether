@@ -130,7 +130,7 @@ function messagesReducer(state: ChatMessage[], action: MessageAction): ChatMessa
             id: action.tool.id,
             name: action.tool.name,
             input: action.tool.input,
-            status: "call",
+            status: "input-available",
           },
         },
       ]
@@ -142,7 +142,7 @@ function messagesReducer(state: ChatMessage[], action: MessageAction): ChatMessa
             ...msg,
             tool: {
               ...msg.tool,
-              status: action.error ? "result" : "result",
+              status: action.error ? "output-error" : "output-available",
               result: action.result,
               error: action.error,
             },
@@ -214,7 +214,11 @@ function historyToChatMessage(histMsg: HistoryMessage): ChatMessage {
         id: histMsg.tool.id,
         name: histMsg.tool.name,
         input: histMsg.tool.input,
-        status: histMsg.tool.result ? "result" : histMsg.tool.error ? "result" : "call",
+        status: histMsg.tool.result
+          ? "output-available"
+          : histMsg.tool.error
+            ? "output-error"
+            : "input-available",
         result: histMsg.tool.result,
         error: histMsg.tool.error,
       },
