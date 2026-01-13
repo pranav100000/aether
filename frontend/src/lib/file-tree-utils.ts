@@ -67,7 +67,7 @@ export function buildTreeFromFilePaths(filePaths: string[]): TreeNode[] {
   // Extract all directory paths from file paths
   for (const filePath of filePaths) {
     let dir = dirname(filePath)
-    while (dir && dir !== "/" && dir !== "") {
+    while (dir && dir !== "/" && dir !== "" && dir !== ".") {
       directories.add(dir)
       dir = dirname(dir)
     }

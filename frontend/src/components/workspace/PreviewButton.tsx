@@ -14,7 +14,7 @@ const PREVIEW_DOMAIN = import.meta.env.VITE_PREVIEW_DOMAIN || "localhost:8081"
 
 function getPreviewUrl(projectId: string, port: number, token?: string): string {
   // For localhost, use direct port access (no subdomain proxy)
-  if (PREVIEW_DOMAIN === "localhost") {
+  if (PREVIEW_DOMAIN.startsWith("localhost")) {
     return `http://localhost:${port}`
   }
 

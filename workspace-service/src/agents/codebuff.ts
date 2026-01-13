@@ -90,6 +90,9 @@ export class CodebuffProvider implements AgentProvider {
       // Wait for next event or completion signal
       await new Promise<void>((resolve) => {
         resolveWait = resolve
+        // Also resolve on abort to prevent hanging
+        const onAbort = () => resolve()
+        this.abortController?.signal.addEventListener("abort", onAbort, { once: true })
       })
     }
 

@@ -49,3 +49,7 @@ temp/
 
 # Playwright MCP
 .playwright-mcp/
+
+# Local Docker Container File System
+infra/images/base/workspace-service
+infra/images/base/

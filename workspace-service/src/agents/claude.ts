@@ -47,7 +47,10 @@ export class ClaudeProvider implements AgentProvider {
 
       for await (const msg of q) {
         // Check if aborted before processing
-        if (this.abortController?.signal.aborted) return
+        if (this.abortController?.signal.aborted) {
+          yield { type: "done" }
+          return
+        }
 
         if (msg.session_id && !this.sessionId) {
           this.sessionId = msg.session_id

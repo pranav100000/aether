@@ -206,10 +206,10 @@ func getContainerState(containerID string) string {
 	return status
 }
 
-// getContainerIP returns the Docker network IP of a container
+// getContainerIP returns the Docker network IP of a container on the aether network
 func getContainerIP(containerID string) string {
 	cmd := exec.Command("docker", "inspect",
-		"--format", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}",
+		"--format", "{{.NetworkSettings.Networks.aether.IPAddress}}",
 		containerID)
 	output, err := cmd.Output()
 	if err != nil {
