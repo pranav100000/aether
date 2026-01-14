@@ -126,11 +126,11 @@ func main() {
 	idleTimeout := time.Duration(idleTimeoutMin) * time.Minute
 
 	// Create workspace factory (returns local or Fly implementations based on LOCAL_MODE)
-	wsFactory := workspace.NewFactory(flyClient, sshClient)
+	wsFactory := workspace.NewFactory(flyClient)
 
 	// New project-based handlers
 	projectHandler := handlers.NewProjectHandler(dbClient, wsFactory.MachineManager(), wsFactory.VolumeManager(), apiKeysGetter, baseImage, flyRegion, idleTimeout)
-	agentHandler := handlers.NewAgentHandler(sshClient, wsFactory.ConnectionResolver(), dbClient, authMiddleware, apiKeysGetter)
+	agentHandler := handlers.NewAgentHandler(wsFactory.ConnectionResolver(), dbClient, authMiddleware, apiKeysGetter)
 	workspaceHandler := handlers.NewWorkspaceHandler(wsFactory.ConnectionResolver(), dbClient, authMiddleware, apiKeysGetter)
 	healthHandler := handlers.NewHealthHandler(dbClient, getEnv("VERSION", "dev"))
 	filesHandler := handlers.NewFilesHandler(sftpClient, wsFactory.ConnectionResolver(), dbClient)

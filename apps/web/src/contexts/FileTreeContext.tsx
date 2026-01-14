@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react"
 import { api } from "@/lib/api"
 import { basename, isChildOrEqualPath } from "@/lib/path-utils"
+import type { FileOperationsProvider } from "@/hooks/useWorkspaceConnection"
 
 interface FileTreeContextValue {
   // All file paths in the project
@@ -32,9 +33,13 @@ export function useFileTreeContext() {
 interface FileTreeProviderProps {
   projectId: string
   children: ReactNode
+  /** Optional WebSocket file operations provider - uses REST API if not provided */
+  fileOps?: FileOperationsProvider
+  /** Callback to receive the handleFileChange function for external file change notifications */
+  onHandleFileChangeReady?: (handler: (action: string, path: string, isDirectory: boolean) => void) => void
 }
 
-export function FileTreeProvider({ projectId, children }: FileTreeProviderProps) {
+export function FileTreeProvider({ projectId, children, fileOps, onHandleFileChangeReady }: FileTreeProviderProps) {
   const [allFiles, setAllFiles] = useState<string[]>([])
   const [directories, setDirectories] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -45,7 +50,10 @@ export function FileTreeProvider({ projectId, children }: FileTreeProviderProps)
     setError(null)
 
     try {
-      const tree = await api.listFilesTree(projectId)
+      // Use WebSocket file operations if available, otherwise fall back to REST API
+      const tree = fileOps
+        ? await fileOps.listFilesTree()
+        : await api.listFilesTree(projectId)
       setAllFiles(tree.paths)
       setDirectories(tree.directories)
     } catch (err) {
@@ -54,7 +62,7 @@ export function FileTreeProvider({ projectId, children }: FileTreeProviderProps)
     } finally {
       setIsLoading(false)
     }
-  }, [projectId])
+  }, [projectId, fileOps])
 
   // Load file tree on mount
   useEffect(() => {
@@ -85,6 +93,13 @@ export function FileTreeProvider({ projectId, children }: FileTreeProviderProps)
       setDirectories(prev => prev.filter(p => !isChildOrEqualPath(p, normalizedPath)))
     }
   }, [])
+
+  // Notify parent component that handleFileChange is ready
+  useEffect(() => {
+    if (onHandleFileChangeReady) {
+      onHandleFileChangeReady(handleFileChange)
+    }
+  }, [onHandleFileChangeReady, handleFileChange])
 
   const refresh = useCallback(async () => {
     await loadFileTree()

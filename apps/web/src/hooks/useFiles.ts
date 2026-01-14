@@ -2,6 +2,7 @@ import { useState, useCallback } from "react"
 import { api } from "@/lib/api"
 import type { FileEntry } from "@/lib/api"
 import { join } from "@/lib/path-utils"
+import type { FileOperationsProvider } from "./useWorkspaceConnection"
 
 // Files/folders to hide in the file tree
 const HIDDEN_ENTRIES = new Set([
@@ -19,6 +20,12 @@ const HIDDEN_ENTRIES = new Set([
   "Thumbs.db",
 ])
 
+interface UseFilesOptions {
+  projectId: string
+  /** Optional WebSocket file operations provider - uses REST API if not provided */
+  fileOps?: FileOperationsProvider
+}
+
 interface UseFilesReturn {
   entries: FileEntry[]
   loading: boolean
@@ -32,7 +39,7 @@ interface UseFilesReturn {
   renameEntry: (oldName: string, newName: string) => Promise<void>
 }
 
-export function useFiles(projectId: string): UseFilesReturn {
+export function useFiles({ projectId, fileOps }: UseFilesOptions): UseFilesReturn {
   const [entries, setEntries] = useState<FileEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -58,7 +65,10 @@ export function useFiles(projectId: string): UseFilesReturn {
       setLoading(true)
       setError(null)
       try {
-        const listing = await api.listFiles(projectId, path)
+        // Use WebSocket file operations if available, otherwise fall back to REST API
+        const listing = fileOps
+          ? await fileOps.listFiles(path)
+          : await api.listFiles(projectId, path)
         setEntries(sortEntries(filterEntries(listing.entries)))
         setCurrentPath(path)
       } catch (err) {
@@ -67,7 +77,7 @@ export function useFiles(projectId: string): UseFilesReturn {
         setLoading(false)
       }
     },
-    [projectId]
+    [projectId, fileOps]
   )
 
   const refresh = useCallback(async () => {
@@ -79,14 +89,19 @@ export function useFiles(projectId: string): UseFilesReturn {
       setError(null)
       try {
         const path = join(currentPath, name)
-        await api.writeFile(projectId, path, content)
+        // Use WebSocket file operations if available, otherwise fall back to REST API
+        if (fileOps) {
+          await fileOps.writeFile(path, content)
+        } else {
+          await api.writeFile(projectId, path, content)
+        }
         await refresh()
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to create file")
         throw err
       }
     },
-    [projectId, currentPath, refresh]
+    [projectId, fileOps, currentPath, refresh]
   )
 
   const createFolder = useCallback(
@@ -94,14 +109,19 @@ export function useFiles(projectId: string): UseFilesReturn {
       setError(null)
       try {
         const path = join(currentPath, name)
-        await api.mkdir(projectId, path)
+        // Use WebSocket file operations if available, otherwise fall back to REST API
+        if (fileOps) {
+          await fileOps.mkdir(path)
+        } else {
+          await api.mkdir(projectId, path)
+        }
         await refresh()
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to create folder")
         throw err
       }
     },
-    [projectId, currentPath, refresh]
+    [projectId, fileOps, currentPath, refresh]
   )
 
   const deleteEntry = useCallback(
@@ -109,14 +129,19 @@ export function useFiles(projectId: string): UseFilesReturn {
       setError(null)
       try {
         const path = join(currentPath, name)
-        await api.deleteFile(projectId, path)
+        // Use WebSocket file operations if available, otherwise fall back to REST API
+        if (fileOps) {
+          await fileOps.deleteFile(path)
+        } else {
+          await api.deleteFile(projectId, path)
+        }
         await refresh()
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to delete")
         throw err
       }
     },
-    [projectId, currentPath, refresh]
+    [projectId, fileOps, currentPath, refresh]
   )
 
   const renameEntry = useCallback(
@@ -125,14 +150,19 @@ export function useFiles(projectId: string): UseFilesReturn {
       try {
         const oldPath = join(currentPath, oldName)
         const newPath = join(currentPath, newName)
-        await api.renameFile(projectId, oldPath, newPath)
+        // Use WebSocket file operations if available, otherwise fall back to REST API
+        if (fileOps) {
+          await fileOps.renameFile(oldPath, newPath)
+        } else {
+          await api.renameFile(projectId, oldPath, newPath)
+        }
         await refresh()
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to rename")
         throw err
       }
     },
-    [projectId, currentPath, refresh]
+    [projectId, fileOps, currentPath, refresh]
   )
 
   return {

@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     vim \
     ripgrep \
     fd-find \
+    socat \
     && rm -rf /var/lib/apt/lists/*
 
 # Create coder user (same as VM)

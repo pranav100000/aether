@@ -18,6 +18,7 @@ services:
       - AGENT_PORT=3001
       - PROJECT_CWD=/home/coder/project
       - STORAGE_DIR=/home/coder/project/.aether
+      - LOCAL_MODE=true
       # API keys from host .env
       - ANTHROPIC_API_KEY
       - OPENAI_API_KEY

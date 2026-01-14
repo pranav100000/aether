@@ -1,8 +1,9 @@
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect, useMemo } from "react"
 import { useParams, useNavigate, Link } from "react-router-dom"
 import { ChevronLeft, PanelLeft, PanelBottom, PanelRight } from "lucide-react"
 import { useProject } from "@/hooks/useProject"
 import { useEditor } from "@/hooks/useEditor"
+import { useWorkspaceConnection, type FileOperationsProvider } from "@/hooks/useWorkspaceConnection"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { StatusBadge } from "@/components/projects/StatusBadge"
@@ -15,11 +16,30 @@ import { PreviewButton } from "@/components/workspace/PreviewButton"
 import { AgentChat } from "@/components/workspace/AgentChat"
 import { FileTreeProvider } from "@/contexts/FileTreeContext"
 import { basename } from "@/lib/path-utils"
+import type { Project } from "@/lib/api"
 
-export function Workspace() {
-  const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
-  const { project, loading, error, start, stop, refresh } = useProject(id!)
+/**
+ * Inner component that renders the workspace content (file tree + editor).
+ * Manages editor state and file operations via WebSocket connection.
+ */
+function WorkspaceContent({
+  project,
+  fileOps,
+  onDisconnect,
+  onPortChange,
+  leftSidebarOpen,
+  terminalOpen,
+  rightSidebarOpen,
+}: {
+  project: Project
+  fileOps: FileOperationsProvider
+  onDisconnect: () => void
+  onPortChange: (action: "open" | "close", port: number) => void
+  leftSidebarOpen: boolean
+  terminalOpen: boolean
+  rightSidebarOpen: boolean
+}) {
+  // Editor hook with WebSocket file operations
   const {
     openFiles,
     activeFile,
@@ -29,31 +49,7 @@ export function Workspace() {
     updateContent,
     saveFile,
     getFile,
-  } = useEditor(id!)
-  const [starting, setStarting] = useState(false)
-  const [leftSidebarOpen, setLeftSidebarOpen] = useState(true)
-  const [terminalOpen, setTerminalOpen] = useState(false)
-  const [rightSidebarOpen, setRightSidebarOpen] = useState(true)
-  const [activePorts, setActivePorts] = useState<number[]>([])
-
-  const handlePortChange = useCallback((action: "open" | "close", port: number) => {
-    setActivePorts((prev) => {
-      if (action === "open") {
-        return prev.includes(port) ? prev : [...prev, port].sort((a, b) => a - b)
-      } else {
-        return prev.filter((p) => p !== port)
-      }
-    })
-  }, [])
-
-  const handleStart = async () => {
-    setStarting(true)
-    try {
-      await start()
-    } finally {
-      setStarting(false)
-    }
-  }
+  } = useEditor({ projectId: project.id, fileOps })
 
   const handleFileSelect = useCallback(
     (path: string) => {
@@ -90,6 +86,177 @@ export function Workspace() {
     [closeFile, getFile]
   )
 
+  const activeFileData = activeFile ? getFile(activeFile) : undefined
+
+  return (
+    <WorkspaceLayout
+      sidebar={
+        <FileTree
+          projectId={project.id}
+          onFileSelect={handleFileSelect}
+          selectedPath={activeFile || undefined}
+        />
+      }
+      editor={
+        <>
+          <EditorTabs
+            files={openFiles}
+            activeFile={activeFile}
+            onSelect={setActiveFile}
+            onClose={handleCloseFile}
+          />
+          {activeFileData ? (
+            <div className="flex-1 overflow-hidden">
+              <Editor
+                file={activeFileData}
+                onContentChange={handleContentChange}
+                onSave={handleSave}
+              />
+            </div>
+          ) : (
+            <WorkspaceEmptyState />
+          )}
+        </>
+      }
+      terminal={<MultiTerminal projectId={project.id} onDisconnect={onDisconnect} onPortChange={onPortChange} />}
+      rightPanel={<AgentChat projectId={project.id} defaultAgent="codebuff" />}
+      leftSidebarOpen={leftSidebarOpen}
+      terminalOpen={terminalOpen}
+      rightPanelOpen={rightSidebarOpen}
+    />
+  )
+}
+
+/**
+ * Connected workspace that handles WebSocket connection and renders content.
+ */
+function ConnectedWorkspace({
+  project,
+  onDisconnect,
+  leftSidebarOpen,
+  terminalOpen,
+  rightSidebarOpen,
+  onPortChange,
+}: {
+  project: Project
+  onDisconnect: () => void
+  leftSidebarOpen: boolean
+  terminalOpen: boolean
+  rightSidebarOpen: boolean
+  onPortChange: (action: "open" | "close", port: number) => void
+}) {
+  const [fileTreeChangeHandler, setFileTreeChangeHandler] = useState<
+    ((action: string, path: string, isDirectory: boolean) => void) | null
+  >(null)
+
+  // Connect to workspace via WebSocket
+  const workspace = useWorkspaceConnection({
+    projectId: project.id,
+    onFileChange: fileTreeChangeHandler || undefined,
+    onPortChange,
+  })
+
+  // Auto-connect when mounted
+  useEffect(() => {
+    workspace.connect()
+    return () => workspace.disconnect()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Create file operations provider from workspace connection
+  const fileOps: FileOperationsProvider | undefined = useMemo(() => {
+    if (workspace.status !== "connected") return undefined
+    return {
+      readFile: workspace.readFile,
+      writeFile: workspace.writeFile,
+      listFiles: workspace.listFiles,
+      listFilesTree: workspace.listFilesTree,
+      mkdir: workspace.mkdir,
+      deleteFile: workspace.deleteFile,
+      renameFile: workspace.renameFile,
+    }
+  }, [workspace.status, workspace.readFile, workspace.writeFile, workspace.listFiles, workspace.listFilesTree, workspace.mkdir, workspace.deleteFile, workspace.renameFile])
+
+  // Show connecting state
+  if (workspace.status === "connecting" || workspace.status === "disconnected") {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center">
+          <Spinner size="lg" className="mx-auto mb-4" />
+          <p className="text-muted-foreground">Connecting to workspace...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Show error state
+  if (workspace.status === "error") {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-destructive text-5xl mb-4">!</div>
+          <p className="text-destructive mb-2">Failed to connect to workspace</p>
+          {workspace.error && (
+            <p className="text-muted-foreground text-sm mb-4">{workspace.error}</p>
+          )}
+          <Button onClick={() => workspace.connect()}>Retry</Button>
+        </div>
+      </div>
+    )
+  }
+
+  // Connected - render workspace with file operations
+  return (
+    <FileTreeProvider
+      projectId={project.id}
+      fileOps={fileOps}
+      // Wrap in arrow function to avoid React's setState updater function behavior
+      // (passing a function directly to setState makes React call it with prev state)
+      onHandleFileChangeReady={(handler) => setFileTreeChangeHandler(() => handler)}
+    >
+      {fileOps && (
+        <WorkspaceContent
+          project={project}
+          fileOps={fileOps}
+          onDisconnect={onDisconnect}
+          onPortChange={onPortChange}
+          leftSidebarOpen={leftSidebarOpen}
+          terminalOpen={terminalOpen}
+          rightSidebarOpen={rightSidebarOpen}
+        />
+      )}
+    </FileTreeProvider>
+  )
+}
+
+export function Workspace() {
+  const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
+  const { project, loading, error, start, stop, refresh } = useProject(id!)
+  const [starting, setStarting] = useState(false)
+  const [leftSidebarOpen, setLeftSidebarOpen] = useState(true)
+  const [terminalOpen, setTerminalOpen] = useState(false)
+  const [rightSidebarOpen, setRightSidebarOpen] = useState(true)
+  const [activePorts, setActivePorts] = useState<number[]>([])
+
+  const handlePortChange = useCallback((action: "open" | "close", port: number) => {
+    setActivePorts((prev) => {
+      if (action === "open") {
+        return prev.includes(port) ? prev : [...prev, port].sort((a, b) => a - b)
+      } else {
+        return prev.filter((p) => p !== port)
+      }
+    })
+  }, [])
+
+  const handleStart = async () => {
+    setStarting(true)
+    try {
+      await start()
+    } finally {
+      setStarting(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -110,8 +277,6 @@ export function Workspace() {
       </div>
     )
   }
-
-  const activeFileData = activeFile ? getFile(activeFile) : undefined
 
   return (
     <div className="h-screen flex flex-col bg-background">
@@ -178,43 +343,14 @@ export function Workspace() {
       {/* Main content */}
       <main className="flex-1 overflow-hidden">
         {project.status === "running" ? (
-          <FileTreeProvider projectId={project.id}>
-            <WorkspaceLayout
-              sidebar={
-                <FileTree
-                  projectId={project.id}
-                  onFileSelect={handleFileSelect}
-                  selectedPath={activeFile || undefined}
-                />
-              }
-              editor={
-                <>
-                  <EditorTabs
-                    files={openFiles}
-                    activeFile={activeFile}
-                    onSelect={setActiveFile}
-                    onClose={handleCloseFile}
-                  />
-                  {activeFileData ? (
-                    <div className="flex-1 overflow-hidden">
-                      <Editor
-                        file={activeFileData}
-                        onContentChange={handleContentChange}
-                        onSave={handleSave}
-                      />
-                    </div>
-                  ) : (
-                    <WorkspaceEmptyState />
-                  )}
-                </>
-              }
-              terminal={<MultiTerminal projectId={project.id} onDisconnect={refresh} onPortChange={handlePortChange} />}
-              rightPanel={<AgentChat projectId={project.id} defaultAgent="codebuff" />}
-              leftSidebarOpen={leftSidebarOpen}
-              terminalOpen={terminalOpen}
-              rightPanelOpen={rightSidebarOpen}
-            />
-          </FileTreeProvider>
+          <ConnectedWorkspace
+            project={project}
+            onDisconnect={refresh}
+            leftSidebarOpen={leftSidebarOpen}
+            terminalOpen={terminalOpen}
+            rightSidebarOpen={rightSidebarOpen}
+            onPortChange={handlePortChange}
+          />
         ) : project.status === "starting" ? (
           <div className="h-full flex items-center justify-center">
             <div className="text-center">
