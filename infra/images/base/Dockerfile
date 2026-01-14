@@ -1,10 +1,3 @@
-# Build stage for port-watcher
-FROM golang:1.25-alpine AS port-watcher-builder
-COPY port-watcher /src
-WORKDIR /src
-RUN go mod download && CGO_ENABLED=0 go build -o /port-watcher .
-
-# Final image
 FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -79,9 +72,6 @@ COPY workspace-service /opt/workspace-service
 WORKDIR /opt/workspace-service
 RUN bun install --production
 WORKDIR /home/coder
-
-# Copy pre-built port-watcher from builder stage
-COPY --from=port-watcher-builder /port-watcher /usr/local/bin/port-watcher
 
 # Port forwarding script for IPv6 → localhost
 COPY port-forward.sh /usr/local/bin/port-forward.sh

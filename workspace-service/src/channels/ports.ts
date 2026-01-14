@@ -1,4 +1,3 @@
-import { readFile } from "fs/promises"
 import type { PortChangeMessage } from "./types"
 
 export interface PortWatcherConfig {
@@ -8,7 +7,7 @@ export interface PortWatcherConfig {
 
 export class PortWatcher {
   private sendFn: ((msg: PortChangeMessage) => void) | null = null
-  private pollInterval: NodeJS.Timeout | null = null
+  private pollInterval: Timer | null = null
   private knownPorts: Set<number> = new Set()
   private config: PortWatcherConfig
 
@@ -25,15 +24,26 @@ export class PortWatcher {
   initialize(send: (msg: PortChangeMessage) => void): void {
     this.sendFn = send
 
-    // Initial scan
-    this.scanPorts()
+    // Initial scan - emit all existing ports as "open"
+    this.getListeningPorts().then((ports) => {
+      for (const port of ports) {
+        this.knownPorts.add(port)
+        this.send(port, "open")
+      }
+      console.log(`[PortWatcher] Started, found ${ports.size} ports, polling every ${this.config.pollIntervalMs}ms`)
+    })
 
     // Start polling
     this.pollInterval = setInterval(() => {
       this.scanPorts()
     }, this.config.pollIntervalMs)
+  }
 
-    console.log(`[PortWatcher] Started, polling every ${this.config.pollIntervalMs}ms`)
+  /**
+   * Get currently known ports (useful for reconnection)
+   */
+  getCurrentPorts(): number[] {
+    return [...this.knownPorts]
   }
 
   /**
@@ -67,31 +77,16 @@ export class PortWatcher {
    * Get currently listening TCP ports by reading /proc/net/tcp
    */
   private async getListeningPorts(): Promise<Set<number>> {
-    const ports = new Set<number>()
+    // Read IPv4 and IPv6 in parallel
+    const [tcp4, tcp6] = await Promise.all([
+      this.readProcNetTcp("/proc/net/tcp").catch(() => []),
+      this.readProcNetTcp("/proc/net/tcp6").catch(() => []),
+    ])
 
-    try {
-      // Read IPv4 TCP connections
-      const tcp4 = await this.readProcNetTcp("/proc/net/tcp")
-      for (const port of tcp4) {
-        ports.add(port)
-      }
-    } catch {
-      // /proc/net/tcp might not exist (non-Linux)
-    }
-
-    try {
-      // Read IPv6 TCP connections
-      const tcp6 = await this.readProcNetTcp("/proc/net/tcp6")
-      for (const port of tcp6) {
-        ports.add(port)
-      }
-    } catch {
-      // /proc/net/tcp6 might not exist
-    }
+    const ports = new Set<number>([...tcp4, ...tcp6])
 
     // Filter out ignored ports
-    const ignorePorts = this.config.ignorePorts ?? []
-    for (const port of ignorePorts) {
+    for (const port of this.config.ignorePorts ?? []) {
       ports.delete(port)
     }
 
@@ -108,7 +103,7 @@ export class PortWatcher {
    * local_address is hex IP:PORT, st is state (0A = LISTEN)
    */
   private async readProcNetTcp(path: string): Promise<number[]> {
-    const content = await readFile(path, "utf-8")
+    const content = await Bun.file(path).text()
     const lines = content.trim().split("\n")
     const ports: number[] = []
 

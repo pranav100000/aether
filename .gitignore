@@ -52,4 +52,3 @@ temp/
 
 # Local Docker Container File System
 infra/images/base/workspace-service
-infra/images/base/port-watcher
