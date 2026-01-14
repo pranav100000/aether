@@ -8,11 +8,14 @@ primary_region = 'sjc'
 
 [build]
   dockerfile = "Dockerfile"
+  # Note: Use scripts/deploy-frontend.sh for deploys - it injects secrets from Infisical
+  # These are fallback values if deploying directly with `fly deploy`
   [build.args]
     VITE_SUPABASE_URL = "https://wowmtmtuncmoxorrahxe.supabase.co"
     VITE_SUPABASE_ANON_KEY = "sb_publishable_qBYR1T0ZZ-bA9dHaYox6kA_Q4EZVYpj"
     VITE_API_URL = "https://aether-api.fly.dev"
     VITE_PREVIEW_DOMAIN = "137.66.8.70.nip.io"
+    VITE_SENTRY_DSN = ""
 
 [http_service]
   internal_port = 8080

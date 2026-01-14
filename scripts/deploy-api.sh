@@ -9,15 +9,16 @@ cd "$PROJECT_ROOT"
 APP_NAME="aether-api"
 
 echo "Deploying backend using Infisical secrets..."
+echo "Fetching secrets from /common + /api"
 
 # Export secrets from Infisical and set on Fly
-infisical export --env=prod --path=/backend --format=dotenv | while IFS='=' read -r key value; do
+infisical export --env=prod --path=/common --path=/api --format=dotenv | while IFS='=' read -r key value; do
     [ -z "$key" ] && continue
     echo "  Setting $key"
 done
 
 # Set Fly secrets using infisical (FLY_API_TOKEN uses local auth, not Infisical)
-infisical run --env=prod --path=/backend -- bash -c "
+infisical run --env=prod --path=/common --path=/api -- bash -c "
     unset FLY_API_TOKEN
     fly secrets set \\
         API_PORT=\"\$API_PORT\" \\
@@ -29,6 +30,8 @@ infisical run --env=prod --path=/backend -- bash -c "
         SUPABASE_ANON_KEY=\"\$SUPABASE_ANON_KEY\" \\
         SUPABASE_SERVICE_KEY=\"\$SUPABASE_SERVICE_KEY\" \\
         SUPABASE_JWT_SECRET=\"\$SUPABASE_JWT_SECRET\" \\
+        SENTRY_DSN=\"\$SENTRY_DSN\" \\
+        ENVIRONMENT=\"\$ENVIRONMENT\" \\
         -a $APP_NAME
 "
 

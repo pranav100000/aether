@@ -7,6 +7,7 @@ ARG VITE_SUPABASE_URL
 ARG VITE_SUPABASE_ANON_KEY
 ARG VITE_API_URL
 ARG VITE_PREVIEW_DOMAIN
+ARG VITE_SENTRY_DSN
 
 # Copy package files from root (monorepo)
 COPY package.json bun.lock ./
@@ -14,7 +15,7 @@ COPY apps/web/package.json ./apps/web/
 COPY packages/types/package.json ./packages/types/
 
 # Install dependencies
-RUN bun install --frozen-lockfile
+RUN bun install 
 
 # Copy source code
 COPY apps/web ./apps/web

@@ -1,3 +1,4 @@
+import { spawn, type Subprocess } from "bun"
 import { logger } from "../logging"
 import type { PortChangeMessage } from "./types"
 
@@ -10,8 +11,10 @@ export class PortWatcher {
   private sendFn: ((msg: PortChangeMessage) => void) | null = null
   private pollInterval: Timer | null = null
   private knownPorts: Set<number> = new Set()
+  private forwarders: Map<number, Subprocess> = new Map()
   private config: PortWatcherConfig
   private log = logger.child({ channel: "ports" })
+  private isLocalMode = Bun.env.LOCAL_MODE === "true"
 
   constructor(config: PortWatcherConfig = {}) {
     this.config = {
@@ -30,6 +33,7 @@ export class PortWatcher {
     this.getListeningPorts().then((ports) => {
       for (const port of ports) {
         this.knownPorts.add(port)
+        this.startForwarder(port)
         this.send(port, "open")
       }
       this.log.info("started", { initial_ports: ports.size, poll_interval_ms: this.config.pollIntervalMs })
@@ -59,6 +63,7 @@ export class PortWatcher {
       for (const port of currentPorts) {
         if (!this.knownPorts.has(port)) {
           this.knownPorts.add(port)
+          this.startForwarder(port)
           this.send(port, "open")
         }
       }
@@ -67,6 +72,7 @@ export class PortWatcher {
       for (const port of this.knownPorts) {
         if (!currentPorts.has(port)) {
           this.knownPorts.delete(port)
+          this.stopForwarder(port)
           this.send(port, "close")
         }
       }
@@ -76,23 +82,20 @@ export class PortWatcher {
   }
 
   /**
-   * Get currently listening TCP ports by reading /proc/net/tcp
+   * Get currently listening TCP ports by reading /proc/net/tcp (IPv4 only).
+   * User dev servers bind to IPv4 (localhost or 0.0.0.0).
+   * We ignore IPv6 to avoid detecting our own socat forwarders.
    */
   private async getListeningPorts(): Promise<Set<number>> {
-    // Read IPv4 and IPv6 in parallel
-    const [tcp4, tcp6] = await Promise.all([
-      this.readProcNetTcp("/proc/net/tcp").catch(() => []),
-      this.readProcNetTcp("/proc/net/tcp6").catch(() => []),
-    ])
-
-    const ports = new Set<number>([...tcp4, ...tcp6])
+    const ports = await this.readProcNetTcp("/proc/net/tcp").catch(() => [])
+    const portSet = new Set<number>(ports)
 
     // Filter out ignored ports
     for (const port of this.config.ignorePorts ?? []) {
-      ports.delete(port)
+      portSet.delete(port)
     }
 
-    return ports
+    return portSet
   }
 
   /**
@@ -138,6 +141,43 @@ export class PortWatcher {
   }
 
   /**
+   * Start an IPv6 → IPv4 forwarder for gateway access.
+   * In production (Fly.io), the gateway connects via IPv6.
+   */
+  private startForwarder(port: number): void {
+    if (this.isLocalMode) return
+    if (this.forwarders.has(port)) return
+
+    try {
+      const proc = spawn({
+        cmd: ["socat", `TCP6-LISTEN:${port},fork,reuseaddr,ipv6-v6only`, `TCP4:127.0.0.1:${port}`],
+        stdout: "pipe",
+        stderr: "pipe",
+      })
+      this.forwarders.set(port, proc)
+      this.log.debug("started forwarder", { port, pid: proc.pid })
+    } catch (err) {
+      this.log.error("failed to start forwarder", { port, error: String(err) })
+    }
+  }
+
+  /**
+   * Stop the forwarder for a port
+   */
+  private stopForwarder(port: number): void {
+    const proc = this.forwarders.get(port)
+    if (!proc) return
+
+    try {
+      proc.kill()
+      this.forwarders.delete(port)
+      this.log.debug("stopped forwarder", { port })
+    } catch (err) {
+      this.log.error("failed to stop forwarder", { port, error: String(err) })
+    }
+  }
+
+  /**
    * Send port change message
    */
   private send(port: number, action: "open" | "close"): void {
@@ -151,13 +191,24 @@ export class PortWatcher {
   }
 
   /**
-   * Close the watcher
+   * Close the watcher and all forwarders
    */
   close(): void {
     if (this.pollInterval) {
       clearInterval(this.pollInterval)
       this.pollInterval = null
     }
+
+    // Kill all forwarders
+    for (const [port, proc] of this.forwarders) {
+      try {
+        proc.kill()
+        this.log.debug("stopped forwarder on close", { port })
+      } catch {
+        // Ignore errors during cleanup
+      }
+    }
+    this.forwarders.clear()
     this.knownPorts.clear()
     this.log.info("closed")
   }

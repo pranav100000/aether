@@ -4,9 +4,10 @@ set -e
 cd "$(dirname "$0")/.."
 
 echo "Deploying frontend using Infisical secrets..."
+echo "Fetching secrets from /common + /web"
 
 # Deploy with Infisical secrets injected as build args
-infisical run --env=prod --path=/frontend -- bash -c '
+infisical run --env=prod --path=/common --path=/web -- bash -c '
     echo "  VITE_API_URL: $VITE_API_URL"
     echo "  VITE_PREVIEW_DOMAIN: $VITE_PREVIEW_DOMAIN"
 
@@ -16,7 +17,8 @@ infisical run --env=prod --path=/frontend -- bash -c '
         --build-arg "VITE_SUPABASE_URL=$VITE_SUPABASE_URL" \
         --build-arg "VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY" \
         --build-arg "VITE_API_URL=$VITE_API_URL" \
-        --build-arg "VITE_PREVIEW_DOMAIN=$VITE_PREVIEW_DOMAIN"
+        --build-arg "VITE_PREVIEW_DOMAIN=$VITE_PREVIEW_DOMAIN" \
+        --build-arg "VITE_SENTRY_DSN=$VITE_SENTRY_DSN"
 '
 
 echo ""
