@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"errors"
-	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -11,6 +10,7 @@ import (
 	"aether/db"
 	"aether/handlers/proxy"
 	authmw "aether/middleware"
+	"aether/pkg/logging"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/gorilla/websocket"
@@ -37,7 +37,7 @@ func NewWorkspaceHandler(resolver ConnectionResolver, db *db.Client, authMiddlew
 }
 
 // updateLastAccessedDebounced updates last_accessed_at at most once per 30 seconds per project
-func (h *WorkspaceHandler) updateLastAccessedDebounced(projectID string) {
+func (h *WorkspaceHandler) updateLastAccessedDebounced(ctx context.Context, projectID string) {
 	h.lastAccessedMu.Lock()
 	lastUpdate, exists := h.lastAccessedTime[projectID]
 	now := time.Now()
@@ -49,7 +49,8 @@ func (h *WorkspaceHandler) updateLastAccessedDebounced(projectID string) {
 	h.lastAccessedMu.Unlock()
 
 	if err := h.db.UpdateProjectLastAccessed(context.Background(), projectID); err != nil {
-		log.Printf("Error updating last accessed for project %s: %v", projectID, err)
+		log := logging.FromContext(ctx)
+		log.Error("failed to update last accessed", "project_id", projectID, "error", err)
 	}
 }
 
@@ -64,8 +65,12 @@ func (h *WorkspaceHandler) clearLastAccessed(projectID string) {
 func (h *WorkspaceHandler) HandleWorkspace(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "id")
 
+	// Enrich context with project ID for logging
+	ctx := r.Context()
+	ctx = logging.WithProjectID(ctx, projectID)
+
 	// Get user ID from context or WebSocket subprotocol
-	userID := authmw.GetUserID(r.Context())
+	userID := authmw.GetUserID(ctx)
 	if userID == "" {
 		token := ExtractTokenFromRequest(r)
 		if token == "" {
@@ -76,20 +81,25 @@ func (h *WorkspaceHandler) HandleWorkspace(w http.ResponseWriter, r *http.Reques
 		var err error
 		userID, err = h.authMiddleware.ValidateToken(token)
 		if err != nil {
-			log.Printf("Token validation error: %v", err)
+			log := logging.FromContext(ctx)
+			log.Warn("token validation failed", "error", err)
 			http.Error(w, "Invalid token", http.StatusUnauthorized)
 			return
 		}
 	}
 
+	// Enrich context with user ID
+	ctx = logging.WithUserID(ctx, userID)
+	log := logging.FromContext(ctx)
+
 	// Get project (verifies ownership)
-	project, err := h.db.GetProjectByUser(r.Context(), projectID, userID)
+	project, err := h.db.GetProjectByUser(ctx, projectID, userID)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			http.Error(w, "Project not found", http.StatusNotFound)
 			return
 		}
-		log.Printf("Error getting project: %v", err)
+		log.Error("failed to get project", "error", err)
 		http.Error(w, "Failed to get project", http.StatusInternalServerError)
 		return
 	}
@@ -102,7 +112,7 @@ func (h *WorkspaceHandler) HandleWorkspace(w http.ResponseWriter, r *http.Reques
 	// Get connection info
 	connInfo, err := h.resolver.GetConnectionInfo(project)
 	if err != nil {
-		log.Printf("Error getting connection info: %v", err)
+		log.Error("failed to get connection info", "error", err)
 		http.Error(w, "Failed to connect to workspace", http.StatusInternalServerError)
 		return
 	}
@@ -115,15 +125,22 @@ func (h *WorkspaceHandler) HandleWorkspace(w http.ResponseWriter, r *http.Reques
 
 	wsConn, err := upgrader.Upgrade(w, r, responseHeader)
 	if err != nil {
-		log.Printf("WebSocket upgrade error: %v", err)
+		log.Error("websocket upgrade failed", "error", err)
 		return
 	}
 	defer wsConn.Close()
 
-	log.Printf("Workspace WebSocket connected for project: %s", projectID)
+	log.Info("workspace websocket connected")
 
 	// Build environment variables for the agent (includes API keys)
-	agentEnv := NewEnvBuilder(h.apiKeys).BuildAgentEnv(r.Context(), projectID, userID)
+	agentEnv := NewEnvBuilder(h.apiKeys).BuildAgentEnv(ctx, projectID, userID)
+
+	// Add correlation IDs for workspace-service logging
+	if requestID := logging.GetRequestID(ctx); requestID != "" {
+		agentEnv["CORRELATION_REQUEST_ID"] = requestID
+	}
+	agentEnv["CORRELATION_USER_ID"] = userID
+	agentEnv["CORRELATION_PROJECT_ID"] = projectID
 
 	// Create connector to VM's unified workspace endpoint
 	connector := proxy.NewWebSocketConnector()
@@ -135,25 +152,25 @@ func (h *WorkspaceHandler) HandleWorkspace(w http.ResponseWriter, r *http.Reques
 		ConnectTimeout: 10 * time.Second,
 	}
 
-	ctx := r.Context()
 	if err := connector.Connect(ctx, config); err != nil {
-		log.Printf("Workspace connector error: %v", err)
+		log.Error("workspace connector failed", "error", err)
 		sendWorkspaceError(wsConn, "Failed to connect to workspace: "+err.Error())
 		return
 	}
 	defer connector.Close()
 
-	log.Printf("Workspace connector established for project %s", projectID)
+	log.Info("workspace connector established")
 
 	// Bridge the frontend WebSocket with the VM connector
 	h.bridgeConnection(ctx, wsConn, connector, projectID)
 
-	log.Printf("Workspace session ended for project: %s", projectID)
+	log.Info("workspace session ended")
 }
 
 // bridgeConnection bridges the frontend WebSocket with the VM ProxyConnector
 func (h *WorkspaceHandler) bridgeConnection(ctx context.Context, wsConn *websocket.Conn, connector proxy.ProxyConnector, projectID string) {
 	defer h.clearLastAccessed(projectID)
+	log := logging.FromContext(ctx)
 
 	var wg sync.WaitGroup
 	var wsMu sync.Mutex
@@ -173,11 +190,11 @@ func (h *WorkspaceHandler) bridgeConnection(ctx context.Context, wsConn *websock
 				err := wsConn.WriteMessage(websocket.TextMessage, data)
 				wsMu.Unlock()
 				if err != nil {
-					log.Printf("Workspace WebSocket write error: %v", err)
+					log.Debug("websocket write error", "error", err)
 					return
 				}
 				// Update last accessed on activity
-				go h.updateLastAccessedDebounced(projectID)
+				go h.updateLastAccessedDebounced(ctx, projectID)
 			case <-connector.Done():
 				return
 			}
@@ -204,16 +221,16 @@ func (h *WorkspaceHandler) bridgeConnection(ctx context.Context, wsConn *websock
 
 			_, data, err := wsConn.ReadMessage()
 			if err != nil {
-				log.Printf("Workspace WebSocket read error: %v", err)
+				log.Debug("websocket read error", "error", err)
 				connector.Close()
 				return
 			}
 
 			// Update last accessed on activity
-			go h.updateLastAccessedDebounced(projectID)
+			go h.updateLastAccessedDebounced(ctx, projectID)
 
 			if err := connector.Send(ctx, data); err != nil {
-				log.Printf("Workspace connector send error: %v", err)
+				log.Debug("connector send error", "error", err)
 				return
 			}
 		}

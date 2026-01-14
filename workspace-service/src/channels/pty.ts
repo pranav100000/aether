@@ -1,4 +1,5 @@
 import { spawn, type Pty } from "bun-pty"
+import { logger } from "../logging"
 import type { TerminalInputMessage, TerminalResizeMessage, TerminalOutputMessage } from "./types"
 
 export interface PTYHandlerConfig {
@@ -11,6 +12,7 @@ export interface PTYHandlerConfig {
 export class PTYHandler {
   private ptyProcess: Pty | null = null
   private sendFn: ((msg: TerminalOutputMessage) => void) | null = null
+  private log = logger.child({ channel: "pty" })
 
   constructor(private config: PTYHandlerConfig) {}
 
@@ -40,11 +42,10 @@ export class PTYHandler {
     })
 
     this.ptyProcess.onExit(({ exitCode, signal }) => {
-      console.log(`[PTY] Shell exited with code ${exitCode}, signal ${signal}`)
-      // Could send a special message here if needed
+      this.log.info("shell exited", { exit_code: exitCode, signal })
     })
 
-    console.log(`[PTY] Started shell: ${shell} in ${this.config.cwd}`)
+    this.log.info("started shell", { shell, cwd: this.config.cwd })
   }
 
   /**
@@ -52,7 +53,7 @@ export class PTYHandler {
    */
   handleMessage(msg: TerminalInputMessage | TerminalResizeMessage): void {
     if (!this.ptyProcess) {
-      console.error("[PTY] Not initialized")
+      this.log.error("not initialized")
       return
     }
 
@@ -63,7 +64,7 @@ export class PTYHandler {
 
       case "resize":
         this.ptyProcess.resize(msg.cols, msg.rows)
-        console.log(`[PTY] Resized to ${msg.cols}x${msg.rows}`)
+        this.log.debug("resized", { cols: msg.cols, rows: msg.rows })
         break
     }
   }
@@ -86,7 +87,7 @@ export class PTYHandler {
     if (this.ptyProcess) {
       this.ptyProcess.kill()
       this.ptyProcess = null
-      console.log("[PTY] Closed")
+      this.log.info("closed")
     }
   }
 }

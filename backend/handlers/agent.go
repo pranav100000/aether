@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -12,6 +11,7 @@ import (
 	"aether/db"
 	"aether/handlers/proxy"
 	authmw "aether/middleware"
+	"aether/pkg/logging"
 	"aether/ssh"
 
 	"github.com/go-chi/chi/v5"
@@ -118,6 +118,10 @@ func (h *AgentHandler) HandleAgent(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "id")
 	agentType := chi.URLParam(r, "agent")
 
+	// Enrich context for logging
+	ctx := r.Context()
+	ctx = logging.WithProjectID(ctx, projectID)
+
 	// Validate agent type
 	if agentType != "claude" && agentType != "codex" && agentType != "codebuff" && agentType != "opencode" {
 		http.Error(w, "Invalid agent type", http.StatusBadRequest)
@@ -125,7 +129,7 @@ func (h *AgentHandler) HandleAgent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get user ID from context or WebSocket subprotocol
-	userID := authmw.GetUserID(r.Context())
+	userID := authmw.GetUserID(ctx)
 	if userID == "" {
 		token := ExtractTokenFromRequest(r)
 		if token == "" {
@@ -136,20 +140,25 @@ func (h *AgentHandler) HandleAgent(w http.ResponseWriter, r *http.Request) {
 		var err error
 		userID, err = h.authMiddleware.ValidateToken(token)
 		if err != nil {
-			log.Printf("Token validation error: %v", err)
+			log := logging.FromContext(ctx)
+			log.Warn("token validation failed", "error", err)
 			http.Error(w, "Invalid token", http.StatusUnauthorized)
 			return
 		}
 	}
 
+	// Enrich context with user ID
+	ctx = logging.WithUserID(ctx, userID)
+	log := logging.FromContext(ctx)
+
 	// Get project (verifies ownership)
-	project, err := h.db.GetProjectByUser(r.Context(), projectID, userID)
+	project, err := h.db.GetProjectByUser(ctx, projectID, userID)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			http.Error(w, "Project not found", http.StatusNotFound)
 			return
 		}
-		log.Printf("Error getting project: %v", err)
+		log.Error("failed to get project", "error", err)
 		http.Error(w, "Failed to get project", http.StatusInternalServerError)
 		return
 	}
@@ -162,7 +171,7 @@ func (h *AgentHandler) HandleAgent(w http.ResponseWriter, r *http.Request) {
 	// Get connection info
 	connInfo, err := h.resolver.GetConnectionInfo(project)
 	if err != nil {
-		log.Printf("Error getting connection info: %v", err)
+		log.Error("failed to get connection info", "error", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -175,15 +184,22 @@ func (h *AgentHandler) HandleAgent(w http.ResponseWriter, r *http.Request) {
 
 	wsConn, err := upgrader.Upgrade(w, r, responseHeader)
 	if err != nil {
-		log.Printf("WebSocket upgrade error: %v", err)
+		log.Error("websocket upgrade failed", "error", err)
 		return
 	}
 	defer wsConn.Close()
 
-	log.Printf("Agent WebSocket connected for project: %s, agent: %s", projectID, agentType)
+	log.Info("agent websocket connected", "agent", agentType)
 
 	// Build fresh env vars for the agent (includes user's latest API keys)
-	agentEnv := NewEnvBuilder(h.apiKeys).BuildAgentEnv(r.Context(), projectID, userID)
+	agentEnv := NewEnvBuilder(h.apiKeys).BuildAgentEnv(ctx, projectID, userID)
+
+	// Add correlation IDs for workspace-service logging
+	if requestID := logging.GetRequestID(ctx); requestID != "" {
+		agentEnv["CORRELATION_REQUEST_ID"] = requestID
+	}
+	agentEnv["CORRELATION_USER_ID"] = userID
+	agentEnv["CORRELATION_PROJECT_ID"] = projectID
 
 	// Create connector and connect to VM via WebSocket
 	connector := proxy.NewWebSocketConnector()
@@ -195,24 +211,24 @@ func (h *AgentHandler) HandleAgent(w http.ResponseWriter, r *http.Request) {
 		ConnectTimeout: 10 * time.Second,
 	}
 
-	ctx := r.Context()
 	if err := connector.Connect(ctx, config); err != nil {
-		log.Printf("Connector error: %v", err)
+		log.Error("agent connector failed", "error", err)
 		sendAgentError(wsConn, "Failed to connect to agent: "+err.Error())
 		return
 	}
 	defer connector.Close()
 
-	log.Printf("Agent connector established for project %s", projectID)
+	log.Info("agent connector established")
 
 	// Bridge the frontend WebSocket with the VM connector
-	h.bridgeConnection(ctx, wsConn, connector, projectID)
+	h.bridgeConnection(ctx, wsConn, connector)
 
-	log.Printf("Agent session ended for project: %s", projectID)
+	log.Info("agent session ended")
 }
 
 // bridgeConnection bridges the frontend WebSocket with the VM ProxyConnector
-func (h *AgentHandler) bridgeConnection(ctx context.Context, wsConn *websocket.Conn, connector proxy.ProxyConnector, projectID string) {
+func (h *AgentHandler) bridgeConnection(ctx context.Context, wsConn *websocket.Conn, connector proxy.ProxyConnector) {
+	log := logging.FromContext(ctx)
 	var wg sync.WaitGroup
 	var wsMu sync.Mutex
 
@@ -231,7 +247,7 @@ func (h *AgentHandler) bridgeConnection(ctx context.Context, wsConn *websocket.C
 				err := wsConn.WriteMessage(websocket.TextMessage, data)
 				wsMu.Unlock()
 				if err != nil {
-					log.Printf("WebSocket write error: %v", err)
+					log.Debug("websocket write error", "error", err)
 					return
 				}
 			case <-connector.Done():
@@ -260,13 +276,13 @@ func (h *AgentHandler) bridgeConnection(ctx context.Context, wsConn *websocket.C
 
 			_, data, err := wsConn.ReadMessage()
 			if err != nil {
-				log.Printf("WebSocket read error: %v", err)
+				log.Debug("websocket read error", "error", err)
 				connector.Close()
 				return
 			}
 
 			if err := connector.Send(ctx, data); err != nil {
-				log.Printf("Connector send error: %v", err)
+				log.Debug("connector send error", "error", err)
 				return
 			}
 		}

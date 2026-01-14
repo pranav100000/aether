@@ -3,7 +3,6 @@ package proxy
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -12,6 +11,7 @@ import (
 
 	"aether/db"
 	"aether/handlers"
+	"aether/pkg/logging"
 )
 
 // Handler handles all incoming proxy requests
@@ -20,15 +20,17 @@ type Handler struct {
 	machines      handlers.MachineManager
 	previewDomain string
 	cache         *ProjectCache
+	log           *logging.Logger
 }
 
 // NewHandler creates a new proxy handler
-func NewHandler(dbClient *db.Client, machines handlers.MachineManager, previewDomain string) *Handler {
+func NewHandler(dbClient *db.Client, machines handlers.MachineManager, previewDomain string, logger *logging.Logger) *Handler {
 	return &Handler{
 		db:            dbClient,
 		machines:      machines,
 		previewDomain: previewDomain,
 		cache:         NewProjectCache(30 * time.Second),
+		log:           logger,
 	}
 }
 
@@ -45,7 +47,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	host := r.Host
 	info, err := ParseSubdomain(host, h.previewDomain)
 	if err != nil {
-		log.Printf("Invalid subdomain %s: %v", host, err)
+		h.log.Warn("invalid subdomain", "host", host, "error", err)
 		http.Error(w, "Invalid preview URL format", http.StatusBadRequest)
 		return
 	}
@@ -66,18 +68,18 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	project, err := h.db.GetProjectByIDPrefix(r.Context(), info.Prefix)
 	if err != nil {
 		if err == db.ErrNotFound {
-			log.Printf("Project not found for prefix: %s", info.Prefix)
+			h.log.Debug("project not found", "prefix", info.Prefix)
 			http.Error(w, "Project not found", http.StatusNotFound)
 			return
 		}
-		log.Printf("Database error looking up project: %v", err)
+		h.log.Error("database error looking up project", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	// Check if project is running
 	if project.Status != "running" {
-		log.Printf("Project %s is not running (status: %s)", project.ID, project.Status)
+		h.log.Debug("project not running", "project_id", project.ID, "status", project.Status)
 		http.Error(w, "Project is not running", http.StatusServiceUnavailable)
 		return
 	}
@@ -90,20 +92,20 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Get machine private IP
 	if project.FlyMachineID == nil || *project.FlyMachineID == "" {
-		log.Printf("Project %s has no machine", project.ID)
+		h.log.Warn("project has no machine", "project_id", project.ID)
 		http.Error(w, "Project has no running machine", http.StatusServiceUnavailable)
 		return
 	}
 
 	machine, err := h.machines.GetMachine(*project.FlyMachineID)
 	if err != nil {
-		log.Printf("Failed to get machine %s: %v", *project.FlyMachineID, err)
+		h.log.Error("failed to get machine", "machine_id", *project.FlyMachineID, "error", err)
 		http.Error(w, "Failed to connect to project", http.StatusBadGateway)
 		return
 	}
 
 	if machine.PrivateIP == "" {
-		log.Printf("Machine %s has no private IP", machine.ID)
+		h.log.Warn("machine has no private IP", "machine_id", machine.ID)
 		http.Error(w, "Project machine has no IP", http.StatusBadGateway)
 		return
 	}
@@ -181,7 +183,7 @@ func (h *Handler) proxyRequest(w http.ResponseWriter, r *http.Request, privateIP
 
 	// Handle errors
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-		log.Printf("Proxy error to %s: %v", targetURL.Host, err)
+		h.log.Error("proxy error", "target", targetURL.Host, "error", err)
 		http.Error(w, "Failed to connect to project", http.StatusBadGateway)
 	}
 
