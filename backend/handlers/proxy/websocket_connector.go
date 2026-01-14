@@ -72,7 +72,11 @@ func (c *WebSocketConnector) Connect(ctx context.Context, config ConnectorConfig
 		}
 		log.Printf("WebSocket connection attempt %d failed: %v", i+1, err)
 		if i < maxRetries-1 {
-			time.Sleep(retryDelay)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(retryDelay):
+			}
 		}
 	}
 
@@ -154,9 +158,10 @@ func (c *WebSocketConnector) readLoop() {
 	}
 }
 
-// closeDone closes the done channel once
+// closeDone closes the done channel and msgChan once
 func (c *WebSocketConnector) closeDone() {
 	c.closeOnce.Do(func() {
 		close(c.done)
+		close(c.msgChan)
 	})
 }

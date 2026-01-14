@@ -207,10 +207,11 @@ func (c *SSHConnector) keepAlive() {
 	c.session.KeepAlive(30*time.Second, c.done)
 }
 
-// closeDone closes the done channel once
+// closeDone closes the done channel and msgChan once
 func (c *SSHConnector) closeDone() {
 	c.closeOnce.Do(func() {
 		close(c.done)
+		close(c.msgChan)
 	})
 }
 

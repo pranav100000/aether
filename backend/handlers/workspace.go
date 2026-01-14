@@ -53,6 +53,13 @@ func (h *WorkspaceHandler) updateLastAccessedDebounced(projectID string) {
 	}
 }
 
+// clearLastAccessed removes the project from the debounce map when connection closes
+func (h *WorkspaceHandler) clearLastAccessed(projectID string) {
+	h.lastAccessedMu.Lock()
+	delete(h.lastAccessedTime, projectID)
+	h.lastAccessedMu.Unlock()
+}
+
 // HandleWorkspace handles unified WebSocket connections for all channels
 func (h *WorkspaceHandler) HandleWorkspace(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "id")
@@ -146,6 +153,8 @@ func (h *WorkspaceHandler) HandleWorkspace(w http.ResponseWriter, r *http.Reques
 
 // bridgeConnection bridges the frontend WebSocket with the VM ProxyConnector
 func (h *WorkspaceHandler) bridgeConnection(ctx context.Context, wsConn *websocket.Conn, connector proxy.ProxyConnector, projectID string) {
+	defer h.clearLastAccessed(projectID)
+
 	var wg sync.WaitGroup
 	var wsMu sync.Mutex
 
