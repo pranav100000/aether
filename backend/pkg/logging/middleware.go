@@ -43,25 +43,20 @@ func RequestLogger(logger *Logger) func(next http.Handler) http.Handler {
 			duration := time.Since(start)
 			status := ww.Status()
 
-			// Choose log level based on status code
-			if status >= 500 {
-				reqLogger.Error("request completed",
-					"status", status,
-					"bytes", ww.BytesWritten(),
-					"duration_ms", duration.Milliseconds(),
-				)
-			} else if status >= 400 {
-				reqLogger.Warn("request completed",
-					"status", status,
-					"bytes", ww.BytesWritten(),
-					"duration_ms", duration.Milliseconds(),
-				)
-			} else {
-				reqLogger.Info("request completed",
-					"status", status,
-					"bytes", ww.BytesWritten(),
-					"duration_ms", duration.Milliseconds(),
-				)
+			// Log request completion with appropriate level based on status code
+			attrs := []any{
+				"status", status,
+				"bytes", ww.BytesWritten(),
+				"duration_ms", duration.Milliseconds(),
+			}
+
+			switch {
+			case status >= 500:
+				reqLogger.Error("request completed", attrs...)
+			case status >= 400:
+				reqLogger.Warn("request completed", attrs...)
+			default:
+				reqLogger.Info("request completed", attrs...)
 			}
 		})
 	}
