@@ -71,8 +71,8 @@ fly secrets set "${SECRETS_ARGS[@]}" -a "$APP_NAME"
 
 echo ""
 echo "Deploying gateway..."
-# Build from project root to include both backend/ and gateway/ in context
-fly deploy --dockerfile gateway/Dockerfile --config gateway/fly.toml --remote-only
+# Build from project root to include apps/ and libs/ in context
+fly deploy --dockerfile apps/gateway/Dockerfile --config apps/gateway/fly.toml --remote-only
 
 echo ""
 echo "Deployment complete!"
@@ -80,4 +80,4 @@ echo ""
 echo "Gateway IP:"
 fly ips list -a "$APP_NAME"
 echo ""
-echo "Set VITE_PREVIEW_DOMAIN in frontend/.env to: <gateway-ip>.nip.io"
+echo "Set VITE_PREVIEW_DOMAIN in apps/web/.env to: <gateway-ip>.nip.io"

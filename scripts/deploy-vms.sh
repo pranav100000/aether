@@ -14,12 +14,12 @@ echo "Building VM base image: $FULL_IMAGE"
 echo "Platform: linux/amd64"
 echo ""
 
-cd infra/images/base
+cd infra/docker/base
 
 # Copy workspace-service to build context
 echo "Copying workspace-service..."
 rm -rf workspace-service
-cp -r "${PROJECT_ROOT}/workspace-service" workspace-service
+cp -r "${PROJECT_ROOT}/apps/workspace-service" workspace-service
 # Remove node_modules (will be installed fresh in Docker), keep lockfile for reproducibility
 rm -rf workspace-service/node_modules
 

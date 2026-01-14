@@ -1,0 +1,21 @@
+FROM golang:1.24-alpine
+
+# Install docker CLI for container inspection
+RUN apk add --no-cache docker-cli
+
+WORKDIR /app
+
+# Copy go mod files from root
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source (will be overwritten by volume mount)
+COPY apps/gateway/ ./apps/gateway/
+COPY apps/api/ ./apps/api/
+COPY libs/go/ ./libs/go/
+
+WORKDIR /app/apps/gateway
+
+EXPOSE 8080
+
+CMD ["go", "run", "."]
