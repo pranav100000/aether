@@ -103,7 +103,7 @@ func (h *WorkspaceHandler) HandleWorkspace(w http.ResponseWriter, r *http.Reques
 	connInfo, err := h.resolver.GetConnectionInfo(project)
 	if err != nil {
 		log.Printf("Error getting connection info: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Failed to connect to workspace", http.StatusInternalServerError)
 		return
 	}
 
