@@ -1,0 +1,24 @@
+FROM golang:1.24-alpine
+
+WORKDIR /app
+
+# Install air for hot reloading
+RUN go install github.com/air-verse/air@v1.61.0
+
+# Install git for go mod download and docker-cli for local mode
+RUN apk add --no-cache git docker-cli
+
+# Copy go mod files first for better caching (from root)
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source (will be overwritten by volume mount)
+COPY apps/api/ ./apps/api/
+COPY libs/go/ ./libs/go/
+
+WORKDIR /app/apps/api
+
+EXPOSE 8080
+
+# Run with air for hot reload
+CMD ["air", "-c", ".air.toml"]

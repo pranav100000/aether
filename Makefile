@@ -42,33 +42,30 @@ setup: check
 	fi
 	@echo ""
 	@echo "Creating .env files with local config..."
-	@if [ ! -f backend/.env ]; then \
-		cp backend/.env.example backend/.env; \
-		echo "  Created backend/.env"; \
+	@if [ ! -f apps/api/.env ]; then \
+		cp apps/api/.env.example apps/api/.env; \
+		echo "  Created apps/api/.env"; \
 	fi
-	@if [ ! -f frontend/.env ]; then \
-		cp frontend/.env.example frontend/.env; \
-		echo "  Created frontend/.env"; \
+	@if [ ! -f apps/web/.env ]; then \
+		cp apps/web/.env.example apps/web/.env; \
+		echo "  Created apps/web/.env"; \
 	fi
-	@if [ ! -f workspace-service/.env ]; then \
-		cp workspace-service/.env.example workspace-service/.env; \
-		echo "  Created workspace-service/.env"; \
+	@if [ ! -f apps/workspace-service/.env ]; then \
+		cp apps/workspace-service/.env.example apps/workspace-service/.env; \
+		echo "  Created apps/workspace-service/.env"; \
 	fi
 	@echo ""
 	@echo "Installing dependencies..."
-	@cd frontend && pnpm install
-	@cd workspace-service && bun install
+	@bun install
 	@echo ""
 	@echo "Setup complete! Run 'make dev' to start."
 
 check:
 	@echo "Checking prerequisites..."
 	@command -v go >/dev/null 2>&1 || { echo "ERROR: go is not installed"; exit 1; }
-	@command -v node >/dev/null 2>&1 || { echo "ERROR: node is not installed"; exit 1; }
-	@command -v pnpm >/dev/null 2>&1 || { echo "ERROR: pnpm is not installed (npm install -g pnpm)"; exit 1; }
+	@command -v bun >/dev/null 2>&1 || { echo "ERROR: bun is not installed (curl -fsSL https://bun.sh/install | bash)"; exit 1; }
 	@command -v docker >/dev/null 2>&1 || { echo "ERROR: docker is not installed"; exit 1; }
 	@command -v supabase >/dev/null 2>&1 || { echo "ERROR: supabase CLI not installed (brew install supabase/tap/supabase)"; exit 1; }
-	@command -v bun >/dev/null 2>&1 || { echo "WARNING: bun not installed (needed for workspace-service)"; }
 	@echo "All prerequisites met!"
 
 # ===========================================
@@ -79,8 +76,7 @@ dev: supabase-start dev-services dev-frontend
 
 dev-services:
 	@echo "Starting Docker services..."
-	LOCAL_PROJECT_DIR=$(shell pwd)/workspace-service/test-project \
-	LOCAL_WORKSPACE_SERVICE_DIR=$(shell pwd)/workspace-service \
+	LOCAL_PROJECT_DIR=$(shell pwd)/apps/workspace-service/test-project \
 	docker compose up -d --build
 	@echo ""
 	@echo "Services started:"
@@ -91,17 +87,17 @@ dev-services:
 
 dev-frontend:
 	@echo "Starting frontend..."
-	cd frontend && pnpm dev
+	cd apps/web && bun run dev
 
 dev-backend:
 	@echo "Starting backend (native Go, local mode)..."
-	cd backend && go run .
+	cd apps/api && go run .
 
 dev-real:
 	@echo "Starting against real infrastructure..."
 	@echo "Using Infisical for secrets (Fly VMs + real Supabase)"
-	infisical run --env=prod --path=/backend -- sh -c "cd backend && go run ." & \
-	infisical run --env=prod --path=/frontend -- sh -c "cd frontend && VITE_API_URL=http://localhost:8080 pnpm dev"
+	infisical run --env=prod --path=/backend -- sh -c "cd apps/api && go run ." & \
+	infisical run --env=prod --path=/frontend -- sh -c "cd apps/web && VITE_API_URL=http://localhost:8080 bun run dev"
 
 # ===========================================
 # Supabase

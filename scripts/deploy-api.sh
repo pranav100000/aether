@@ -45,7 +45,7 @@ fi
 
 echo ""
 echo "Deploying backend..."
-cd backend && fly deploy
+fly deploy --dockerfile apps/api/Dockerfile --config apps/api/fly.toml
 
 echo ""
 echo "Deployment complete!"

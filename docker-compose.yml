@@ -5,17 +5,17 @@ services:
   # Note: Requires local Supabase running (make supabase-start)
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile.dev
+      context: .
+      dockerfile: apps/api/Dockerfile.dev
     ports:
       - "8080:8080"
     volumes:
-      - ./backend:/app
+      - .:/app
       - ./.keys:/app/.keys:ro
       - go_mod_cache:/go/pkg/mod
       - /var/run/docker.sock:/var/run/docker.sock
     env_file:
-      - ./backend/.env
+      - ./apps/api/.env
     environment:
       # Override to use Supabase's Postgres via host network
       - DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:54322/postgres?sslmode=disable
@@ -37,12 +37,11 @@ services:
   gateway:
     build:
       context: .
-      dockerfile: gateway/Dockerfile.dev
+      dockerfile: apps/gateway/Dockerfile.dev
     ports:
       - "8081:8080"
     volumes:
-      - ./backend:/app/backend
-      - ./gateway:/app/gateway
+      - .:/app
       - go_mod_cache:/go/pkg/mod
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
