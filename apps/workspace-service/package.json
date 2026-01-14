@@ -15,6 +15,7 @@
     "@codebuff/sdk": "^0.10.2",
     "@openai/codex-sdk": "^0.79.0",
     "@opencode-ai/sdk": "^1.1.8",
+    "@sentry/bun": "^10.33.0",
     "bun-pty": "^0.4.7",
     "pino": "^10.1.1"
   },

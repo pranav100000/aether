@@ -1,4 +1,19 @@
 import pino from "pino"
+import * as Sentry from "@sentry/bun"
+
+// Initialize Sentry
+const SENTRY_DSN = "https://cd2942e3079c4f215326dfcb9eea424c@o4510703250505728.ingest.us.sentry.io/4510707850936320"
+Sentry.init({
+  dsn: SENTRY_DSN,
+  environment: Bun.env.ENVIRONMENT || "development",
+  tracesSampleRate: 0.1,
+  integrations: [
+    // Send console.log, console.warn, and console.error calls as logs to Sentry
+    Sentry.consoleLoggingIntegration({ levels: ["log", "warn", "error"] }),
+  ],
+  // Enable logs to be sent to Sentry
+  enableLogs: true,
+})
 
 /**
  * Logger wraps pino to provide a stable API that doesn't leak implementation details.
@@ -46,7 +61,7 @@ export class Logger {
   }
 
   /**
-   * Log at error level - hook point for Sentry integration
+   * Log at error level and capture to Sentry if enabled
    */
   error(msg: string, data?: Record<string, unknown>): void {
     if (data) {
@@ -54,7 +69,16 @@ export class Logger {
     } else {
       this.pino.error(msg)
     }
-    // TODO: Add Sentry capture here when integrated
+
+    // Capture to Sentry
+    if (SENTRY_DSN) {
+      Sentry.withScope((scope) => {
+        if (data) {
+          scope.setExtras(data)
+        }
+        Sentry.captureMessage(msg, "error")
+      })
+    }
   }
 }
 

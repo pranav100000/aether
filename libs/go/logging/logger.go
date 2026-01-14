@@ -2,10 +2,14 @@ package logging
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"strings"
+	"time"
+
+	"github.com/getsentry/sentry-go"
 )
 
 // Logger wraps slog.Logger to provide a stable API that doesn't leak implementation details.
@@ -26,6 +30,41 @@ type Config struct {
 }
 
 var defaultLogger *Logger
+var sentryEnabled bool
+
+// SentryConfig holds Sentry configuration
+type SentryConfig struct {
+	DSN              string
+	Environment      string
+	TracesSampleRate float64
+}
+
+// InitSentry initializes Sentry for error reporting.
+// Call this before Init() in main.go if you want Sentry integration.
+// Returns a cleanup function that should be deferred.
+func InitSentry(cfg SentryConfig) (func(), error) {
+	if cfg.DSN == "" {
+		return func() {}, nil
+	}
+
+	err := sentry.Init(sentry.ClientOptions{
+		Dsn:              cfg.DSN,
+		Environment:      cfg.Environment,
+		TracesSampleRate: cfg.TracesSampleRate,
+		EnableLogs:       true,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	sentryEnabled = true
+
+	cleanup := func() {
+		sentry.Flush(2 * time.Second)
+	}
+
+	return cleanup, nil
+}
 
 // Init initializes the global logger from environment variables.
 // LOG_LEVEL: debug, info, warn, error (default: info)
@@ -93,21 +132,28 @@ func (l *Logger) Debug(msg string, args ...any) {
 	l.slog.Debug(msg, args...)
 }
 
-// Info logs at info level
+// Info logs at info level and sends to Sentry Logs if enabled
 func (l *Logger) Info(msg string, args ...any) {
 	l.slog.Info(msg, args...)
+	if sentryEnabled {
+		logToSentry(sentry.NewLogger(context.Background()).Info(), msg, args)
+	}
 }
 
-// Warn logs at warn level
+// Warn logs at warn level and sends to Sentry Logs if enabled
 func (l *Logger) Warn(msg string, args ...any) {
 	l.slog.Warn(msg, args...)
+	if sentryEnabled {
+		logToSentry(sentry.NewLogger(context.Background()).Warn(), msg, args)
+	}
 }
 
-// Error logs at error level
-// This is a hook point for Sentry integration
+// Error logs at error level and sends to Sentry Logs if enabled
 func (l *Logger) Error(msg string, args ...any) {
 	l.slog.Error(msg, args...)
-	// TODO: Add Sentry capture here when integrated
+	if sentryEnabled {
+		logToSentry(sentry.NewLogger(context.Background()).Error(), msg, args)
+	}
 }
 
 // DebugContext logs at debug level with context
@@ -115,20 +161,50 @@ func (l *Logger) DebugContext(ctx context.Context, msg string, args ...any) {
 	l.slog.DebugContext(ctx, msg, args...)
 }
 
-// InfoContext logs at info level with context
+// InfoContext logs at info level with context and sends to Sentry Logs if enabled
 func (l *Logger) InfoContext(ctx context.Context, msg string, args ...any) {
 	l.slog.InfoContext(ctx, msg, args...)
+	if sentryEnabled {
+		logToSentry(sentry.NewLogger(ctx).Info(), msg, args)
+	}
 }
 
-// WarnContext logs at warn level with context
+// WarnContext logs at warn level with context and sends to Sentry Logs if enabled
 func (l *Logger) WarnContext(ctx context.Context, msg string, args ...any) {
 	l.slog.WarnContext(ctx, msg, args...)
+	if sentryEnabled {
+		logToSentry(sentry.NewLogger(ctx).Warn(), msg, args)
+	}
 }
 
-// ErrorContext logs at error level with context
+// ErrorContext logs at error level with context and sends to Sentry Logs if enabled
 func (l *Logger) ErrorContext(ctx context.Context, msg string, args ...any) {
 	l.slog.ErrorContext(ctx, msg, args...)
-	// TODO: Add Sentry capture here when integrated
+	if sentryEnabled {
+		logToSentry(sentry.NewLogger(ctx).Error(), msg, args)
+	}
+}
+
+// logToSentry sends a log entry to Sentry Logs with key-value attributes
+func logToSentry(entry sentry.LogEntry, msg string, args []any) {
+	for i := 0; i+1 < len(args); i += 2 {
+		if key, ok := args[i].(string); ok {
+			entry = entry.String(key, formatValue(args[i+1]))
+		}
+	}
+	entry.Emit(msg)
+}
+
+// formatValue converts any value to a string for Sentry attributes
+func formatValue(v any) string {
+	switch val := v.(type) {
+	case string:
+		return val
+	case error:
+		return val.Error()
+	default:
+		return fmt.Sprintf("%v", val)
+	}
 }
 
 func parseLevel(s string) slog.Level {

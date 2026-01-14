@@ -22,10 +22,24 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/joho/godotenv"
+	sentryhttp "github.com/getsentry/sentry-go/http"
 )
 
 func main() {
-	// Initialize logger early
+	// Initialize Sentry first (if DSN is configured)
+	sentryCleanup, err := logging.InitSentry(logging.SentryConfig{
+		DSN:              os.Getenv("SENTRY_DSN"),
+		Environment:      os.Getenv("ENVIRONMENT"),
+		TracesSampleRate: 0.1,
+	})
+	if err != nil {
+		// Can't use logger yet, fall back to stderr
+		os.Stderr.WriteString("failed to initialize Sentry: " + err.Error() + "\n")
+		os.Exit(1)
+	}
+	defer sentryCleanup()
+
+	// Initialize logger (will now capture errors to Sentry)
 	logger := logging.Init()
 
 	// Load .env file if it exists (check both current dir and parent)
@@ -127,14 +141,23 @@ func main() {
 
 	r := chi.NewRouter()
 
+	// Create Sentry HTTP handler for panic recovery and request context
+	sentryHandler := sentryhttp.New(sentryhttp.Options{
+		Repanic: true, // Re-panic after capturing so chi's Recoverer can log it
+	})
+
 	// Middleware order matters:
 	// 1. RequestID - generates request ID first
 	// 2. RealIP - extracts client IP
-	// 3. RequestLogger - logs requests and enriches context with request_id
-	// 4. Recoverer - catches panics
-	// 5. Timeout - limits request duration
+	// 3. Sentry - attaches hub to context, captures panics
+	// 4. RequestLogger - logs requests and enriches context with request_id
+	// 5. Recoverer - catches panics (after Sentry captures them)
+	// 6. Timeout - limits request duration
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
+	r.Use(func(next http.Handler) http.Handler {
+		return sentryHandler.Handle(next)
+	})
 	r.Use(logging.RequestLogger(logger))
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))

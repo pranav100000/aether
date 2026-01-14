@@ -17,6 +17,7 @@ import (
 	"aether/libs/go/logging"
 
 	"github.com/joho/godotenv"
+	sentryhttp "github.com/getsentry/sentry-go/http"
 )
 
 func main() {
@@ -26,7 +27,19 @@ func main() {
 		godotenv.Load("../.env")
 	}
 
-	// Initialize logging
+	// Initialize Sentry first (if DSN is configured)
+	sentryCleanup, err := logging.InitSentry(logging.SentryConfig{
+		DSN:              os.Getenv("SENTRY_DSN"),
+		Environment:      os.Getenv("ENVIRONMENT"),
+		TracesSampleRate: 0.1,
+	})
+	if err != nil {
+		os.Stderr.WriteString("failed to initialize Sentry: " + err.Error() + "\n")
+		os.Exit(1)
+	}
+	defer sentryCleanup()
+
+	// Initialize logging (will now capture errors to Sentry)
 	logging.Init()
 	logger := logging.Default()
 
@@ -89,12 +102,17 @@ func main() {
 	}
 
 	// Create proxy handler
-	handler := proxy.NewHandler(dbClient, machines, previewDomain, logger)
+	proxyHandler := proxy.NewHandler(dbClient, machines, previewDomain, logger)
+
+	// Wrap with Sentry HTTP handler for panic recovery and request context
+	sentryHandler := sentryhttp.New(sentryhttp.Options{
+		Repanic: true,
+	})
 
 	// Create HTTP server
 	server := &http.Server{
 		Addr:         ":" + port,
-		Handler:      handler,
+		Handler:      sentryHandler.Handle(proxyHandler),
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 60 * time.Second, // Longer for proxied requests
 		IdleTimeout:  120 * time.Second,

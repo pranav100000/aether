@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react"
 import type { User, Session, Provider, UserIdentity } from "@supabase/supabase-js"
+import * as Sentry from "@sentry/react"
 import { supabase } from "@/lib/supabase"
 
 interface AuthState {
@@ -23,6 +24,12 @@ export function useAuth() {
         session,
         loading: false,
       })
+      // Set Sentry user context
+      if (session?.user) {
+        Sentry.setUser({ id: session.user.id, email: session.user.email })
+      } else {
+        Sentry.setUser(null)
+      }
     })
 
     // Listen for auth changes
@@ -34,6 +41,12 @@ export function useAuth() {
         session,
         loading: false,
       })
+      // Update Sentry user context
+      if (session?.user) {
+        Sentry.setUser({ id: session.user.id, email: session.user.email })
+      } else {
+        Sentry.setUser(null)
+      }
     })
 
     return () => subscription.unsubscribe()

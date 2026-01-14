@@ -1,4 +1,5 @@
 .PHONY: help setup dev dev-services dev-frontend dev-backend stop clean clean-vms logs check
+.PHONY: dev-real dev-api-real dev-gateway-real dev-web-real
 .PHONY: supabase-start supabase-stop supabase-status supabase-reset db-shell
 
 # Default target
@@ -14,7 +15,12 @@ help:
 	@echo "  make dev-services   - Start Docker services (backend)"
 	@echo "  make dev-frontend   - Start frontend (Vite)"
 	@echo "  make dev-backend    - Start backend (native Go, local mode)"
-	@echo "  make dev-real       - Start backend against real Fly VMs + Supabase"
+	@echo ""
+	@echo "Development (real infra via Infisical):"
+	@echo "  make dev-real       - Start API + Web against real infrastructure"
+	@echo "  make dev-api-real   - Start API only (secrets from /common + /api)"
+	@echo "  make dev-gateway-real - Start Gateway only (secrets from /common + /gateway)"
+	@echo "  make dev-web-real   - Start Web only (secrets from /common + /web)"
 	@echo ""
 	@echo "Supabase:"
 	@echo "  make supabase-start - Start local Supabase"
@@ -87,7 +93,7 @@ dev-services:
 
 dev-frontend:
 	@echo "Starting frontend..."
-	cd apps/web && bun run dev
+	cd apps/web && npx vite --host
 
 dev-backend:
 	@echo "Starting backend (native Go, local mode)..."
@@ -96,8 +102,21 @@ dev-backend:
 dev-real:
 	@echo "Starting against real infrastructure..."
 	@echo "Using Infisical for secrets (Fly VMs + real Supabase)"
-	infisical run --env=prod --path=/backend -- sh -c "cd apps/api && go run ." & \
-	infisical run --env=prod --path=/frontend -- sh -c "cd apps/web && VITE_API_URL=http://localhost:8080 bun run dev"
+	@echo "Fetching secrets from /common + service-specific folders"
+	infisical run --env=prod --path=/common --path=/api -- sh -c "cd apps/api && go run ." & \
+	infisical run --env=prod --path=/common --path=/web -- sh -c "cd apps/web && VITE_API_URL=http://localhost:8080 bun run dev"
+
+dev-api-real:
+	@echo "Starting API against real infrastructure..."
+	infisical run --env=prod --path=/common --path=/api -- sh -c "cd apps/api && go run ."
+
+dev-gateway-real:
+	@echo "Starting Gateway against real infrastructure..."
+	infisical run --env=prod --path=/common --path=/gateway -- sh -c "cd apps/gateway && go run ."
+
+dev-web-real:
+	@echo "Starting Web against real infrastructure..."
+	infisical run --env=prod --path=/common --path=/web -- sh -c "cd apps/web && bun run dev"
 
 # ===========================================
 # Supabase

@@ -6,8 +6,9 @@
     "packages/*"
   ],
   "scripts": {
-    "dev:web": "bun run --filter frontend dev",
-    "build:web": "bun run --filter frontend build",
+    "dev": "cd apps/web && bun run dev",
+    "dev:web": "cd apps/web && bun run dev",
+    "build:web": "cd apps/web && bun run build",
     "typecheck": "bun run --filter '*' typecheck"
   }
 }
