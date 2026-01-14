@@ -1,6 +1,7 @@
 import { watch, type FSWatcher } from "fs"
 import { readdir, stat } from "fs/promises"
 import { join, relative } from "path"
+import { logger } from "../logging"
 import type { FileChangeMessage } from "./types"
 
 export interface FileWatcherConfig {
@@ -14,6 +15,7 @@ export class FileWatcher {
   private projectDir: string
   private debounceMs: number
   private pendingEvents: Map<string, NodeJS.Timeout> = new Map()
+  private log = logger.child({ channel: "files" })
 
   constructor(config: FileWatcherConfig) {
     this.projectDir = config.projectDir
@@ -28,9 +30,9 @@ export class FileWatcher {
 
     try {
       await this.watchDirectory(this.projectDir)
-      console.log(`[FileWatcher] Watching: ${this.projectDir}`)
+      this.log.info("watching", { dir: this.projectDir })
     } catch (err) {
-      console.error("[FileWatcher] Failed to initialize:", err)
+      this.log.error("failed to initialize", { error: String(err) })
     }
   }
 
@@ -46,7 +48,7 @@ export class FileWatcher {
     })
 
     watcher.on("error", (err) => {
-      console.error(`[FileWatcher] Error watching ${dirPath}:`, err)
+      this.log.error("watch error", { dir: dirPath, error: String(err) })
     })
 
     this.watchers.push(watcher)
@@ -161,6 +163,6 @@ export class FileWatcher {
     }
     this.pendingEvents.clear()
 
-    console.log("[FileWatcher] Closed")
+    this.log.info("closed")
   }
 }

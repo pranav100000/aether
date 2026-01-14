@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -15,6 +14,7 @@ import (
 	"aether/fly"
 	"aether/handlers"
 	"aether/local"
+	"aether/pkg/logging"
 
 	"github.com/joho/godotenv"
 )
@@ -26,13 +26,18 @@ func main() {
 		godotenv.Load("../.env")
 	}
 
+	// Initialize logging
+	logging.Init()
+	logger := logging.Default()
+
 	// Check if running in local mode
 	localMode := os.Getenv("LOCAL_MODE") == "true"
 
 	// Required environment variables
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
-		log.Fatal("DATABASE_URL environment variable is required")
+		logger.Error("DATABASE_URL environment variable is required")
+		os.Exit(1)
 	}
 
 	// Optional environment variables with defaults
@@ -47,28 +52,31 @@ func main() {
 	}
 
 	// Initialize database client
-	log.Println("Connecting to database...")
+	logger.Info("connecting to database")
 	dbClient, err := db.NewClient(databaseURL)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		logger.Error("failed to connect to database", "error", err)
+		os.Exit(1)
 	}
 	defer dbClient.Close()
 
 	// Initialize machine manager based on mode
 	var machines handlers.MachineManager
 	if localMode {
-		log.Println("Running in LOCAL_MODE - using Docker containers")
+		logger.Info("running in LOCAL_MODE - using Docker containers")
 		machines = local.NewMachineManager()
 	} else {
 		// Production mode - require Fly.io credentials
 		flyToken := os.Getenv("FLY_API_TOKEN")
 		if flyToken == "" {
-			log.Fatal("FLY_API_TOKEN environment variable is required")
+			logger.Error("FLY_API_TOKEN environment variable is required")
+			os.Exit(1)
 		}
 
 		flyAppName := os.Getenv("FLY_VMS_APP_NAME")
 		if flyAppName == "" {
-			log.Fatal("FLY_VMS_APP_NAME environment variable is required")
+			logger.Error("FLY_VMS_APP_NAME environment variable is required")
+			os.Exit(1)
 		}
 
 		flyRegion := os.Getenv("FLY_REGION")
@@ -76,12 +84,12 @@ func main() {
 			flyRegion = "sjc"
 		}
 
-		log.Println("Running in production mode - using Fly.io")
+		logger.Info("running in production mode - using Fly.io")
 		machines = fly.NewClient(flyToken, flyAppName, flyRegion)
 	}
 
 	// Create proxy handler
-	handler := proxy.NewHandler(dbClient, machines, previewDomain)
+	handler := proxy.NewHandler(dbClient, machines, previewDomain, logger)
 
 	// Create HTTP server
 	server := &http.Server{
@@ -94,10 +102,10 @@ func main() {
 
 	// Start server in background
 	go func() {
-		log.Printf("Gateway starting on port %s", port)
-		log.Printf("Preview domain: %s", previewDomain)
+		logger.Info("gateway starting", "port", port, "preview_domain", previewDomain)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server failed: %v", err)
+			logger.Error("server failed", "error", err)
+			os.Exit(1)
 		}
 	}()
 
@@ -106,15 +114,15 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("Shutting down server...")
+	logger.Info("shutting down server")
 
 	// Graceful shutdown with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	if err := server.Shutdown(ctx); err != nil {
-		log.Printf("Server shutdown error: %v", err)
+		logger.Error("server shutdown error", "error", err)
 	}
 
-	log.Println("Server stopped")
+	logger.Info("server stopped")
 }

@@ -3,7 +3,6 @@ package proxy
 import (
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"time"
@@ -18,7 +17,7 @@ func (h *Handler) proxyWebSocket(w http.ResponseWriter, r *http.Request, private
 	// Connect to the target
 	targetConn, err := net.DialTimeout("tcp", targetAddr, 10*time.Second)
 	if err != nil {
-		log.Printf("Failed to connect to WebSocket target %s: %v", targetAddr, err)
+		h.log.Error("failed to connect to WebSocket target", "target", targetAddr, "error", err)
 		http.Error(w, "Failed to connect to project", http.StatusBadGateway)
 		return
 	}
@@ -27,14 +26,14 @@ func (h *Handler) proxyWebSocket(w http.ResponseWriter, r *http.Request, private
 	// Hijack the client connection
 	hijacker, ok := w.(http.Hijacker)
 	if !ok {
-		log.Printf("ResponseWriter does not support hijacking")
+		h.log.Error("ResponseWriter does not support hijacking")
 		http.Error(w, "WebSocket not supported", http.StatusInternalServerError)
 		return
 	}
 
 	clientConn, _, err := hijacker.Hijack()
 	if err != nil {
-		log.Printf("Failed to hijack connection: %v", err)
+		h.log.Error("failed to hijack connection", "error", err)
 		http.Error(w, "Failed to upgrade connection", http.StatusInternalServerError)
 		return
 	}
@@ -46,7 +45,7 @@ func (h *Handler) proxyWebSocket(w http.ResponseWriter, r *http.Request, private
 	// Forward the upgrade request to the target
 	err = r.Write(targetConn)
 	if err != nil {
-		log.Printf("Failed to write upgrade request to target: %v", err)
+		h.log.Error("failed to write upgrade request to target", "error", err)
 		return
 	}
 
@@ -67,7 +66,7 @@ func (h *Handler) proxyWebSocket(w http.ResponseWriter, r *http.Request, private
 	// Wait for either direction to close or error
 	err = <-errCh
 	if err != nil && err != io.EOF {
-		log.Printf("WebSocket proxy error: %v", err)
+		h.log.Debug("websocket proxy closed", "error", err)
 	}
 }
 

@@ -1,5 +1,6 @@
 import { AgentHandler } from "./handler"
 import { PTYHandler, FileWatcher, PortWatcher, isTerminalMessage } from "./channels"
+import { logger, createContextLogger, Logger } from "./logging"
 import type { AgentType, ClientMessage, ServerMessage } from "./types"
 import type { TerminalInputMessage, TerminalResizeMessage } from "./channels"
 import type { ServerWebSocket } from "bun"
@@ -12,6 +13,7 @@ interface WSData {
   mode: "workspace" | "agent-only"
   agent?: AgentType
   environment: Record<string, string>
+  log?: Logger
   agentHandler?: AgentHandler
   ptyHandler?: PTYHandler
   fileWatcher?: FileWatcher
@@ -33,7 +35,7 @@ function extractEnvironment(req: Request): Record<string, string> {
       try {
         env[envKey] = atob(value)
       } catch {
-        console.error(`Failed to decode env var ${envKey}`)
+        logger.error("failed to decode env var", { key: envKey })
       }
     }
   })
@@ -94,13 +96,17 @@ const server = Bun.serve<WSData>({
   websocket: {
     async open(ws: ServerWebSocket<WSData>) {
       const { mode, environment } = ws.data
-      console.log(`[WS] Connection opened, mode: ${mode}`)
 
-      // Apply environment variables
+      // Apply environment variables first (needed for correlation context)
       if (Object.keys(environment).length > 0) {
-        console.log(`[WS] Applying ${Object.keys(environment).length} environment variables`)
         applyEnvironment(environment)
       }
+
+      // Create connection-scoped logger with correlation context
+      const log = createContextLogger({ channel: "websocket", mode })
+      ws.data.log = log
+
+      log.info("connection opened", { env_count: Object.keys(environment).length })
 
       try {
         if (mode === "workspace") {
@@ -110,7 +116,7 @@ const server = Bun.serve<WSData>({
             ws.send(JSON.stringify(msg))
           })
           ws.data.ptyHandler = ptyHandler
-          console.log("[WS] PTY initialized")
+          log.info("PTY initialized")
 
           // Initialize file watcher
           const fileWatcher = new FileWatcher({ projectDir: PROJECT_CWD })
@@ -118,7 +124,7 @@ const server = Bun.serve<WSData>({
             ws.send(JSON.stringify(msg))
           })
           ws.data.fileWatcher = fileWatcher
-          console.log("[WS] FileWatcher initialized")
+          log.info("FileWatcher initialized")
 
           // Initialize port watcher
           const portWatcher = new PortWatcher()
@@ -126,7 +132,7 @@ const server = Bun.serve<WSData>({
             ws.send(JSON.stringify(msg))
           })
           ws.data.portWatcher = portWatcher
-          console.log("[WS] PortWatcher initialized")
+          log.info("PortWatcher initialized")
 
           // Agent handler will be created on first agent message
           // (since we need to know which agent type)
@@ -140,9 +146,10 @@ const server = Bun.serve<WSData>({
           })
           ws.data.agentHandler = agentHandler
           await agentHandler.initialize()
+          log.info("agent handler initialized", { agent })
         }
       } catch (err) {
-        console.error("[WS] Failed to initialize:", err)
+        log.error("failed to initialize", { error: String(err) })
         ws.send(JSON.stringify({
           type: "error",
           error: String(err),
@@ -152,6 +159,7 @@ const server = Bun.serve<WSData>({
     },
 
     async message(ws: ServerWebSocket<WSData>, message: string | Buffer) {
+      const log = ws.data.log ?? logger
       try {
         const msg = JSON.parse(String(message))
 
@@ -165,7 +173,7 @@ const server = Bun.serve<WSData>({
           }
         }
       } catch (err) {
-        console.error("[WS] Error handling message:", err)
+        log.error("error handling message", { error: String(err) })
         ws.send(JSON.stringify({
           type: "error",
           error: String(err),
@@ -174,7 +182,8 @@ const server = Bun.serve<WSData>({
     },
 
     close(ws: ServerWebSocket<WSData>) {
-      console.log("[WS] Connection closed")
+      const log = ws.data.log ?? logger
+      log.info("connection closed")
 
       // Cleanup handlers
       ws.data.ptyHandler?.close()
@@ -188,6 +197,7 @@ const server = Bun.serve<WSData>({
  * Handle messages in unified workspace mode with channel routing
  */
 async function handleWorkspaceMessage(ws: ServerWebSocket<WSData>, msg: unknown): Promise<void> {
+  const log = ws.data.log ?? logger
   const channelMsg = msg as { channel?: string; type?: string; agent?: string }
 
   // Route by channel
@@ -204,12 +214,12 @@ async function handleWorkspaceMessage(ws: ServerWebSocket<WSData>, msg: unknown)
 
     case "files":
       // File operations handled separately (watchers send outbound only)
-      console.log("[WS] Files channel message:", msg)
+      log.debug("files channel message", { type: channelMsg.type })
       break
 
     case "ports":
       // Port operations handled separately (watchers send outbound only)
-      console.log("[WS] Ports channel message:", msg)
+      log.debug("ports channel message", { type: channelMsg.type })
       break
 
     default:
@@ -218,7 +228,7 @@ async function handleWorkspaceMessage(ws: ServerWebSocket<WSData>, msg: unknown)
       if (channelMsg.type === "prompt" || channelMsg.type === "abort" || channelMsg.type === "settings") {
         await handleAgentMessage(ws, { ...(msg as Record<string, unknown>), channel: "agent" })
       } else {
-        console.warn("[WS] Unknown message format:", msg)
+        log.warn("unknown message format", { type: channelMsg.type, channel: channelMsg.channel })
       }
   }
 }
@@ -227,12 +237,13 @@ async function handleWorkspaceMessage(ws: ServerWebSocket<WSData>, msg: unknown)
  * Handle agent channel messages
  */
 async function handleAgentMessage(ws: ServerWebSocket<WSData>, msg: unknown): Promise<void> {
+  const log = ws.data.log ?? logger
   const agentMsg = msg as { agent?: string; type?: string }
   const agentType = (agentMsg.agent || "claude") as AgentType
 
   // Create agent handler on first message if needed
   if (!ws.data.agentHandler || ws.data.agent !== agentType) {
-    console.log(`[WS] Creating agent handler for: ${agentType}`)
+    log.info("creating agent handler", { agent: agentType })
     ws.data.agent = agentType
     ws.data.agentHandler = new AgentHandler(agentType, {
       send: (serverMsg: ServerMessage) => {
@@ -251,10 +262,11 @@ async function handleAgentMessage(ws: ServerWebSocket<WSData>, msg: unknown): Pr
   await ws.data.agentHandler.handleMessage(agentMsg as ClientMessage)
 }
 
-console.log(`Workspace service running at ws://localhost:${PORT}`)
-console.log(`Endpoints:`)
-console.log(`  ws://localhost:${PORT}/workspace - Unified (terminal + agent + files + ports)`)
-for (const agent of VALID_AGENTS) {
-  console.log(`  ws://localhost:${PORT}/agent/${agent} - Agent only (legacy)`)
-}
-console.log(`  http://localhost:${PORT}/health - Health check`)
+logger.info("workspace service started", {
+  port: PORT,
+  endpoints: {
+    workspace: `ws://localhost:${PORT}/workspace`,
+    agents: VALID_AGENTS.map(a => `ws://localhost:${PORT}/agent/${a}`),
+    health: `http://localhost:${PORT}/health`,
+  },
+})

@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/base64"
-	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -14,6 +13,7 @@ import (
 	"aether/fly"
 	"aether/handlers"
 	authmw "aether/middleware"
+	"aether/pkg/logging"
 	"aether/sftp"
 	"aether/ssh"
 	"aether/workspace"
@@ -25,10 +25,13 @@ import (
 )
 
 func main() {
+	// Initialize logger early
+	logger := logging.Init()
+
 	// Load .env file if it exists (check both current dir and parent)
 	if err := godotenv.Load(); err != nil {
 		if err := godotenv.Load("../.env"); err != nil {
-			log.Println("No .env file found, using environment variables")
+			logger.Debug("no .env file found, using environment variables")
 		}
 	}
 	port := getEnv("API_PORT", "8080")
@@ -39,8 +42,8 @@ func main() {
 	// Fly.io config (not required in local mode)
 	var flyToken, flyAppName, flyRegion, baseImage string
 	if !cfg.LocalMode {
-		flyToken = requireEnv("FLY_API_TOKEN")
-		flyAppName = requireEnv("FLY_VMS_APP_NAME")
+		flyToken = requireEnv(logger, "FLY_API_TOKEN")
+		flyAppName = requireEnv(logger, "FLY_VMS_APP_NAME")
 		flyRegion = getEnv("FLY_REGION", "sjc")
 		baseImage = getEnv("BASE_IMAGE", "registry.fly.io/"+flyAppName+"/base:latest")
 	} else {
@@ -48,8 +51,8 @@ func main() {
 		flyAppName = os.Getenv("FLY_VMS_APP_NAME")
 		flyRegion = getEnv("FLY_REGION", "sjc")
 		baseImage = getEnv("BASE_IMAGE", "")
-		log.Println("LOCAL_MODE enabled - Fly.io VM operations will be skipped")
-		log.Printf("Local project directory: %s", cfg.LocalProjectDir)
+		logger.Info("LOCAL_MODE enabled - Fly.io VM operations will be skipped")
+		logger.Info("local project directory configured", "path", cfg.LocalProjectDir)
 	}
 	idleTimeoutMin := getEnvInt("IDLE_TIMEOUT_MINUTES", 10)
 
@@ -57,33 +60,37 @@ func main() {
 
 	sshClient, err := loadSSHClient()
 	if err != nil {
-		log.Fatalf("Failed to load SSH client: %v", err)
+		logger.Error("failed to load SSH client", "error", err)
+		os.Exit(1)
 	}
 
 	// Initialize SFTP client (uses same SSH key)
 	sftpClient, err := loadSFTPClient()
 	if err != nil {
-		log.Fatalf("Failed to load SFTP client: %v", err)
+		logger.Error("failed to load SFTP client", "error", err)
+		os.Exit(1)
 	}
 	defer sftpClient.Close()
 
 	// Initialize database client
-	databaseURL := requireEnv("DATABASE_URL")
+	databaseURL := requireEnv(logger, "DATABASE_URL")
 	dbClient, err := db.NewClient(databaseURL)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		logger.Error("failed to connect to database", "error", err)
+		os.Exit(1)
 	}
 	defer dbClient.Close()
-	log.Println("Connected to database")
+	logger.Info("connected to database")
 
 	// Initialize auth middleware
-	supabaseURL := requireEnv("SUPABASE_URL")
+	supabaseURL := requireEnv(logger, "SUPABASE_URL")
 	jwtSecret := os.Getenv("SUPABASE_JWT_SECRET") // Optional for local dev (HS256 fallback)
 	authMiddleware, err := authmw.NewAuthMiddleware(supabaseURL, jwtSecret)
 	if err != nil {
-		log.Fatalf("Failed to initialize auth middleware: %v", err)
+		logger.Error("failed to initialize auth middleware", "error", err)
+		os.Exit(1)
 	}
-	log.Println("Auth middleware initialized with JWKS")
+	logger.Info("auth middleware initialized with JWKS")
 
 	// Initialize encryption service (optional - if key not set, API keys feature is disabled)
 	var encryptor *crypto.Encryptor
@@ -91,12 +98,13 @@ func main() {
 	if os.Getenv("ENCRYPTION_MASTER_KEY") != "" {
 		encryptor, err = crypto.NewEncryptor()
 		if err != nil {
-			log.Fatalf("Failed to initialize encryptor: %v", err)
+			logger.Error("failed to initialize encryptor", "error", err)
+			os.Exit(1)
 		}
 		apiKeysHandler = handlers.NewAPIKeysHandler(dbClient, encryptor)
-		log.Println("Encryption service initialized")
+		logger.Info("encryption service initialized")
 	} else {
-		log.Println("Warning: ENCRYPTION_MASTER_KEY not set, API keys feature disabled")
+		logger.Warn("ENCRYPTION_MASTER_KEY not set, API keys feature disabled")
 	}
 	// Convert to interface safely (avoids Go's typed-nil interface gotcha)
 	apiKeysGetter := asAPIKeysGetter(apiKeysHandler)
@@ -119,10 +127,16 @@ func main() {
 
 	r := chi.NewRouter()
 
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
+	// Middleware order matters:
+	// 1. RequestID - generates request ID first
+	// 2. RealIP - extracts client IP
+	// 3. RequestLogger - logs requests and enriches context with request_id
+	// 4. Recoverer - catches panics
+	// 5. Timeout - limits request duration
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
+	r.Use(logging.RequestLogger(logger))
+	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))
 
 	r.Use(cors.Handler(cors.Options{
@@ -190,13 +204,17 @@ func main() {
 
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("../frontend"))))
 
-	log.Printf("Server starting on port %s", port)
-	log.Printf("Fly App: %s, Region: %s", flyAppName, flyRegion)
-	log.Printf("Base Image: %s", baseImage)
-	log.Printf("Idle Timeout: %d minutes", idleTimeoutMin)
+	logger.Info("server starting",
+		"port", port,
+		"fly_app", flyAppName,
+		"fly_region", flyRegion,
+		"base_image", baseImage,
+		"idle_timeout_minutes", idleTimeoutMin,
+	)
 
 	if err := http.ListenAndServe(":"+port, r); err != nil {
-		log.Fatalf("Server failed: %v", err)
+		logger.Error("server failed", "error", err)
+		os.Exit(1)
 	}
 }
 
@@ -247,10 +265,11 @@ func getEnv(key, defaultValue string) string {
 	return defaultValue
 }
 
-func requireEnv(key string) string {
+func requireEnv(logger *logging.Logger, key string) string {
 	value := os.Getenv(key)
 	if value == "" {
-		log.Fatalf("Required environment variable %s is not set", key)
+		logger.Error("required environment variable not set", "key", key)
+		os.Exit(1)
 	}
 	return value
 }

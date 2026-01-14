@@ -4,13 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"log"
 	"net/http"
 	"time"
 
 	"aether/db"
 	authmw "aether/middleware"
+	"aether/pkg/logging"
 	"aether/validation"
 
 	"github.com/go-chi/chi/v5"
@@ -122,11 +121,13 @@ func projectToResponse(p *db.Project) ProjectResponse {
 // Handlers
 
 func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
-	userID := authmw.GetUserID(r.Context())
+	ctx := r.Context()
+	userID := authmw.GetUserID(ctx)
+	log := logging.FromContext(ctx)
 
-	projects, err := h.store.ListProjects(r.Context(), userID)
+	projects, err := h.store.ListProjects(ctx, userID)
 	if err != nil {
-		log.Printf("Error listing projects: %v", err)
+		log.Error("failed to list projects", "error", err)
 		WriteError(w, http.StatusInternalServerError, "Failed to list projects")
 		return
 	}
@@ -140,22 +141,18 @@ func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
-	userID := authmw.GetUserID(r.Context())
+	ctx := r.Context()
+	userID := authmw.GetUserID(ctx)
+	log := logging.FromContext(ctx)
 
 	var req CreateProjectRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Printf("Error decoding create project request: %v", err)
+		log.Error("failed to decode create project request", "error", err)
 		WriteError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
-	var idleTimeoutLog string
-	if req.IdleTimeoutMinutes != nil {
-		idleTimeoutLog = fmt.Sprintf("%d", *req.IdleTimeoutMinutes)
-	} else {
-		idleTimeoutLog = "nil"
-	}
-	log.Printf("Create project request: user=%s name=%q hardware=%+v idleTimeout=%s", userID, req.Name, req.Hardware, idleTimeoutLog)
+	log.Info("create project request", "name", req.Name, "hardware", req.Hardware, "idle_timeout_minutes", req.IdleTimeoutMinutes)
 
 	// Handle hardware config - frontend always sends the actual values
 	var hwConfig *validation.HardwareConfig
@@ -187,7 +184,7 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	input, errs := validation.ValidateCreateProject(req.Name, req.Description, hwConfig)
 	if errs.HasErrors() {
-		log.Printf("Validation failed for create project: %v", errs)
+		log.Warn("validation failed for create project", "errors", errs)
 		WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error":  "Validation failed",
 			"errors": errs,
@@ -204,19 +201,22 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 		GPUKind:      input.Hardware.GPUKind,
 	}
 
-	project, err := h.store.CreateProject(r.Context(), userID, input.Name, input.Description, h.baseImage, dbHwConfig, idleTimeoutMinutes)
+	project, err := h.store.CreateProject(ctx, userID, input.Name, input.Description, h.baseImage, dbHwConfig, idleTimeoutMinutes)
 	if err != nil {
-		log.Printf("Error creating project: %v", err)
+		log.Error("failed to create project", "error", err)
 		WriteError(w, http.StatusInternalServerError, "Failed to create project")
 		return
 	}
 
+	log.Info("project created", "project_id", project.ID)
 	WriteJSON(w, http.StatusCreated, projectToResponse(project))
 }
 
 func (h *ProjectHandler) Get(w http.ResponseWriter, r *http.Request) {
-	userID := authmw.GetUserID(r.Context())
+	ctx := r.Context()
+	userID := authmw.GetUserID(ctx)
 	projectID := chi.URLParam(r, "id")
+	log := logging.FromContext(ctx)
 
 	if err := validation.ValidateUUID(projectID, "id"); err != nil {
 		WriteJSON(w, http.StatusBadRequest, map[string]any{
@@ -226,13 +226,13 @@ func (h *ProjectHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	project, err := h.store.GetProjectByUser(r.Context(), projectID, userID)
+	project, err := h.store.GetProjectByUser(ctx, projectID, userID)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			WriteError(w, http.StatusNotFound, "Project not found")
 			return
 		}
-		log.Printf("Error getting project: %v", err)
+		log.Error("failed to get project", "error", err)
 		WriteError(w, http.StatusInternalServerError, "Failed to get project")
 		return
 	}
@@ -251,8 +251,10 @@ func (h *ProjectHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
-	userID := authmw.GetUserID(r.Context())
+	ctx := r.Context()
+	userID := authmw.GetUserID(ctx)
 	projectID := chi.URLParam(r, "id")
+	log := logging.FromContext(ctx)
 
 	if err := validation.ValidateUUID(projectID, "id"); err != nil {
 		WriteJSON(w, http.StatusBadRequest, map[string]any{
@@ -277,13 +279,13 @@ func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	project, err := h.store.UpdateProject(r.Context(), projectID, userID, input.Name, input.Description)
+	project, err := h.store.UpdateProject(ctx, projectID, userID, input.Name, input.Description)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			WriteError(w, http.StatusNotFound, "Project not found")
 			return
 		}
-		log.Printf("Error updating project: %v", err)
+		log.Error("failed to update project", "error", err)
 		WriteError(w, http.StatusInternalServerError, "Failed to update project")
 		return
 	}
@@ -292,8 +294,10 @@ func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	userID := authmw.GetUserID(r.Context())
+	ctx := r.Context()
+	userID := authmw.GetUserID(ctx)
 	projectID := chi.URLParam(r, "id")
+	log := logging.FromContext(ctx)
 
 	if err := validation.ValidateUUID(projectID, "id"); err != nil {
 		WriteJSON(w, http.StatusBadRequest, map[string]any{
@@ -304,13 +308,13 @@ func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get project first to check for machine
-	project, err := h.store.GetProjectByUser(r.Context(), projectID, userID)
+	project, err := h.store.GetProjectByUser(ctx, projectID, userID)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			WriteError(w, http.StatusNotFound, "Project not found")
 			return
 		}
-		log.Printf("Error getting project for delete: %v", err)
+		log.Error("failed to get project for delete", "error", err)
 		WriteError(w, http.StatusInternalServerError, "Failed to delete project")
 		return
 	}
@@ -318,7 +322,7 @@ func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	// Destroy Fly machine if exists
 	if project.FlyMachineID != nil && *project.FlyMachineID != "" {
 		if err := h.machines.DeleteMachine(*project.FlyMachineID); err != nil {
-			log.Printf("Error: failed to delete Fly machine %s: %v", *project.FlyMachineID, err)
+			log.Error("failed to delete Fly machine", "machine_id", *project.FlyMachineID, "error", err)
 			WriteError(w, http.StatusInternalServerError, "Failed to delete VM from Fly.io")
 			return
 		}
@@ -327,25 +331,28 @@ func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	// Destroy Fly volume if exists
 	if project.FlyVolumeID != nil && *project.FlyVolumeID != "" {
 		if err := h.volumes.DeleteVolume(*project.FlyVolumeID); err != nil {
-			log.Printf("Error: failed to delete Fly volume %s: %v", *project.FlyVolumeID, err)
+			log.Error("failed to delete Fly volume", "volume_id", *project.FlyVolumeID, "error", err)
 			WriteError(w, http.StatusInternalServerError, "Failed to delete volume from Fly.io")
 			return
 		}
 	}
 
 	// Delete from database
-	if err := h.store.DeleteProject(r.Context(), projectID, userID); err != nil {
-		log.Printf("Error deleting project: %v", err)
+	if err := h.store.DeleteProject(ctx, projectID, userID); err != nil {
+		log.Error("failed to delete project", "error", err)
 		WriteError(w, http.StatusInternalServerError, "Failed to delete project")
 		return
 	}
 
+	log.Info("project deleted", "project_id", projectID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *ProjectHandler) Start(w http.ResponseWriter, r *http.Request) {
-	userID := authmw.GetUserID(r.Context())
+	ctx := r.Context()
+	userID := authmw.GetUserID(ctx)
 	projectID := chi.URLParam(r, "id")
+	log := logging.FromContext(ctx)
 
 	if err := validation.ValidateUUID(projectID, "id"); err != nil {
 		WriteJSON(w, http.StatusBadRequest, map[string]any{
@@ -355,21 +362,23 @@ func (h *ProjectHandler) Start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	project, err := h.store.GetProjectByUser(r.Context(), projectID, userID)
+	project, err := h.store.GetProjectByUser(ctx, projectID, userID)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			WriteError(w, http.StatusNotFound, "Project not found")
 			return
 		}
-		log.Printf("Error getting project for start: %v", err)
+		log.Error("failed to get project for start", "error", err)
 		WriteError(w, http.StatusInternalServerError, "Failed to start project")
 		return
 	}
 
 	// Update status to starting
-	if err := h.store.UpdateProjectStatus(r.Context(), projectID, "starting", nil); err != nil {
-		log.Printf("Error updating project status: %v", err)
+	if err := h.store.UpdateProjectStatus(ctx, projectID, "starting", nil); err != nil {
+		log.Error("failed to update project status", "error", err)
 	}
+
+	log.Info("starting project")
 
 	// Start machine in background goroutine
 	go h.startMachineAsync(projectID, project, userID)
@@ -384,6 +393,7 @@ func (h *ProjectHandler) Start(w http.ResponseWriter, r *http.Request) {
 // startMachineAsync handles machine creation/startup in the background
 func (h *ProjectHandler) startMachineAsync(projectID string, project *db.Project, userID string) {
 	ctx := context.Background()
+	log := logging.Default().With("project_id", projectID, "user_id", userID)
 
 	// Create volume if it doesn't exist
 	if project.FlyVolumeID == nil || *project.FlyVolumeID == "" {
@@ -395,39 +405,39 @@ func (h *ProjectHandler) startMachineAsync(projectID string, project *db.Project
 		}
 		volume, err := h.volumes.CreateVolume(volumeName, project.VolumeSizeGB, region)
 		if err != nil {
-			log.Printf("Error creating volume: %v", err)
+			log.Error("failed to create volume", "error", err)
 			errMsg := "Failed to create storage volume: " + err.Error()
 			h.store.UpdateProjectStatus(ctx, projectID, "error", &errMsg)
 			return
 		}
 
 		if err := h.store.UpdateProjectVolume(ctx, projectID, volume.ID); err != nil {
-			log.Printf("Error updating project volume ID: %v", err)
+			log.Error("failed to update project volume ID", "error", err)
 		}
 
 		project.FlyVolumeID = &volume.ID
-		log.Printf("Created volume %s for project %s", volume.ID, projectID)
+		log.Info("created volume", "volume_id", volume.ID)
 	}
 
 	// If no machine exists, create one
 	if project.FlyMachineID == nil || *project.FlyMachineID == "" {
 		machine, err := h.createMachine(ctx, project, userID)
 		if err != nil {
-			log.Printf("Error creating machine: %v", err)
+			log.Error("failed to create machine", "error", err)
 			errMsg := err.Error()
 			h.store.UpdateProjectStatus(ctx, projectID, "error", &errMsg)
 			return
 		}
 
 		if err := h.store.UpdateProjectMachine(ctx, projectID, machine.ID); err != nil {
-			log.Printf("Error updating project machine ID: %v", err)
+			log.Error("failed to update project machine ID", "error", err)
 		}
 
 		project.FlyMachineID = &machine.ID
 	} else {
 		// Machine exists, start it
 		if err := h.machines.StartMachine(*project.FlyMachineID); err != nil {
-			log.Printf("Error starting machine: %v", err)
+			log.Error("failed to start machine", "error", err)
 			errMsg := err.Error()
 			h.store.UpdateProjectStatus(ctx, projectID, "error", &errMsg)
 			return
@@ -436,7 +446,7 @@ func (h *ProjectHandler) startMachineAsync(projectID string, project *db.Project
 
 	// Wait for machine to be running
 	if err := h.machines.WaitForState(*project.FlyMachineID, "started", 60*time.Second); err != nil {
-		log.Printf("Error waiting for machine to start: %v", err)
+		log.Error("failed waiting for machine to start", "error", err)
 		errMsg := err.Error()
 		h.store.UpdateProjectStatus(ctx, projectID, "error", &errMsg)
 		return
@@ -444,20 +454,22 @@ func (h *ProjectHandler) startMachineAsync(projectID string, project *db.Project
 
 	// Update status to running
 	if err := h.store.UpdateProjectStatus(ctx, projectID, "running", nil); err != nil {
-		log.Printf("Error updating project status: %v", err)
+		log.Error("failed to update project status", "error", err)
 	}
 
 	// Update last accessed
 	if err := h.store.UpdateProjectLastAccessed(ctx, projectID); err != nil {
-		log.Printf("Error updating last accessed: %v", err)
+		log.Error("failed to update last accessed", "error", err)
 	}
 
-	log.Printf("Project %s started successfully", projectID)
+	log.Info("project started successfully")
 }
 
 func (h *ProjectHandler) Stop(w http.ResponseWriter, r *http.Request) {
-	userID := authmw.GetUserID(r.Context())
+	ctx := r.Context()
+	userID := authmw.GetUserID(ctx)
 	projectID := chi.URLParam(r, "id")
+	log := logging.FromContext(ctx)
 
 	if err := validation.ValidateUUID(projectID, "id"); err != nil {
 		WriteJSON(w, http.StatusBadRequest, map[string]any{
@@ -467,13 +479,13 @@ func (h *ProjectHandler) Stop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	project, err := h.store.GetProjectByUser(r.Context(), projectID, userID)
+	project, err := h.store.GetProjectByUser(ctx, projectID, userID)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			WriteError(w, http.StatusNotFound, "Project not found")
 			return
 		}
-		log.Printf("Error getting project for stop: %v", err)
+		log.Error("failed to get project for stop", "error", err)
 		WriteError(w, http.StatusInternalServerError, "Failed to stop project")
 		return
 	}
@@ -484,9 +496,11 @@ func (h *ProjectHandler) Stop(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update status to stopping
-	if err := h.store.UpdateProjectStatus(r.Context(), projectID, "stopping", nil); err != nil {
-		log.Printf("Error updating project status: %v", err)
+	if err := h.store.UpdateProjectStatus(ctx, projectID, "stopping", nil); err != nil {
+		log.Error("failed to update project status", "error", err)
 	}
+
+	log.Info("stopping project")
 
 	// Stop machine in background goroutine
 	go h.stopMachineAsync(projectID, *project.FlyMachineID)
@@ -498,10 +512,11 @@ func (h *ProjectHandler) Stop(w http.ResponseWriter, r *http.Request) {
 // stopMachineAsync handles machine shutdown in the background
 func (h *ProjectHandler) stopMachineAsync(projectID string, machineID string) {
 	ctx := context.Background()
+	log := logging.Default().With("project_id", projectID, "machine_id", machineID)
 
 	// Stop the machine
 	if err := h.machines.StopMachine(machineID); err != nil {
-		log.Printf("Error stopping machine: %v", err)
+		log.Error("failed to stop machine", "error", err)
 		errMsg := err.Error()
 		h.store.UpdateProjectStatus(ctx, projectID, "error", &errMsg)
 		return
@@ -509,7 +524,7 @@ func (h *ProjectHandler) stopMachineAsync(projectID string, machineID string) {
 
 	// Wait for machine to be stopped
 	if err := h.machines.WaitForState(machineID, "stopped", 30*time.Second); err != nil {
-		log.Printf("Error waiting for machine to stop: %v", err)
+		log.Error("failed waiting for machine to stop", "error", err)
 		errMsg := err.Error()
 		h.store.UpdateProjectStatus(ctx, projectID, "error", &errMsg)
 		return
@@ -517,13 +532,14 @@ func (h *ProjectHandler) stopMachineAsync(projectID string, machineID string) {
 
 	// Update status to stopped
 	if err := h.store.UpdateProjectStatus(ctx, projectID, "stopped", nil); err != nil {
-		log.Printf("Error updating project status: %v", err)
+		log.Error("failed to update project status", "error", err)
 	}
 
-	log.Printf("Project %s stopped successfully", projectID)
+	log.Info("project stopped successfully")
 }
 
 func (h *ProjectHandler) createMachine(ctx context.Context, project *db.Project, userID string) (*Machine, error) {
+	log := logging.Default().With("project_id", project.ID, "user_id", userID)
 	var guestConfig GuestConfig
 
 	// GPU machines require cpu_kind and cpus, but Fly.io determines actual compute from gpu_kind
@@ -534,19 +550,19 @@ func (h *ProjectHandler) createMachine(ctx context.Context, project *db.Project,
 			MemoryMB: 16384,
 			GPUKind:  *project.GPUKind,
 		}
-		log.Printf("Creating GPU machine with gpu_kind=%s", *project.GPUKind)
+		log.Info("creating GPU machine", "gpu_kind", *project.GPUKind)
 	} else {
 		guestConfig = GuestConfig{
 			CPUKind:  project.CPUKind,
 			CPUs:     project.CPUs,
 			MemoryMB: project.MemoryMB,
 		}
-		log.Printf("Creating CPU machine with cpu_kind=%s, cpus=%d, memory_mb=%d", project.CPUKind, project.CPUs, project.MemoryMB)
+		log.Info("creating CPU machine", "cpu_kind", project.CPUKind, "cpus", project.CPUs, "memory_mb", project.MemoryMB)
 	}
 
 	// Build environment variables
 	machineEnv := NewEnvBuilder(h.apiKeys).BuildEnv(ctx, project.ID, userID, nil)
-	log.Printf("Creating machine with %d env vars", len(machineEnv))
+	log.Debug("creating machine", "env_count", len(machineEnv))
 	config := MachineConfig{
 		Image: h.baseImage,
 		Guest: guestConfig,
@@ -577,10 +593,11 @@ func (h *ProjectHandler) StartIdleChecker(interval time.Duration) {
 
 func (h *ProjectHandler) checkIdleProjects() {
 	ctx := context.Background()
+	log := logging.Default()
 
 	projects, err := h.store.GetRunningProjects(ctx)
 	if err != nil {
-		log.Printf("Error checking idle projects: %v", err)
+		log.Error("failed to check idle projects", "error", err)
 		return
 	}
 
@@ -603,21 +620,22 @@ func (h *ProjectHandler) checkIdleProjects() {
 		}
 
 		idleFor := time.Since(*p.LastAccessedAt)
-		log.Printf("Idle check: project %s idle for %v, timeout %v", p.ID, idleFor.Round(time.Second), timeout)
+		projectLog := log.With("project_id", p.ID)
+		projectLog.Debug("idle check", "idle_for", idleFor.Round(time.Second), "timeout", timeout)
 
 		if idleFor <= timeout {
 			continue
 		}
 
-		log.Printf("Stopping idle project: %s (idle for %v, timeout: %v)", p.ID, idleFor, timeout)
+		projectLog.Info("stopping idle project", "idle_for", idleFor, "timeout", timeout)
 		if p.FlyMachineID != nil && *p.FlyMachineID != "" {
 			if err := h.machines.StopMachine(*p.FlyMachineID); err != nil {
-				log.Printf("Error stopping idle machine: %v", err)
+				projectLog.Error("failed to stop idle machine", "error", err)
 				continue
 			}
 		}
 		if err := h.store.UpdateProjectStatus(ctx, p.ID, "stopped", nil); err != nil {
-			log.Printf("Error updating idle project status: %v", err)
+			projectLog.Error("failed to update idle project status", "error", err)
 		}
 	}
 }

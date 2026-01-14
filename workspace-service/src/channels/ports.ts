@@ -1,3 +1,4 @@
+import { logger } from "../logging"
 import type { PortChangeMessage } from "./types"
 
 export interface PortWatcherConfig {
@@ -10,6 +11,7 @@ export class PortWatcher {
   private pollInterval: Timer | null = null
   private knownPorts: Set<number> = new Set()
   private config: PortWatcherConfig
+  private log = logger.child({ channel: "ports" })
 
   constructor(config: PortWatcherConfig = {}) {
     this.config = {
@@ -30,7 +32,7 @@ export class PortWatcher {
         this.knownPorts.add(port)
         this.send(port, "open")
       }
-      console.log(`[PortWatcher] Started, found ${ports.size} ports, polling every ${this.config.pollIntervalMs}ms`)
+      this.log.info("started", { initial_ports: ports.size, poll_interval_ms: this.config.pollIntervalMs })
     })
 
     // Start polling
@@ -69,7 +71,7 @@ export class PortWatcher {
         }
       }
     } catch (err) {
-      console.error("[PortWatcher] Error scanning ports:", err)
+      this.log.error("error scanning ports", { error: String(err) })
     }
   }
 
@@ -139,7 +141,7 @@ export class PortWatcher {
    * Send port change message
    */
   private send(port: number, action: "open" | "close"): void {
-    console.log(`[PortWatcher] Port ${port} ${action}ed`)
+    this.log.debug("port change", { port, action })
     this.sendFn?.({
       channel: "ports",
       type: "change",
@@ -157,6 +159,6 @@ export class PortWatcher {
       this.pollInterval = null
     }
     this.knownPorts.clear()
-    console.log("[PortWatcher] Closed")
+    this.log.info("closed")
   }
 }
