@@ -20,8 +20,8 @@ cd infra/docker/base
 echo "Copying workspace-service..."
 rm -rf workspace-service
 cp -r "${PROJECT_ROOT}/apps/workspace-service" workspace-service
-# Remove node_modules (will be installed fresh in Docker), keep lockfile for reproducibility
-rm -rf workspace-service/node_modules
+# Remove node_modules and lockfile - lockfile has workspace refs that don't exist in Docker
+rm -rf workspace-service/node_modules workspace-service/bun.lock workspace-service/bun.lockb
 
 # Build for amd64 (Fly.io runs on amd64)
 docker build --platform linux/amd64 -t "$FULL_IMAGE" .

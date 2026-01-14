@@ -16,7 +16,7 @@ export class CodexProvider implements AgentProvider {
   }
 
   isConfigured(): boolean {
-    return !!process.env.CODEX_API_KEY
+    return !!Bun.env.CODEX_API_KEY
   }
 
   private getCodex(): Codex {

@@ -1,4 +1,4 @@
-import { spawn, type Pty } from "bun-pty"
+import { spawn, type IPty, type IExitEvent } from "bun-pty"
 import { logger } from "../logging"
 import type { TerminalInputMessage, TerminalResizeMessage, TerminalOutputMessage } from "./types"
 
@@ -10,7 +10,7 @@ export interface PTYHandlerConfig {
 }
 
 export class PTYHandler {
-  private ptyProcess: Pty | null = null
+  private ptyProcess: IPty | null = null
   private sendFn: ((msg: TerminalOutputMessage) => void) | null = null
   private log = logger.child({ channel: "pty" })
 
@@ -22,7 +22,7 @@ export class PTYHandler {
   initialize(send: (msg: TerminalOutputMessage) => void): void {
     this.sendFn = send
 
-    const shell = process.env.SHELL || "bash"
+    const shell = Bun.env.SHELL || "bash"
 
     this.ptyProcess = spawn(shell, [], {
       name: "xterm-256color",
@@ -30,18 +30,18 @@ export class PTYHandler {
       rows: this.config.rows || 24,
       cwd: this.config.cwd,
       env: {
-        ...process.env,
+        ...Bun.env,
         ...this.config.env,
         TERM: "xterm-256color",
       } as Record<string, string>,
     })
 
     // Forward PTY output to WebSocket
-    this.ptyProcess.onData((data) => {
+    this.ptyProcess.onData((data: string) => {
       this.send(data)
     })
 
-    this.ptyProcess.onExit(({ exitCode, signal }) => {
+    this.ptyProcess.onExit(({ exitCode, signal }: IExitEvent) => {
       this.log.info("shell exited", { exit_code: exitCode, signal })
     })
 

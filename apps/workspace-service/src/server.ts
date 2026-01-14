@@ -5,9 +5,9 @@ import type { AgentType, ClientMessage, ServerMessage } from "./types"
 import type { TerminalInputMessage, TerminalResizeMessage } from "./channels"
 import type { ServerWebSocket } from "bun"
 
-const PORT = parseInt(process.env.AGENT_PORT || "3001")
+const PORT = parseInt(Bun.env.AGENT_PORT || "3001")
 const VALID_AGENTS = ["claude", "codex", "codebuff", "opencode"]
-const PROJECT_CWD = process.env.PROJECT_CWD || "/home/coder/project"
+const PROJECT_CWD = Bun.env.PROJECT_CWD || "/home/coder/project"
 
 interface WSData {
   mode: "workspace" | "agent-only"
@@ -48,7 +48,7 @@ function extractEnvironment(req: Request): Record<string, string> {
  */
 function applyEnvironment(env: Record<string, string>): void {
   for (const [key, value] of Object.entries(env)) {
-    process.env[key] = value
+    Bun.env[key] = value
   }
 }
 
@@ -166,7 +166,7 @@ const server = Bun.serve<WSData>({
       }
     },
 
-    async message(ws: ServerWebSocket<WSData>, message: string | Buffer) {
+    async message(ws: ServerWebSocket<WSData>, message: string | ArrayBuffer) {
       const log = ws.data.log ?? logger
       try {
         const msg = JSON.parse(String(message))

@@ -1,0 +1,13 @@
+{
+  "name": "aether",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "bun run --filter frontend dev",
+    "build:web": "bun run --filter frontend build",
+    "typecheck": "bun run --filter '*' typecheck"
+  }
+}

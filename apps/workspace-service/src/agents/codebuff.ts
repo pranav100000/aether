@@ -15,13 +15,13 @@ export class CodebuffProvider implements AgentProvider {
   }
 
   isConfigured(): boolean {
-    return !!process.env.CODEBUFF_API_KEY && !!process.env.CODEBUFF_BYOK_OPENROUTER
+    return !!Bun.env.CODEBUFF_API_KEY && !!Bun.env.CODEBUFF_BYOK_OPENROUTER
   }
 
   private getClient(): CodebuffClient {
     if (!this.client) {
       this.client = new CodebuffClient({
-        apiKey: process.env.CODEBUFF_API_KEY!,
+        apiKey: Bun.env.CODEBUFF_API_KEY!,
         cwd: this.cwd,
       })
     }

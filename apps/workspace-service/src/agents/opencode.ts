@@ -20,10 +20,10 @@ export class OpenCodeProvider implements AgentProvider {
 
   isConfigured(): boolean {
     return !!(
-      process.env.ANTHROPIC_API_KEY ||
-      process.env.OPENAI_API_KEY ||
-      process.env.GOOGLE_API_KEY ||
-      process.env.OPENROUTER_API_KEY
+      Bun.env.ANTHROPIC_API_KEY ||
+      Bun.env.OPENAI_API_KEY ||
+      Bun.env.GOOGLE_API_KEY ||
+      Bun.env.OPENROUTER_API_KEY
     )
   }
 
@@ -34,7 +34,7 @@ export class OpenCodeProvider implements AgentProvider {
       const client = createOpencodeClient({
         baseUrl: `http://127.0.0.1:${OPENCODE_PORT}`,
       })
-      await client.app.info()
+      await (client.app as unknown as { info(): Promise<unknown> }).info()
       this.client = client
     } catch {
       const { client, server } = await createOpencode({
@@ -62,7 +62,7 @@ export class OpenCodeProvider implements AgentProvider {
     ]
 
     for (const provider of providers) {
-      const apiKey = process.env[provider.envKey]
+      const apiKey = Bun.env[provider.envKey]
       if (apiKey) {
         try {
           await client.auth.set({

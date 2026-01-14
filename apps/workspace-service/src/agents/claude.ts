@@ -12,7 +12,7 @@ export class ClaudeProvider implements AgentProvider {
   }
 
   isConfigured(): boolean {
-    return !!process.env.ANTHROPIC_API_KEY
+    return !!Bun.env.ANTHROPIC_API_KEY
   }
 
   private getModelId(model?: string): string {

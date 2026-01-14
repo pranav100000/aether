@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"aether/apps/api/handlers"
 )
 
 func TestListMachines(t *testing.T) {
@@ -89,9 +91,9 @@ func TestCreateMachine(t *testing.T) {
 	baseURL = server.URL + "/v1"
 	defer func() { baseURL = originalBaseURL }()
 
-	machine, err := client.CreateMachine("test-machine", MachineConfig{
+	machine, err := client.CreateMachine("test-machine", handlers.MachineConfig{
 		Image: "test-image",
-		Guest: GuestConfig{CPUKind: "shared", CPUs: 1, MemoryMB: 256},
+		Guest: handlers.GuestConfig{CPUKind: "shared", CPUs: 1, MemoryMB: 256},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

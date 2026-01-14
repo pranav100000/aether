@@ -1,153 +1,48 @@
 import { supabase } from "./supabase"
 
+// Re-export types from shared package for backwards compatibility
+export {
+  type HardwareConfig,
+  type HardwarePreset,
+  type IdleTimeoutMinutes,
+  HARDWARE_PRESETS,
+  IDLE_TIMEOUT_OPTIONS,
+  type Project,
+  type CreateProjectInput,
+  type UpdateProjectInput,
+  type FileEntry,
+  type DirListing,
+  type FileInfo,
+  type FileTree,
+  type UserSettings,
+  type UpdateUserSettingsInput,
+  type ConnectedProvider,
+  type ListProvidersResponse,
+  type ApiError,
+} from "@aether/types"
+
+// Local type alias for backwards compatibility
+export type { StartProjectResponse as StartResponse } from "@aether/types"
+
+import type {
+  Project,
+  CreateProjectInput,
+  UpdateProjectInput,
+  DirListing,
+  FileTree,
+  FileInfo,
+  UserSettings,
+  UpdateUserSettingsInput,
+  ConnectedProvider,
+  ListProvidersResponse,
+  ApiError,
+  StartProjectResponse as StartResponse,
+} from "@aether/types"
+
 const API_URL = import.meta.env.VITE_API_URL
 
 if (!API_URL) {
   throw new Error("Missing VITE_API_URL environment variable")
-}
-
-export interface HardwareConfig {
-  cpu_kind: "shared" | "performance"
-  cpus: number
-  memory_mb: number
-  volume_size_gb: number
-  gpu_kind?: "a10" | "l40s" | "a100-40gb" | "a100-80gb" | null
-}
-
-export interface HardwarePreset {
-  id: string
-  name: string
-  description: string
-  config: HardwareConfig
-}
-
-export const HARDWARE_PRESETS: HardwarePreset[] = [
-  {
-    id: "small",
-    name: "Small",
-    description: "1 shared CPU, 1GB RAM, 5GB storage",
-    config: { cpu_kind: "shared", cpus: 1, memory_mb: 1024, volume_size_gb: 5 },
-  },
-  {
-    id: "medium",
-    name: "Medium",
-    description: "2 shared CPUs, 2GB RAM, 10GB storage",
-    config: { cpu_kind: "shared", cpus: 2, memory_mb: 2048, volume_size_gb: 10 },
-  },
-  {
-    id: "large",
-    name: "Large",
-    description: "4 shared CPUs, 4GB RAM, 20GB storage",
-    config: { cpu_kind: "shared", cpus: 4, memory_mb: 4096, volume_size_gb: 20 },
-  },
-  {
-    id: "performance",
-    name: "Performance",
-    description: "2 performance CPUs, 4GB RAM, 20GB storage",
-    config: { cpu_kind: "performance", cpus: 2, memory_mb: 4096, volume_size_gb: 20 },
-  },
-]
-
-// Idle timeout options
-export const IDLE_TIMEOUT_OPTIONS = [
-  { value: 5, label: "5 minutes" },
-  { value: 10, label: "10 minutes" },
-  { value: 30, label: "30 minutes" },
-  { value: 60, label: "1 hour" },
-  { value: 0, label: "Never (manual stop only)" },
-] as const
-
-export type IdleTimeoutMinutes = 0 | 5 | 10 | 30 | 60 | null
-
-// User Settings types
-export interface UserSettings {
-  default_hardware: HardwareConfig
-  default_idle_timeout_minutes: IdleTimeoutMinutes
-}
-
-export interface UpdateUserSettingsInput {
-  default_hardware?: HardwareConfig
-  default_idle_timeout_minutes?: IdleTimeoutMinutes
-}
-
-export interface Project {
-  id: string
-  name: string
-  description?: string
-  status: "stopped" | "starting" | "running" | "stopping" | "error"
-  hardware: HardwareConfig
-  idle_timeout_minutes?: IdleTimeoutMinutes
-  fly_machine_id?: string
-  private_ip?: string
-  preview_token?: string
-  error_message?: string
-  last_accessed_at?: string
-  created_at: string
-  updated_at: string
-}
-
-export interface CreateProjectInput {
-  name: string
-  description?: string
-  hardware?: {
-    preset?: string
-    cpu_kind?: string
-    cpus?: number
-    memory_mb?: number
-    volume_size_gb?: number
-    gpu_kind?: string | null
-  }
-  idle_timeout_minutes?: IdleTimeoutMinutes
-}
-
-export interface UpdateProjectInput {
-  name?: string
-  description?: string
-}
-
-export interface StartResponse {
-  status: string
-  terminal_url: string
-}
-
-export interface ApiError {
-  error: string
-}
-
-// File system types
-export interface FileEntry {
-  name: string
-  type: "file" | "directory"
-  size?: number
-  modified: string
-}
-
-export interface DirListing {
-  path: string
-  entries: FileEntry[]
-}
-
-export interface FileInfo {
-  path: string
-  content?: string
-  size: number
-  modified: string
-}
-
-export interface FileTree {
-  paths: string[]
-  directories: string[]
-}
-
-// API Keys types
-export interface ConnectedProvider {
-  provider: string
-  connected: boolean
-  added_at?: string
-}
-
-export interface ListProvidersResponse {
-  providers: ConnectedProvider[]
 }
 
 async function getAuthHeaders(): Promise<HeadersInit> {

@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile, readdir } from "node:fs/promises"
 import { join } from "node:path"
 import type { AgentType, StoredMessage, ChatHistory } from "./types"
 
-const STORAGE_DIR = process.env.STORAGE_DIR || "./data/.aether"
+const STORAGE_DIR = Bun.env.STORAGE_DIR || "./data/.aether"
 
 function getAgentDir(agent: AgentType): string {
   return join(STORAGE_DIR, agent)

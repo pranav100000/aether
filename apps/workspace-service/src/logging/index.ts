@@ -59,8 +59,8 @@ export class Logger {
 }
 
 // Configuration from environment
-const LOG_LEVEL = process.env.LOG_LEVEL || "info"
-const LOG_FORMAT = process.env.LOG_FORMAT || (process.env.NODE_ENV === "development" ? "text" : "json")
+const LOG_LEVEL = Bun.env.LOG_LEVEL || "info"
+const LOG_FORMAT = Bun.env.LOG_FORMAT || (Bun.env.NODE_ENV === "development" ? "text" : "json")
 
 // Create base pino instance
 const pinoOptions: pino.LoggerOptions = {
