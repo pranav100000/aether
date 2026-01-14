@@ -90,7 +90,7 @@ if (LOG_FORMAT === "text") {
 /** Root logger instance */
 export const logger = new Logger(pinoInstance)
 
-/** Correlation context from environment (set by backend via headers) */
+/** Correlation context passed from the backend via WebSocket connection */
 export interface CorrelationContext {
   requestId?: string
   userId?: string
@@ -98,22 +98,13 @@ export interface CorrelationContext {
 }
 
 /**
- * Get correlation context from environment variables
- * These are set by the backend when establishing the WebSocket connection
+ * Create a logger with correlation context
+ * Context should be passed explicitly per-connection to avoid race conditions
  */
-export function getCorrelationContext(): CorrelationContext {
-  return {
-    requestId: process.env.CORRELATION_REQUEST_ID,
-    userId: process.env.CORRELATION_USER_ID,
-    projectId: process.env.CORRELATION_PROJECT_ID,
-  }
-}
-
-/**
- * Create a logger with correlation context from environment
- */
-export function createContextLogger(additional?: Record<string, unknown>): Logger {
-  const ctx = getCorrelationContext()
+export function createContextLogger(
+  ctx: CorrelationContext,
+  additional?: Record<string, unknown>
+): Logger {
   const bindings: Record<string, unknown> = {}
 
   if (ctx.requestId) bindings.request_id = ctx.requestId

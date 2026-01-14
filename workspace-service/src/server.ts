@@ -1,6 +1,6 @@
 import { AgentHandler } from "./handler"
 import { PTYHandler, FileWatcher, PortWatcher, isTerminalMessage } from "./channels"
-import { logger, createContextLogger, Logger } from "./logging"
+import { logger, createContextLogger, Logger, CorrelationContext } from "./logging"
 import type { AgentType, ClientMessage, ServerMessage } from "./types"
 import type { TerminalInputMessage, TerminalResizeMessage } from "./channels"
 import type { ServerWebSocket } from "bun"
@@ -97,13 +97,21 @@ const server = Bun.serve<WSData>({
     async open(ws: ServerWebSocket<WSData>) {
       const { mode, environment } = ws.data
 
-      // Apply environment variables first (needed for correlation context)
+      // Apply environment variables (for non-correlation config like API keys)
       if (Object.keys(environment).length > 0) {
         applyEnvironment(environment)
       }
 
+      // Extract correlation context directly from environment (not process.env)
+      // to avoid race conditions with concurrent connections
+      const correlationCtx: CorrelationContext = {
+        requestId: environment.CORRELATION_REQUEST_ID,
+        userId: environment.CORRELATION_USER_ID,
+        projectId: environment.CORRELATION_PROJECT_ID,
+      }
+
       // Create connection-scoped logger with correlation context
-      const log = createContextLogger({ channel: "websocket", mode })
+      const log = createContextLogger(correlationCtx, { channel: "websocket", mode })
       ws.data.log = log
 
       log.info("connection opened", { env_count: Object.keys(environment).length })
