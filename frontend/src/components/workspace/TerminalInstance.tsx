@@ -15,15 +15,18 @@ interface TerminalInstanceProps {
   onPortChange?: (action: "open" | "close", port: number) => void
 }
 
+// Channel-based messages for unified WebSocket
 interface WSMessage {
-  type: "input" | "output" | "resize" | "error" | "file_change" | "port_change"
+  channel?: "terminal" | "files" | "ports" | "error"
+  type: "input" | "output" | "resize" | "error" | "change"
   data?: string
   cols?: number
   rows?: number
   action?: string
   path?: string
-  is_directory?: boolean
+  isDirectory?: boolean
   port?: number
+  error?: string
 }
 
 export interface TerminalInstanceHandle {
@@ -73,7 +76,8 @@ export const TerminalInstance = forwardRef<TerminalInstanceHandle, TerminalInsta
 
           // Send resize to backend
           if (wsRef.current?.readyState === WebSocket.OPEN && terminalRef.current) {
-            const message: WSMessage = {
+            const message = {
+              channel: "terminal",
               type: "resize",
               cols: terminalRef.current.cols,
               rows: terminalRef.current.rows,
@@ -121,7 +125,8 @@ export const TerminalInstance = forwardRef<TerminalInstanceHandle, TerminalInsta
       const handleResize = () => {
         fitAddon.fit()
         if (wsRef.current?.readyState === WebSocket.OPEN) {
-          const message: WSMessage = {
+          const message = {
+            channel: "terminal",
             type: "resize",
             cols: terminal.cols,
             rows: terminal.rows,
@@ -144,8 +149,10 @@ export const TerminalInstance = forwardRef<TerminalInstanceHandle, TerminalInsta
             throw new Error("Not authenticated")
           }
 
-          const wsUrl = api.getTerminalUrl(projectId)
-          const ws = new WebSocket(wsUrl, ["bearer", session.access_token])
+          const wsUrl = api.getWorkspaceUrl(projectId)
+          // Add token as query param for unified endpoint
+          const urlWithToken = `${wsUrl}?token=${session.access_token}`
+          const ws = new WebSocket(urlWithToken)
 
           if (canceled) {
             ws.close()
@@ -157,7 +164,9 @@ export const TerminalInstance = forwardRef<TerminalInstanceHandle, TerminalInsta
             if (isActiveRef.current) {
               terminal.focus()
             }
-            const message: WSMessage = {
+            // Send resize with channel
+            const message = {
+              channel: "terminal",
               type: "resize",
               cols: terminal.cols,
               rows: terminal.rows,
@@ -169,14 +178,22 @@ export const TerminalInstance = forwardRef<TerminalInstanceHandle, TerminalInsta
             if (canceled) return
             try {
               const message: WSMessage = JSON.parse(event.data)
-              if (message.type === "output" && message.data) {
-                terminal.write(message.data)
-              } else if (message.type === "error" && message.data) {
-                terminal.write(`\r\n\x1b[31mError: ${message.data}\x1b[0m\r\n`)
-              } else if (message.type === "file_change" && message.action && message.path) {
-                onFileChangeRef.current?.(message.action, message.path, message.is_directory ?? false)
-              } else if (message.type === "port_change" && message.action && message.port) {
-                onPortChangeRef.current?.(message.action as "open" | "close", message.port)
+              // Route by channel
+              if (message.channel === "terminal") {
+                if (message.type === "output" && message.data) {
+                  terminal.write(message.data)
+                }
+              } else if (message.channel === "files") {
+                if (message.type === "change" && message.action && message.path) {
+                  onFileChangeRef.current?.(message.action, message.path, message.isDirectory ?? false)
+                }
+              } else if (message.channel === "ports") {
+                if (message.type === "change" && message.action && message.port) {
+                  onPortChangeRef.current?.(message.action as "open" | "close", message.port)
+                }
+              } else if (message.channel === "error" || message.type === "error") {
+                const errorMsg = message.error || message.data || "Unknown error"
+                terminal.write(`\r\n\x1b[31mError: ${errorMsg}\x1b[0m\r\n`)
               }
             } catch {
               terminal.write(event.data)
@@ -196,7 +213,7 @@ export const TerminalInstance = forwardRef<TerminalInstanceHandle, TerminalInsta
 
           terminal.onData((data) => {
             if (ws.readyState === WebSocket.OPEN) {
-              const message: WSMessage = { type: "input", data }
+              const message = { channel: "terminal", type: "input", data }
               ws.send(JSON.stringify(message))
             }
           })

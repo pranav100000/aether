@@ -13,6 +13,7 @@ import (
 )
 
 const DefaultSSHPort = 2222
+const DefaultWebSocketPort = 3001
 
 // LocalConnectionResolver resolves connections for local Docker containers
 type LocalConnectionResolver struct{}
@@ -26,12 +27,18 @@ func (r *LocalConnectionResolver) GetConnectionInfo(project *db.Project) (*handl
 		return nil, fmt.Errorf("project has no container")
 	}
 
-	// Query Docker for the port mapping
+	// Query Docker for the port mappings
 	// Container name is the machine ID (e.g., "local-<project-name>")
 	containerName := *project.FlyMachineID
-	port, err := getDockerPort(containerName, 2222)
+
+	sshPort, err := getDockerPort(containerName, DefaultSSHPort)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get container port: %w", err)
+		return nil, fmt.Errorf("failed to get SSH port: %w", err)
+	}
+
+	wsPort, err := getDockerPort(containerName, DefaultWebSocketPort)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get WebSocket port: %w", err)
 	}
 
 	// Use host.docker.internal when backend runs in Docker (sibling container setup)
@@ -39,8 +46,9 @@ func (r *LocalConnectionResolver) GetConnectionInfo(project *db.Project) (*handl
 	host := getDockerHost()
 
 	return &handlers.ConnectionInfo{
-		Host: host,
-		Port: port,
+		Host:          host,
+		Port:          sshPort,
+		WebSocketPort: wsPort,
 	}, nil
 }
 
@@ -127,7 +135,8 @@ func (r *FlyConnectionResolver) GetConnectionInfo(project *db.Project) (*handler
 	}
 
 	return &handlers.ConnectionInfo{
-		Host: machine.PrivateIP,
-		Port: DefaultSSHPort,
+		Host:          machine.PrivateIP,
+		Port:          DefaultSSHPort,
+		WebSocketPort: DefaultWebSocketPort,
 	}, nil
 }

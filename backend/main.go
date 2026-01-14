@@ -108,8 +108,8 @@ func main() {
 
 	// New project-based handlers
 	projectHandler := handlers.NewProjectHandler(dbClient, wsFactory.MachineManager(), wsFactory.VolumeManager(), apiKeysGetter, baseImage, flyRegion, idleTimeout)
-	terminalHandler := handlers.NewTerminalHandler(wsFactory.TerminalProvider(), wsFactory.ConnectionResolver(), dbClient, authMiddleware, sshClient)
 	agentHandler := handlers.NewAgentHandler(sshClient, wsFactory.ConnectionResolver(), dbClient, authMiddleware, apiKeysGetter)
+	workspaceHandler := handlers.NewWorkspaceHandler(wsFactory.ConnectionResolver(), dbClient, authMiddleware, apiKeysGetter)
 	healthHandler := handlers.NewHealthHandler(dbClient, getEnv("VERSION", "dev"))
 	filesHandler := handlers.NewFilesHandler(sftpClient, wsFactory.ConnectionResolver(), dbClient)
 	portsHandler := handlers.NewPortsHandler(sshClient, wsFactory.ConnectionResolver(), dbClient)
@@ -182,11 +182,11 @@ func main() {
 		})
 	})
 
-	// Terminal endpoint handles its own auth (WebSocket subprotocol)
-	r.Get("/projects/{id}/terminal", terminalHandler.HandleTerminal)
-
-	// Agent endpoint handles its own auth (WebSocket subprotocol)
+	// Agent endpoint handles its own auth (WebSocket subprotocol - legacy)
 	r.Get("/projects/{id}/agent/{agent}", agentHandler.HandleAgent)
+
+	// Unified workspace endpoint (terminal + agent + files + ports over single WebSocket)
+	r.Get("/projects/{id}/workspace", workspaceHandler.HandleWorkspace)
 
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("../frontend"))))
 

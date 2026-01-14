@@ -79,4 +79,8 @@ fi
 # This allows the gateway to reach dev servers that only bind to localhost
 /usr/local/bin/port-forward.sh &
 
+# Start agent WebSocket server (runs on port 3001)
+# This handles agent connections from the backend proxy
+cd /opt/workspace-service && su -c ". /home/coder/.aether_env && bun run src/server.ts" coder &
+
 exec /usr/sbin/sshd -D -e

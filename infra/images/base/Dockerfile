@@ -1,5 +1,5 @@
 # Build stage for port-watcher
-FROM golang:1.21-alpine AS port-watcher-builder
+FROM golang:1.25-alpine AS port-watcher-builder
 COPY port-watcher /src
 WORKDIR /src
 RUN go mod download && CGO_ENABLED=0 go build -o /port-watcher .
@@ -77,7 +77,7 @@ USER root
 # Copy and install workspace-service (runs in VM, handles agent tools)
 COPY workspace-service /opt/workspace-service
 WORKDIR /opt/workspace-service
-RUN bun install --frozen-lockfile --production
+RUN bun install --production
 WORKDIR /home/coder
 
 # Copy pre-built port-watcher from builder stage
@@ -88,6 +88,7 @@ COPY port-forward.sh /usr/local/bin/port-forward.sh
 RUN chmod +x /usr/local/bin/port-forward.sh
 
 EXPOSE 2222
+EXPOSE 3001
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

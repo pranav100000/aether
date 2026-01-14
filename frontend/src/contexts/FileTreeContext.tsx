@@ -65,7 +65,8 @@ export function FileTreeProvider({ projectId, children }: FileTreeProviderProps)
     // Normalize path to ensure it starts with /
     const normalizedPath = path.startsWith("/") ? path : `/${path}`
 
-    if (action === "create") {
+    if (action === "create" || action === "modify") {
+      // Treat modify as create if file doesn't exist (fs.watch can't distinguish)
       if (isDirectory) {
         setDirectories(prev => {
           if (prev.includes(normalizedPath)) return prev
@@ -83,7 +84,6 @@ export function FileTreeProvider({ projectId, children }: FileTreeProviderProps)
       // Remove from directories
       setDirectories(prev => prev.filter(p => !isChildOrEqualPath(p, normalizedPath)))
     }
-    // 'modify' doesn't change paths, so we ignore it
   }, [])
 
   const refresh = useCallback(async () => {

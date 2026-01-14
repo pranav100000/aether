@@ -54,13 +54,14 @@ func (m *MachineManager) CreateMachine(name string, cfg handlers.MachineConfig) 
 	}
 
 	// Create and start Docker container
-	// Use -p 0:2222 to let Docker auto-assign an available host port for SSH
+	// Use -p 0:PORT to let Docker auto-assign available host ports for SSH and WebSocket
 	// Join the 'aether' network so gateway can reach this container
 	args := []string{
 		"run", "-d",
 		"--name", id,
 		"--network", "aether",
 		"-p", "0:2222",
+		"-p", "0:3001",
 	}
 
 	// Mount volumes from config (each project has its own volume directory)

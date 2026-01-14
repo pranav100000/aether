@@ -242,6 +242,12 @@ export const api = {
     return `${wsUrl}/projects/${projectId}/agent/${agent}`
   },
 
+  getWorkspaceUrl(projectId: string): string {
+    // Unified workspace WebSocket (terminal + agent + files + ports)
+    const wsUrl = API_URL.replace("http", "ws")
+    return `${wsUrl}/projects/${projectId}/workspace`
+  },
+
   // File system operations
   async listFiles(projectId: string, path: string = "/"): Promise<DirListing> {
     return apiRequest(`/projects/${projectId}/files?path=${encodeURIComponent(path)}`)
