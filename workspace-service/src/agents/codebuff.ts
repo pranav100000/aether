@@ -213,6 +213,5 @@ export class CodebuffProvider implements AgentProvider {
 
   abort(): void {
     this.abortController?.abort()
-    this.abortController = null
   }
 }
