@@ -226,8 +226,9 @@ func (h *WorkspaceHandler) bridgeConnection(ctx context.Context, wsConn *websock
 		h.pingLoop(wsConn, connector.Done(), &wsMu)
 	}()
 
-	// Wait for connector to close
+	// Wait for connector to close, then close websocket to unblock ReadMessage
 	<-connector.Done()
+	wsConn.Close()
 	wg.Wait()
 }
 
