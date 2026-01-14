@@ -14,7 +14,7 @@ COPY apps/web/package.json ./apps/web/
 COPY packages/types/package.json ./packages/types/
 
 # Install dependencies
-RUN bun install --frozen-lockfile
+RUN bun install
 
 # Copy source code
 COPY apps/web ./apps/web
