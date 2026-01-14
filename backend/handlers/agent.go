@@ -1,18 +1,16 @@
 package handlers
 
 import (
-	"encoding/base64"
+	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
 	"log"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
 	"aether/db"
+	"aether/handlers/proxy"
 	authmw "aether/middleware"
 	"aether/ssh"
 
@@ -175,238 +173,118 @@ func (h *AgentHandler) HandleAgent(w http.ResponseWriter, r *http.Request) {
 		responseHeader.Set("Sec-WebSocket-Protocol", "bearer")
 	}
 
-	conn, err := upgrader.Upgrade(w, r, responseHeader)
+	wsConn, err := upgrader.Upgrade(w, r, responseHeader)
 	if err != nil {
 		log.Printf("WebSocket upgrade error: %v", err)
 		return
 	}
-	defer conn.Close()
+	defer wsConn.Close()
 
 	log.Printf("Agent WebSocket connected for project: %s, agent: %s", projectID, agentType)
 
 	// Build fresh env vars for the agent (includes user's latest API keys)
 	agentEnv := NewEnvBuilder(h.apiKeys).BuildAgentEnv(r.Context(), projectID, userID)
-	envContent := ToEnvFileContent(agentEnv)
-	encodedEnv := base64.StdEncoding.EncodeToString([]byte(envContent))
 
-	// Connect to SSH
-	sshSession, err := h.sshClient.ConnectWithRetry(connInfo.Host, connInfo.Port, 5, 2*time.Second)
-	if err != nil {
-		log.Printf("SSH connection error: %v", err)
-		sendAgentError(conn, "Failed to connect to machine: "+err.Error())
+	// Create connector and connect to VM via WebSocket
+	connector := proxy.NewWebSocketConnector()
+	config := proxy.ConnectorConfig{
+		Host:           connInfo.Host,
+		Port:           connInfo.WebSocketPort,
+		AgentType:      agentType,
+		Environment:    agentEnv,
+		ConnectTimeout: 10 * time.Second,
+	}
+
+	ctx := r.Context()
+	if err := connector.Connect(ctx, config); err != nil {
+		log.Printf("Connector error: %v", err)
+		sendAgentError(wsConn, "Failed to connect to agent: "+err.Error())
 		return
 	}
-	defer sshSession.Close()
+	defer connector.Close()
 
-	// Start the agent CLI
-	// Write env vars via base64 (avoids shell escaping issues), then source and run
-	// Use "." instead of "source" for POSIX shell compatibility
-	// cd to project directory so agent runs in correct context
-	cmd := fmt.Sprintf("echo %s | base64 -d > ~/.aether_env && . ~/.aether_env && cd /home/coder/project && exec /usr/local/bin/bun /opt/workspace-service/src/cli.ts %s", encodedEnv, agentType)
-	log.Printf("Starting agent for project %s", projectID)
-	if err := sshSession.Start(cmd); err != nil {
-		log.Printf("Agent start error: %v", err)
-		sendAgentError(conn, "Failed to start agent: "+err.Error())
-		return
-	}
-	log.Printf("Agent command started successfully")
+	log.Printf("Agent connector established for project %s", projectID)
 
-	done := make(chan struct{})
-	var wg sync.WaitGroup
-	var closeOnce sync.Once
-	var wsMu sync.Mutex
-
-	closeDone := func() {
-		closeOnce.Do(func() {
-			close(done)
-		})
-	}
-
-	go sshSession.KeepAlive(30*time.Second, done)
-
-	// Read from agent stdout -> WebSocket
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		h.readFromAgent(conn, sshSession, done, closeDone, projectID, &wsMu)
-	}()
-
-	// Read from agent stderr -> WebSocket (as errors)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		h.readAgentStderr(conn, sshSession, done, &wsMu)
-	}()
-
-	// Read from WebSocket -> agent stdin
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		h.readFromWebSocket(conn, sshSession, done, closeDone)
-	}()
-
-	// Ping loop
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		h.pingLoop(conn, done, &wsMu)
-	}()
-
-	<-done
-	wg.Wait()
+	// Bridge the frontend WebSocket with the VM connector
+	h.bridgeConnection(ctx, wsConn, connector, projectID)
 
 	log.Printf("Agent session ended for project: %s", projectID)
 }
 
-func (h *AgentHandler) readFromAgent(conn *websocket.Conn, session *ssh.Session, done chan struct{}, closeDone func(), projectID string, wsMu *sync.Mutex) {
-	buf := make([]byte, 4096)
-	var buffer strings.Builder
+// bridgeConnection bridges the frontend WebSocket with the VM ProxyConnector
+func (h *AgentHandler) bridgeConnection(ctx context.Context, wsConn *websocket.Conn, connector proxy.ProxyConnector, projectID string) {
+	var wg sync.WaitGroup
+	var wsMu sync.Mutex
 
-	log.Printf("Starting to read from agent stdout...")
-
-	for {
-		select {
-		case <-done:
-			log.Printf("readFromAgent: done channel closed")
-			return
-		default:
-		}
-
-		n, err := session.Read(buf)
-		log.Printf("Agent stdout read: n=%d, err=%v", n, err)
-		if err != nil {
-			if err != io.EOF {
-				log.Printf("Agent read error: %v", err)
-			}
-			closeDone()
-			return
-		}
-
-		if n > 0 {
-			buffer.Write(buf[:n])
-
-			// Process complete JSON lines
-			content := buffer.String()
-			lines := strings.Split(content, "\n")
-
-			// Keep the last incomplete line in the buffer
-			buffer.Reset()
-			if len(lines) > 0 && !strings.HasSuffix(content, "\n") {
-				buffer.WriteString(lines[len(lines)-1])
-				lines = lines[:len(lines)-1]
-			}
-
-			for _, line := range lines {
-				line = strings.TrimSpace(line)
-				if line == "" {
-					continue
-				}
-
-				// Parse and forward the JSON message
-				var msg AgentMessage
-				if err := json.Unmarshal([]byte(line), &msg); err != nil {
-					// If not valid JSON, send as text
-					msg = AgentMessage{Type: "text", Content: line}
-				}
-
-				wsMu.Lock()
-				conn.SetWriteDeadline(time.Now().Add(writeWait))
-				err := conn.WriteJSON(msg)
-				wsMu.Unlock()
-
-				if err != nil {
-					log.Printf("WebSocket write error: %v", err)
-					closeDone()
+	// Connector -> WebSocket (forward raw messages from VM to frontend)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case data, ok := <-connector.Receive():
+				if !ok {
 					return
 				}
-			}
-		}
-	}
-}
-
-func (h *AgentHandler) readAgentStderr(conn *websocket.Conn, session *ssh.Session, done chan struct{}, wsMu *sync.Mutex) {
-	buf := make([]byte, 4096)
-	stderr := session.Stderr()
-
-	for {
-		select {
-		case <-done:
-			return
-		default:
-		}
-
-		n, err := stderr.Read(buf)
-		if err != nil {
-			if err != io.EOF {
-				log.Printf("Agent stderr read error: %v", err)
-			}
-			return
-		}
-
-		if n > 0 {
-			content := strings.TrimSpace(string(buf[:n]))
-			if content != "" {
-				log.Printf("Agent stderr: %s", content)
-				// Send stderr to frontend as error message
 				wsMu.Lock()
-				conn.SetWriteDeadline(time.Now().Add(writeWait))
-				conn.WriteJSON(AgentMessage{
-					Type:  "error",
-					Error: content,
-				})
+				wsConn.SetWriteDeadline(time.Now().Add(writeWait))
+				err := wsConn.WriteMessage(websocket.TextMessage, data)
 				wsMu.Unlock()
+				if err != nil {
+					log.Printf("WebSocket write error: %v", err)
+					return
+				}
+			case <-connector.Done():
+				return
 			}
 		}
-	}
+	}()
+
+	// WebSocket -> Connector (forward raw messages from frontend to VM)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		wsConn.SetReadLimit(maxMessageSize)
+		wsConn.SetReadDeadline(time.Now().Add(pongWait))
+		wsConn.SetPongHandler(func(string) error {
+			wsConn.SetReadDeadline(time.Now().Add(pongWait))
+			return nil
+		})
+
+		for {
+			select {
+			case <-connector.Done():
+				return
+			default:
+			}
+
+			_, data, err := wsConn.ReadMessage()
+			if err != nil {
+				log.Printf("WebSocket read error: %v", err)
+				connector.Close()
+				return
+			}
+
+			if err := connector.Send(ctx, data); err != nil {
+				log.Printf("Connector send error: %v", err)
+				return
+			}
+		}
+	}()
+
+	// Ping loop for WebSocket keepalive
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		h.pingLoop(wsConn, connector.Done(), &wsMu)
+	}()
+
+	// Wait for connector to close
+	<-connector.Done()
+	wg.Wait()
 }
 
-func (h *AgentHandler) readFromWebSocket(conn *websocket.Conn, session *ssh.Session, done chan struct{}, closeDone func()) {
-	conn.SetReadLimit(maxMessageSize)
-	conn.SetReadDeadline(time.Now().Add(pongWait))
-	conn.SetPongHandler(func(string) error {
-		conn.SetReadDeadline(time.Now().Add(pongWait))
-		return nil
-	})
-
-	for {
-		select {
-		case <-done:
-			return
-		default:
-		}
-
-		var msg AgentMessage
-		log.Printf("Waiting for WebSocket message...")
-		if err := conn.ReadJSON(&msg); err != nil {
-			log.Printf("WebSocket ReadJSON error: %v", err)
-			closeDone()
-			return
-		}
-		log.Printf("Received WebSocket message: type=%s", msg.Type)
-
-		// Forward message to agent stdin as JSON
-		jsonData, err := json.Marshal(msg)
-		if err != nil {
-			log.Printf("JSON marshal error: %v", err)
-			continue
-		}
-
-		// Add newline for JSON lines protocol
-		jsonData = append(jsonData, '\n')
-
-		log.Printf("Forwarding to agent stdin: %s", string(jsonData))
-
-		n, err := session.Write(jsonData)
-		if err != nil {
-			log.Printf("Agent write error: %v", err)
-			closeDone()
-			return
-		}
-		log.Printf("Wrote %d bytes to agent stdin", n)
-	}
-}
-
-func (h *AgentHandler) pingLoop(conn *websocket.Conn, done chan struct{}, wsMu *sync.Mutex) {
+func (h *AgentHandler) pingLoop(conn *websocket.Conn, done <-chan struct{}, wsMu *sync.Mutex) {
 	ticker := time.NewTicker(pingPeriod)
 	defer ticker.Stop()
 

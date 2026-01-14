@@ -1,83 +1,15 @@
 import { useState, useCallback, useMemo } from "react"
 import { RefreshCw, FilePlus, FolderPlus } from "lucide-react"
 import { api } from "@/lib/api"
-import { FileTreeItem, type TreeNode } from "./FileTreeItem"
+import { FileTreeItem } from "./FileTreeItem"
 import { Spinner } from "@/components/ui/spinner"
 import { useFileTreeContext } from "@/contexts/FileTreeContext"
-import { basename, dirname } from "@/lib/path-utils"
+import { buildTreeFromPaths } from "@/lib/file-tree-utils"
 
 interface FileTreeProps {
   projectId: string
   onFileSelect: (path: string) => void
   selectedPath?: string
-}
-
-// Build tree structure from flat paths
-function buildTreeFromPaths(files: string[], directories: string[]): TreeNode[] {
-  const nodeMap = new Map<string, TreeNode>()
-
-  // Add all directories first
-  for (const dir of directories) {
-    nodeMap.set(dir, {
-      name: basename(dir),
-      path: dir,
-      type: "directory",
-      children: [],
-    })
-  }
-
-  // Add all files
-  for (const file of files) {
-    nodeMap.set(file, {
-      name: basename(file),
-      path: file,
-      type: "file",
-    })
-  }
-
-  // Build parent-child relationships
-  const rootNodes: TreeNode[] = []
-
-  for (const [path, node] of nodeMap) {
-    const parentPath = dirname(path)
-
-    if (parentPath === "" || parentPath === "/") {
-      // Root level item
-      rootNodes.push(node)
-    } else {
-      // Find parent and add as child
-      const parent = nodeMap.get(parentPath)
-      if (parent && parent.children) {
-        parent.children.push(node)
-      } else {
-        // Parent doesn't exist (shouldn't happen with proper data), add to root
-        rootNodes.push(node)
-      }
-    }
-  }
-
-  // Sort: directories first, then alphabetically
-  const sortNodes = (nodes: TreeNode[]): TreeNode[] => {
-    return nodes.sort((a, b) => {
-      if (a.type !== b.type) {
-        return a.type === "directory" ? -1 : 1
-      }
-      return a.name.localeCompare(b.name)
-    })
-  }
-
-  // Sort root and all children recursively
-  const sortRecursive = (nodes: TreeNode[]): TreeNode[] => {
-    const sorted = sortNodes(nodes)
-    for (const node of sorted) {
-      if (node.children) {
-        node.children = sortRecursive(node.children)
-      }
-    }
-    return sorted
-  }
-
-  return sortRecursive(rootNodes)
 }
 
 export function FileTree({ projectId, onFileSelect, selectedPath }: FileTreeProps) {

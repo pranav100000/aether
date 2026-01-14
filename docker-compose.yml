@@ -27,6 +27,37 @@ services:
       - LOCAL_WORKSPACE_SERVICE_DIR=${LOCAL_WORKSPACE_SERVICE_DIR}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    networks:
+      - aether
+
+  # ===========================================
+  # Gateway (Preview URL proxy)
+  # ===========================================
+  # Routes {port}-{projectId}.localhost:8081 to Docker containers
+  gateway:
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile.dev
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./backend:/app/backend
+      - ./gateway:/app/gateway
+      - go_mod_cache:/go/pkg/mod
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - LOCAL_MODE=true
+      - DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:54322/postgres?sslmode=disable
+      - PREVIEW_DOMAIN=localhost
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - aether
+
+networks:
+  aether:
+    name: aether
+    driver: bridge
 
 volumes:
   go_mod_cache:

@@ -13,29 +13,50 @@ import {
   Tool,
   ToolHeader,
   ToolContent,
-  ToolInput,
-  ToolOutput,
 } from "@/components/ai-elements/tool"
 import {
   Reasoning,
   ReasoningContent,
   ReasoningTrigger,
 } from "@/components/ai-elements/reasoning"
+import { ToolRenderer, getToolIcon, getToolColor } from "@/components/tools"
 import { cn } from "@/lib/utils"
-import type { ChatMessage, ChatStatus } from "@/hooks/useAgentMessages"
+import type {
+  ChatMessage,
+  ChatStatus,
+  TextMessage,
+  ToolMessage,
+  ThinkingMessage,
+} from "@/hooks/useAgentMessages"
+import type { AgentType } from "@/types/agent"
 import type { LucideIcon } from "lucide-react"
 
 export interface AgentMessageListProps {
   messages: ChatMessage[]
   status: ChatStatus
+  agent: AgentType
   agentIcon: LucideIcon
   agentName: string
   agentColor: string
 }
 
+// Type guards for rendering
+function isTextMessage(msg: ChatMessage): msg is TextMessage {
+  return msg.role === "assistant" && (msg as TextMessage).variant === "text"
+}
+
+function isToolMessage(msg: ChatMessage): msg is ToolMessage {
+  return msg.role === "assistant" && (msg as ToolMessage).variant === "tool"
+}
+
+function isThinkingMessage(msg: ChatMessage): msg is ThinkingMessage {
+  return msg.role === "assistant" && (msg as ThinkingMessage).variant === "thinking"
+}
+
 export function AgentMessageList({
   messages,
   status,
+  agent,
   agentIcon: AgentIcon,
   agentName,
   agentColor,
@@ -44,7 +65,7 @@ export function AgentMessageList({
 
   return (
     <Conversation className="flex-1">
-      <ConversationContent className="gap-4 p-4">
+      <ConversationContent className="gap-6 p-5">
         {showEmptyState ? (
           <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
             <div className="rounded-full bg-zinc-800 p-4">
@@ -60,36 +81,47 @@ export function AgentMessageList({
         ) : (
           messages.map((msg) => (
             <Message key={msg.id} from={msg.role === "user" ? "user" : "assistant"}>
-              {msg.thinking && (
-                <Reasoning
-                  isStreaming={msg.thinking.isStreaming}
-                  duration={msg.thinking.duration}
-                >
-                  <ReasoningTrigger />
-                  <ReasoningContent>{msg.thinking.content}</ReasoningContent>
-                </Reasoning>
-              )}
               <MessageContent>
-                {msg.tool ? (
+                {/* User message */}
+                {msg.role === "user" && (
+                  <MessageResponse>{msg.content}</MessageResponse>
+                )}
+
+                {/* Thinking message */}
+                {isThinkingMessage(msg) && (
+                  <Reasoning isStreaming={msg.isStreaming} duration={msg.duration}>
+                    <ReasoningTrigger />
+                    <ReasoningContent>{msg.content}</ReasoningContent>
+                  </Reasoning>
+                )}
+
+                {/* Tool message */}
+                {isToolMessage(msg) && (
                   <Tool defaultOpen>
                     <ToolHeader
                       title={msg.tool.name}
                       type="tool-invocation"
                       state={msg.tool.status}
+                      toolName={msg.tool.name}
+                      toolIcon={getToolIcon(agent, msg.tool.name)}
+                      toolColor={getToolColor(agent, msg.tool.name)}
                     />
-                    <ToolContent>
-                      <ToolInput input={msg.tool.input} />
-                      <ToolOutput
-                        output={msg.tool.result}
-                        errorText={msg.tool.error}
+                    <ToolContent className="p-4">
+                      <ToolRenderer
+                        agent={agent}
+                        name={msg.tool.name}
+                        input={msg.tool.input}
+                        result={msg.tool.result}
+                        error={msg.tool.error}
                       />
                     </ToolContent>
                   </Tool>
-                ) : msg.role === "system" ? (
-                  <div className="text-xs text-zinc-500 italic">{msg.content}</div>
-                ) : msg.content ? (
+                )}
+
+                {/* Text message */}
+                {isTextMessage(msg) && msg.content && (
                   <MessageResponse>{msg.content}</MessageResponse>
-                ) : null}
+                )}
               </MessageContent>
             </Message>
           ))

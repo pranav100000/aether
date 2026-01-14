@@ -6,7 +6,7 @@ import (
 )
 
 // ExtractTokenFromRequest extracts a bearer token from an HTTP request
-// It checks both the Authorization header and WebSocket subprotocol
+// It checks Authorization header, WebSocket subprotocol, and query params
 func ExtractTokenFromRequest(r *http.Request) string {
 	// Try Authorization header first
 	authHeader := r.Header.Get("Authorization")
@@ -27,6 +27,11 @@ func ExtractTokenFromRequest(r *http.Request) string {
 				return parts[i+1]
 			}
 		}
+	}
+
+	// Try query parameter (for WebSocket reconnection)
+	if token := r.URL.Query().Get("token"); token != "" {
+		return token
 	}
 
 	return ""

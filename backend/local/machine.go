@@ -54,12 +54,14 @@ func (m *MachineManager) CreateMachine(name string, cfg handlers.MachineConfig) 
 	}
 
 	// Create and start Docker container
-	// Use -p 0:2222 to let Docker auto-assign an available host port
-	// The ConnectionResolver queries Docker for the actual port
+	// Use -p 0:PORT to let Docker auto-assign available host ports for SSH and WebSocket
+	// Join the 'aether' network so gateway can reach this container
 	args := []string{
 		"run", "-d",
 		"--name", id,
+		"--network", "aether",
 		"-p", "0:2222",
+		"-p", "0:3001",
 	}
 
 	// Mount volumes from config (each project has its own volume directory)
@@ -152,20 +154,70 @@ func isHexString(s string) bool {
 
 func (m *MachineManager) GetMachine(machineID string) (*handlers.Machine, error) {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
-
 	state, ok := m.machines[machineID]
-	if !ok {
-		return nil, fmt.Errorf("machine %s not found in local manager", machineID)
+	m.mu.RUnlock()
+
+	if ok {
+		// Found in memory - use cached container ID
+		privateIP := getContainerIP(state.ContainerID)
+		if privateIP == "" {
+			privateIP = "127.0.0.1"
+		}
+		return &handlers.Machine{
+			ID:        state.ID,
+			Name:      state.ID,
+			State:     state.State,
+			PrivateIP: privateIP,
+			Region:    "local",
+		}, nil
 	}
 
+	// Not in memory - try to look up container directly via docker inspect
+	// This allows the gateway to find containers created by the backend
+	privateIP := getContainerIP(machineID)
+	if privateIP == "" {
+		return nil, fmt.Errorf("machine %s not found (no container with that name/ID)", machineID)
+	}
+
+	// Container exists - return its info
+	containerState := getContainerState(machineID)
 	return &handlers.Machine{
-		ID:        state.ID,
-		Name:      state.ID,
-		State:     state.State,
-		PrivateIP: "127.0.0.1",
+		ID:        machineID,
+		Name:      machineID,
+		State:     containerState,
+		PrivateIP: privateIP,
 		Region:    "local",
 	}, nil
+}
+
+// getContainerState returns the state of a Docker container (running, exited, etc.)
+func getContainerState(containerID string) string {
+	cmd := exec.Command("docker", "inspect",
+		"--format", "{{.State.Status}}",
+		containerID)
+	output, err := cmd.Output()
+	if err != nil {
+		return "unknown"
+	}
+	status := strings.TrimSpace(string(output))
+	// Map Docker status to our state names
+	if status == "running" {
+		return "started"
+	}
+	return status
+}
+
+// getContainerIP returns the Docker network IP of a container on the aether network
+func getContainerIP(containerID string) string {
+	cmd := exec.Command("docker", "inspect",
+		"--format", "{{.NetworkSettings.Networks.aether.IPAddress}}",
+		containerID)
+	output, err := cmd.Output()
+	if err != nil {
+		log.Printf("[LOCAL] Failed to get container IP for %s: %v", containerID, err)
+		return ""
+	}
+	return strings.TrimSpace(string(output))
 }
 
 func (m *MachineManager) StartMachine(machineID string) error {

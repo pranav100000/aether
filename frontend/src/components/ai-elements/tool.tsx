@@ -34,6 +34,9 @@ export type ToolHeaderProps = {
   type: ToolUIPart["type"];
   state: ToolUIPart["state"];
   className?: string;
+  toolName?: string;
+  toolIcon?: React.ComponentType<{ className?: string }>;
+  toolColor?: string;
 };
 
 const getStatusBadge = (status: ToolUIPart["state"]) => {
@@ -70,25 +73,33 @@ export const ToolHeader = ({
   title,
   type,
   state,
+  toolName,
+  toolIcon: ToolIcon,
+  toolColor,
   ...props
-}: ToolHeaderProps) => (
-  <CollapsibleTrigger
-    className={cn(
-      "flex w-full items-center justify-between gap-4 p-3",
-      className
-    )}
-    {...props}
-  >
-    <div className="flex items-center gap-2">
-      <WrenchIcon className="size-4 text-muted-foreground" />
-      <span className="font-medium text-sm">
-        {title ?? type.split("-").slice(1).join("-")}
-      </span>
-      {getStatusBadge(state)}
-    </div>
-    <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-  </CollapsibleTrigger>
-);
+}: ToolHeaderProps) => {
+  const Icon = ToolIcon || WrenchIcon;
+  const iconColor = toolColor || "text-muted-foreground";
+
+  return (
+    <CollapsibleTrigger
+      className={cn(
+        "flex w-full items-center justify-between gap-4 p-3",
+        className
+      )}
+      {...props}
+    >
+      <div className="flex items-center gap-2">
+        <Icon className={cn("size-4", iconColor)} />
+        <span className="font-medium text-sm">
+          {title ?? type.split("-").slice(1).join("-")}
+        </span>
+        {getStatusBadge(state)}
+      </div>
+      <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+    </CollapsibleTrigger>
+  );
+};
 
 export type ToolContentProps = ComponentProps<typeof CollapsibleContent>;
 

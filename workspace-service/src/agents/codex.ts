@@ -9,6 +9,7 @@ export class CodexProvider implements AgentProvider {
   private cwd: string
   private codex: Codex | null = null
   private currentThread: ReturnType<Codex["startThread"]> | null = null
+  private abortController: AbortController | null = null
 
   constructor(config: ProviderConfig) {
     this.cwd = config.cwd
@@ -34,6 +35,7 @@ export class CodexProvider implements AgentProvider {
   }
 
   async *query(prompt: string, options: QueryOptions): AsyncIterable<AgentEvent> {
+    this.abortController = new AbortController()
     const codex = this.getCodex()
 
     const thread = codex.startThread({
@@ -49,6 +51,8 @@ export class CodexProvider implements AgentProvider {
 
     let hasDone = false
     for await (const event of events) {
+      if (this.abortController?.signal.aborted) break
+
       const mapped = this.mapEvent(event, options.autoApprove)
       if (mapped) {
         if (mapped.type === "done") hasDone = true
@@ -127,6 +131,8 @@ export class CodexProvider implements AgentProvider {
   }
 
   abort(): void {
+    this.abortController?.abort()
+    this.abortController = null
     this.currentThread = null
   }
 }

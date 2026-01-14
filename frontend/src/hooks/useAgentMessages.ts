@@ -2,13 +2,30 @@ import { useReducer, useCallback, useRef } from "react"
 import type { ServerMessage, HistoryMessage, ToolData } from "@/types/agent"
 import type { ToolUIPart } from "ai"
 
-// Chat message as displayed in UI
-export interface ChatMessage {
+// =============================================================================
+// Message Types - Discriminated union for clarity
+// =============================================================================
+
+interface BaseMessage {
   id: string
-  role: "user" | "assistant" | "system"
-  content: string
   timestamp: Date
-  tool?: {
+}
+
+export interface UserMessage extends BaseMessage {
+  role: "user"
+  content: string
+}
+
+export interface TextMessage extends BaseMessage {
+  role: "assistant"
+  variant: "text"
+  content: string
+}
+
+export interface ToolMessage extends BaseMessage {
+  role: "assistant"
+  variant: "tool"
+  tool: {
     id: string
     name: string
     input: Record<string, unknown>
@@ -16,27 +33,53 @@ export interface ChatMessage {
     result?: string
     error?: string
   }
-  thinking?: {
-    content: string
-    isStreaming: boolean
-    duration?: number
-  }
 }
+
+export interface ThinkingMessage extends BaseMessage {
+  role: "assistant"
+  variant: "thinking"
+  content: string
+  isStreaming: boolean
+  duration?: number
+}
+
+export type ChatMessage = UserMessage | TextMessage | ToolMessage | ThinkingMessage
 
 export type ChatStatus = "ready" | "submitted" | "streaming" | "error"
 
-// Actions for the reducer
+// =============================================================================
+// Type Guards
+// =============================================================================
+
+function isTextMessage(msg: ChatMessage): msg is TextMessage {
+  return msg.role === "assistant" && (msg as TextMessage).variant === "text"
+}
+
+function isToolMessage(msg: ChatMessage): msg is ToolMessage {
+  return msg.role === "assistant" && (msg as ToolMessage).variant === "tool"
+}
+
+function isThinkingMessage(msg: ChatMessage): msg is ThinkingMessage {
+  return msg.role === "assistant" && (msg as ThinkingMessage).variant === "thinking"
+}
+
+// =============================================================================
+// Actions
+// =============================================================================
+
 type MessageAction =
   | { type: "ADD_USER_MESSAGE"; id: string; content: string }
-  | { type: "START_ASSISTANT_MESSAGE"; id: string }
   | { type: "APPEND_TEXT"; content: string }
-  | { type: "START_THINKING"; id: string }
+  | { type: "ADD_TOOL"; id: string; tool: ToolData }
+  | { type: "UPDATE_TOOL_RESULT"; toolId: string; result?: string; error?: string }
   | { type: "APPEND_THINKING"; content: string }
   | { type: "FINISH_THINKING"; duration: number }
-  | { type: "ADD_TOOL_USE"; id: string; tool: ToolData }
-  | { type: "UPDATE_TOOL_RESULT"; toolId: string; result?: string; error?: string }
   | { type: "RESTORE_HISTORY"; messages: ChatMessage[] }
   | { type: "CLEAR" }
+
+// =============================================================================
+// Reducer - Clean, predictable state transitions
+// =============================================================================
 
 function messagesReducer(state: ChatMessage[], action: MessageAction): ChatMessage[] {
   switch (action.type) {
@@ -51,114 +94,37 @@ function messagesReducer(state: ChatMessage[], action: MessageAction): ChatMessa
         },
       ]
 
-    case "START_ASSISTANT_MESSAGE":
-      return [
-        ...state,
-        {
-          id: action.id,
-          role: "assistant",
-          content: "",
-          timestamp: new Date(),
-        },
-      ]
-
     case "APPEND_TEXT": {
-      const last = state[state.length - 1]
-      if (!last || last.role !== "assistant") {
-        // No assistant message to append to - this shouldn't happen
-        console.warn("[useAgentMessages] APPEND_TEXT with no assistant message")
-        return state
-      }
+      const last = state.at(-1)
 
-      // If we were thinking, finalize thinking first and set content
-      if (last.thinking?.isStreaming) {
+      // Append to existing text message
+      if (last && isTextMessage(last)) {
         return [
           ...state.slice(0, -1),
-          {
-            ...last,
-            thinking: { ...last.thinking, isStreaming: false },
-            content: action.content,
-          },
+          { ...last, content: last.content + action.content },
         ]
       }
 
-      // Append to existing content
-      return [
-        ...state.slice(0, -1),
-        { ...last, content: last.content + action.content },
-      ]
-    }
-
-    case "START_THINKING":
+      // Create new text message
       return [
         ...state,
         {
-          id: action.id,
+          id: `text-${Date.now()}`,
           role: "assistant",
-          content: "",
+          variant: "text",
+          content: action.content,
           timestamp: new Date(),
-          thinking: {
-            content: "",
-            isStreaming: true,
-          },
-        },
-      ]
-
-    case "APPEND_THINKING": {
-      const last = state[state.length - 1]
-      if (!last?.thinking?.isStreaming) {
-        // Start a new thinking block if needed
-        return [
-          ...state,
-          {
-            id: `thinking-${Date.now()}`,
-            role: "assistant",
-            content: "",
-            timestamp: new Date(),
-            thinking: {
-              content: action.content,
-              isStreaming: true,
-            },
-          },
-        ]
-      }
-
-      return [
-        ...state.slice(0, -1),
-        {
-          ...last,
-          thinking: {
-            ...last.thinking,
-            content: last.thinking.content + action.content,
-          },
         },
       ]
     }
 
-    case "FINISH_THINKING": {
-      const last = state[state.length - 1]
-      if (!last?.thinking) return state
-
-      return [
-        ...state.slice(0, -1),
-        {
-          ...last,
-          thinking: {
-            ...last.thinking,
-            isStreaming: false,
-            duration: action.duration,
-          },
-        },
-      ]
-    }
-
-    case "ADD_TOOL_USE":
+    case "ADD_TOOL":
       return [
         ...state,
         {
           id: action.id,
           role: "assistant",
-          content: "",
+          variant: "tool",
           timestamp: new Date(),
           tool: {
             id: action.tool.id,
@@ -171,7 +137,7 @@ function messagesReducer(state: ChatMessage[], action: MessageAction): ChatMessa
 
     case "UPDATE_TOOL_RESULT":
       return state.map((msg) => {
-        if (msg.tool?.id === action.toolId) {
+        if (isToolMessage(msg) && msg.tool.id === action.toolId) {
           return {
             ...msg,
             tool: {
@@ -185,6 +151,42 @@ function messagesReducer(state: ChatMessage[], action: MessageAction): ChatMessa
         return msg
       })
 
+    case "APPEND_THINKING": {
+      const last = state.at(-1)
+
+      // Append to existing streaming thinking
+      if (last && isThinkingMessage(last) && last.isStreaming) {
+        return [
+          ...state.slice(0, -1),
+          { ...last, content: last.content + action.content },
+        ]
+      }
+
+      // Create new thinking message
+      return [
+        ...state,
+        {
+          id: `thinking-${Date.now()}`,
+          role: "assistant",
+          variant: "thinking",
+          content: action.content,
+          timestamp: new Date(),
+          isStreaming: true,
+        },
+      ]
+    }
+
+    case "FINISH_THINKING": {
+      const last = state.at(-1)
+      if (last && isThinkingMessage(last)) {
+        return [
+          ...state.slice(0, -1),
+          { ...last, isStreaming: false, duration: action.duration },
+        ]
+      }
+      return state
+    }
+
     case "RESTORE_HISTORY":
       return action.messages
 
@@ -196,32 +198,56 @@ function messagesReducer(state: ChatMessage[], action: MessageAction): ChatMessa
   }
 }
 
-// Convert history message from server to chat message
-function historyToChatMessage(histMsg: HistoryMessage): ChatMessage {
-  const chatMsg: ChatMessage = {
-    id: histMsg.id,
-    role: histMsg.role,
-    content: histMsg.content,
-    timestamp: new Date(histMsg.timestamp),
-  }
+// =============================================================================
+// History Conversion
+// =============================================================================
 
+function historyToChatMessage(histMsg: HistoryMessage): ChatMessage {
+  // Tool message
   if (histMsg.tool) {
-    chatMsg.tool = {
-      id: histMsg.tool.id,
-      name: histMsg.tool.name,
-      input: histMsg.tool.input,
-      status: histMsg.tool.result
-        ? "output-available"
-        : histMsg.tool.error
-          ? "output-error"
-          : "input-available",
-      result: histMsg.tool.result,
-      error: histMsg.tool.error,
+    return {
+      id: histMsg.id,
+      role: "assistant",
+      variant: "tool",
+      timestamp: new Date(histMsg.timestamp),
+      tool: {
+        id: histMsg.tool.id,
+        name: histMsg.tool.name,
+        input: histMsg.tool.input,
+        status: histMsg.tool.result
+          ? "output-available"
+          : histMsg.tool.error
+            ? "output-error"
+            : "input-available",
+        result: histMsg.tool.result,
+        error: histMsg.tool.error,
+      },
     }
   }
 
-  return chatMsg
+  // User message
+  if (histMsg.role === "user") {
+    return {
+      id: histMsg.id,
+      role: "user",
+      content: histMsg.content,
+      timestamp: new Date(histMsg.timestamp),
+    }
+  }
+
+  // Assistant text message
+  return {
+    id: histMsg.id,
+    role: "assistant",
+    variant: "text",
+    content: histMsg.content,
+    timestamp: new Date(histMsg.timestamp),
+  }
 }
+
+// =============================================================================
+// Hook
+// =============================================================================
 
 export interface UseAgentMessagesReturn {
   messages: ChatMessage[]
@@ -253,94 +279,97 @@ export function useAgentMessages(): UseAgentMessagesReturn {
     setStatusState(newStatus)
   }, [])
 
-  const addUserMessage = useCallback((content: string) => {
-    const id = generateId()
-    dispatch({ type: "ADD_USER_MESSAGE", id, content })
-    setStatus("submitted")
-    return id
-  }, [generateId, setStatus])
+  const addUserMessage = useCallback(
+    (content: string) => {
+      const id = generateId()
+      dispatch({ type: "ADD_USER_MESSAGE", id, content })
+      setStatus("submitted")
+      return id
+    },
+    [generateId, setStatus]
+  )
 
-  const handleServerMessage = useCallback((message: ServerMessage) => {
-    switch (message.type) {
-      case "init":
-        // Session initialized
-        break
+  const handleServerMessage = useCallback(
+    (message: ServerMessage) => {
+      switch (message.type) {
+        case "init":
+          break
 
-      case "history":
-        if (message.history) {
-          const restoredMessages = message.history.map(historyToChatMessage)
-          dispatch({ type: "RESTORE_HISTORY", messages: restoredMessages })
+        case "history":
+          if (message.history) {
+            const restoredMessages = message.history.map(historyToChatMessage)
+            dispatch({ type: "RESTORE_HISTORY", messages: restoredMessages })
 
-          // Update message ID counter to avoid collisions
-          const maxId = restoredMessages.reduce((max, m) => {
-            const num = parseInt(m.id.replace("msg-", ""), 10)
-            return isNaN(num) ? max : Math.max(max, num)
-          }, 0)
-          messageIdRef.current = maxId
-        }
-        break
-
-      case "thinking":
-        if (message.content) {
-          if (thinkingStartRef.current === null) {
-            thinkingStartRef.current = Date.now()
-            dispatch({ type: "START_THINKING", id: generateId() })
+            const maxId = restoredMessages.reduce((max, m) => {
+              const num = parseInt(m.id.replace("msg-", ""), 10)
+              return isNaN(num) ? max : Math.max(max, num)
+            }, 0)
+            messageIdRef.current = maxId
           }
-          dispatch({ type: "APPEND_THINKING", content: message.content })
-        }
-        break
+          break
 
-      case "text":
-        if (message.content) {
-          setStatus("streaming")
-
-          // Finalize thinking if we were thinking
-          if (thinkingStartRef.current !== null) {
-            const duration = Math.ceil((Date.now() - thinkingStartRef.current) / 1000)
-            dispatch({ type: "FINISH_THINKING", duration })
-            thinkingStartRef.current = null
+        case "thinking":
+          if (message.content) {
+            if (thinkingStartRef.current === null) {
+              thinkingStartRef.current = Date.now()
+            }
+            dispatch({ type: "APPEND_THINKING", content: message.content })
           }
+          break
 
-          dispatch({ type: "APPEND_TEXT", content: message.content })
-        }
-        break
+        case "text":
+          if (message.content) {
+            setStatus("streaming")
 
-      case "tool_use":
-        if (message.tool) {
-          dispatch({
-            type: "ADD_TOOL_USE",
-            id: generateId(),
-            tool: {
-              id: message.tool.id,
-              name: message.tool.name,
-              input: message.tool.input,
-              status: message.tool.status,
-            },
-          })
-        }
-        break
+            // Finalize thinking if active
+            if (thinkingStartRef.current !== null) {
+              const duration = Math.ceil((Date.now() - thinkingStartRef.current) / 1000)
+              dispatch({ type: "FINISH_THINKING", duration })
+              thinkingStartRef.current = null
+            }
 
-      case "tool_result":
-        if (message.toolId) {
-          dispatch({
-            type: "UPDATE_TOOL_RESULT",
-            toolId: message.toolId,
-            result: message.result,
-            error: message.error,
-          })
-        }
-        break
+            dispatch({ type: "APPEND_TEXT", content: message.content })
+          }
+          break
 
-      case "error":
-        setStatus("error")
-        break
+        case "tool_use":
+          if (message.tool) {
+            dispatch({
+              type: "ADD_TOOL",
+              id: generateId(),
+              tool: {
+                id: message.tool.id,
+                name: message.tool.name,
+                input: message.tool.input,
+                status: message.tool.status,
+              },
+            })
+          }
+          break
 
-      case "done":
-        setStatus("ready")
-        thinkingStartRef.current = null
-        break
-    }
-  }, [generateId, setStatus])
+        case "tool_result":
+          if (message.toolId) {
+            dispatch({
+              type: "UPDATE_TOOL_RESULT",
+              toolId: message.toolId,
+              result: message.result,
+              error: message.error,
+            })
+          }
+          break
+
+        case "error":
+          setStatus("error")
+          break
+
+        case "done":
+          setStatus("ready")
+          thinkingStartRef.current = null
+          break
+      }
+    },
+    [generateId, setStatus]
+  )
 
   const clear = useCallback(() => {
     dispatch({ type: "CLEAR" })

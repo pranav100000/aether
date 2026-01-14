@@ -8,6 +8,7 @@ export class CodebuffProvider implements AgentProvider {
   private cwd: string
   private client: CodebuffClient | null = null
   private previousRun: RunState | null = null
+  private abortController: AbortController | null = null
 
   constructor(config: ProviderConfig) {
     this.cwd = config.cwd
@@ -28,6 +29,7 @@ export class CodebuffProvider implements AgentProvider {
   }
 
   async *query(prompt: string, options: QueryOptions): AsyncIterable<AgentEvent> {
+    this.abortController = new AbortController()
     const client = this.getClient()
 
     const eventQueue: AgentEvent[] = []
@@ -38,10 +40,9 @@ export class CodebuffProvider implements AgentProvider {
       const mapped = this.mapEvent(event, options.autoApprove)
       if (mapped) {
         eventQueue.push(mapped)
-        if (resolveWait) {
-          resolveWait()
-          resolveWait = null
-        }
+        // Always try to resolve - even if null, this is safe
+        resolveWait?.()
+        resolveWait = null
       }
     }
 
@@ -50,37 +51,62 @@ export class CodebuffProvider implements AgentProvider {
         agent: options.model || "base2",
         prompt,
         handleEvent,
+        signal: this.abortController.signal,
         ...(this.previousRun ? { previousRun: this.previousRun } : {}),
       })
       .then((result: RunState) => {
-        this.previousRun = result
+        // Only update state if not aborted
+        if (!this.abortController?.signal.aborted) {
+          this.previousRun = result
+        }
         isComplete = true
         resolveWait?.()
         resolveWait = null
         return result
       })
       .catch((err: Error) => {
-        eventQueue.push({ type: "error", error: err.message })
+        // Only report errors if not aborted (abort may cause expected errors)
+        if (!this.abortController?.signal.aborted) {
+          eventQueue.push({ type: "error", error: err.message })
+        }
         isComplete = true
         resolveWait?.()
         resolveWait = null
         throw err
       })
 
-    while (!isComplete || eventQueue.length > 0) {
-      if (eventQueue.length > 0) {
+    // Main event loop
+    while (true) {
+      if (this.abortController?.signal.aborted) break
+
+      // Drain all available events first
+      while (eventQueue.length > 0) {
         yield eventQueue.shift()!
-      } else if (!isComplete) {
-        await new Promise<void>((resolve) => {
-          resolveWait = resolve
-        })
       }
+
+      // Exit only after queue is empty AND processing is complete
+      if (isComplete) break
+
+      // Wait for next event or completion signal
+      await new Promise<void>((resolve) => {
+        resolveWait = resolve
+        // Also resolve on abort to prevent hanging
+        const onAbort = () => resolve()
+        this.abortController?.signal.addEventListener("abort", onAbort, { once: true })
+      })
     }
 
+    // Ensure the SDK promise is fully settled
     try {
       await runPromise
     } catch {
       // Error already pushed to queue
+    }
+
+    // Final drain: catch any events that arrived during promise settlement
+    // This is critical - events can arrive between isComplete=true and await runPromise
+    while (eventQueue.length > 0) {
+      yield eventQueue.shift()!
     }
 
     yield { type: "done" }
@@ -95,6 +121,15 @@ export class CodebuffProvider implements AgentProvider {
         const text = event.text as string | undefined
         if (text) {
           return { type: "text", content: text, streaming: true }
+        }
+        return null
+      }
+
+      case "reasoning_delta": {
+        // Extended thinking/reasoning from the model
+        const text = event.text as string | undefined
+        if (text) {
+          return { type: "thinking", content: text, streaming: true }
         }
         return null
       }
@@ -129,10 +164,47 @@ export class CodebuffProvider implements AgentProvider {
         }
       }
 
+      case "subagent_start": {
+        // Subagent spawned - display as a tool use for visibility
+        const agentId = event.agentId as string | undefined
+        const agentType = event.agentType as string | undefined
+        const displayName = event.displayName as string | undefined
+
+        return {
+          type: "tool_use",
+          tool: {
+            id: agentId || crypto.randomUUID(),
+            name: "spawn_agent_inline",
+            input: {
+              agent_type: agentType || "unknown",
+              displayName: displayName,
+            },
+            status: "running",
+          },
+        }
+      }
+
+      case "subagent_finish": {
+        // Subagent completed
+        const agentId = event.agentId as string | undefined
+
+        return {
+          type: "tool_result",
+          toolId: agentId,
+          result: JSON.stringify([{ type: "json", value: { message: "Agent completed" } }]),
+        }
+      }
+
       case "error": {
         const message = event.message as string | undefined
         return { type: "error", error: message || "Unknown error" }
       }
+
+      case "start":
+      case "finish":
+        // These are SDK lifecycle events, not user-facing
+        // finish doesn't mean completion (that's when Promise resolves)
+        return null
 
       default:
         return null
@@ -140,6 +212,6 @@ export class CodebuffProvider implements AgentProvider {
   }
 
   abort(): void {
-    this.previousRun = null
+    this.abortController?.abort()
   }
 }

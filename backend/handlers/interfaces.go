@@ -64,8 +64,9 @@ type TerminalProvider interface {
 
 // ConnectionInfo contains connection details for a project's VM
 type ConnectionInfo struct {
-	Host string
-	Port int
+	Host          string
+	Port          int // SSH port (default 2222)
+	WebSocketPort int // WebSocket port for agent service (default 3001)
 }
 
 // ConnectionResolver resolves project → connection details

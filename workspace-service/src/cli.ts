@@ -1,4 +1,5 @@
 import { AgentHandler } from "./handler"
+import { StdioConnector } from "./connector"
 import type { AgentType, ClientMessage, ServerMessage } from "./types"
 
 const agent = process.argv[2] as AgentType;
@@ -8,52 +9,40 @@ if (!agent) {
   process.exit(1);
 }
 
-function send(msg: ServerMessage) {
-  console.log(JSON.stringify({ ...msg, agent }))
-}
+// Create connector and handler
+const connector = new StdioConnector();
 
 let handler: AgentHandler;
 
 try {
-  handler = new AgentHandler(agent, { send });
+  handler = new AgentHandler(agent, {
+    send: (msg: ServerMessage) => connector.send(msg)
+  });
 } catch (err) {
-  send({ type: "error", error: String(err) });
+  connector.send({ type: "error", error: String(err) });
   process.exit(1);
 }
 
 // Handle uncaught errors
 process.on("uncaughtException", (err) => {
-  send({ type: "error", error: `Uncaught: ${err.message}` });
+  connector.send({ type: "error", error: `Uncaught: ${err.message}` });
   process.exit(1);
 });
 
 process.on("unhandledRejection", (err) => {
-  send({ type: "error", error: `Unhandled: ${String(err)}` });
+  connector.send({ type: "error", error: `Unhandled: ${String(err)}` });
   process.exit(1);
 });
 
-// Initialize handler (loads history, sends init message)
+// Set up message handling
+connector.onMessage(async (data) => {
+  await handler.handleMessage(data as ClientMessage);
+});
+
+connector.onClose(() => {
+  process.exit(0);
+});
+
+// Initialize connector and handler
+await connector.initialize({ agentType: agent });
 await handler.initialize();
-
-// Read JSON lines from stdin
-const decoder = new TextDecoder();
-let buffer = "";
-
-for await (const chunk of Bun.stdin.stream()) {
-  buffer += decoder.decode(chunk);
-
-  // Process complete lines
-  const lines = buffer.split("\n");
-  buffer = lines.pop() || ""; // Keep incomplete line in buffer
-
-  for (const line of lines) {
-    if (!line.trim()) continue;
-
-    try {
-      const msg: ClientMessage = JSON.parse(line);
-      await handler.handleMessage(msg);
-    } catch (err) {
-      send({ type: "error", error: String(err) });
-    }
-  }
-}

@@ -48,7 +48,7 @@ export function Login() {
     <div className="flex min-h-screen items-center justify-center">
       <div className="w-full max-w-sm space-y-6 px-4">
         <div className="space-y-2 text-center">
-          <h1 className="text-3xl font-bold">Aether</h1>
+          <h1 className="text-3xl font-bold">æther</h1>
           <p className="text-muted-foreground">Sign in to your account</p>
         </div>
 

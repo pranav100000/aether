@@ -13,6 +13,8 @@ import (
 
 	"aether/db"
 	"aether/fly"
+	"aether/handlers"
+	"aether/local"
 
 	"github.com/joho/godotenv"
 )
@@ -24,20 +26,13 @@ func main() {
 		godotenv.Load("../.env")
 	}
 
+	// Check if running in local mode
+	localMode := os.Getenv("LOCAL_MODE") == "true"
+
 	// Required environment variables
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
 		log.Fatal("DATABASE_URL environment variable is required")
-	}
-
-	flyToken := os.Getenv("FLY_API_TOKEN")
-	if flyToken == "" {
-		log.Fatal("FLY_API_TOKEN environment variable is required")
-	}
-
-	flyAppName := os.Getenv("FLY_VMS_APP_NAME")
-	if flyAppName == "" {
-		log.Fatal("FLY_VMS_APP_NAME environment variable is required")
 	}
 
 	// Optional environment variables with defaults
@@ -51,11 +46,6 @@ func main() {
 		previewDomain = "localhost" // Default for local dev
 	}
 
-	flyRegion := os.Getenv("FLY_REGION")
-	if flyRegion == "" {
-		flyRegion = "sjc"
-	}
-
 	// Initialize database client
 	log.Println("Connecting to database...")
 	dbClient, err := db.NewClient(databaseURL)
@@ -64,11 +54,34 @@ func main() {
 	}
 	defer dbClient.Close()
 
-	// Initialize Fly client
-	flyClient := fly.NewClient(flyToken, flyAppName, flyRegion)
+	// Initialize machine manager based on mode
+	var machines handlers.MachineManager
+	if localMode {
+		log.Println("Running in LOCAL_MODE - using Docker containers")
+		machines = local.NewMachineManager()
+	} else {
+		// Production mode - require Fly.io credentials
+		flyToken := os.Getenv("FLY_API_TOKEN")
+		if flyToken == "" {
+			log.Fatal("FLY_API_TOKEN environment variable is required")
+		}
+
+		flyAppName := os.Getenv("FLY_VMS_APP_NAME")
+		if flyAppName == "" {
+			log.Fatal("FLY_VMS_APP_NAME environment variable is required")
+		}
+
+		flyRegion := os.Getenv("FLY_REGION")
+		if flyRegion == "" {
+			flyRegion = "sjc"
+		}
+
+		log.Println("Running in production mode - using Fly.io")
+		machines = fly.NewClient(flyToken, flyAppName, flyRegion)
+	}
 
 	// Create proxy handler
-	handler := proxy.NewHandler(dbClient, flyClient, previewDomain)
+	handler := proxy.NewHandler(dbClient, machines, previewDomain)
 
 	// Create HTTP server
 	server := &http.Server{
