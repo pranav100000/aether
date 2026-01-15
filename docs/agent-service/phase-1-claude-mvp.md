@@ -241,7 +241,7 @@ export class ClaudeProvider implements AgentProvider {
     // Text content
     if (m.type === "assistant" && m.message) {
       const message = m.message as { content?: Array<{ type: string; text?: string }> };
-      const textBlock = message.content?.find(b => b.type === "text");
+      const textBlock = message.content?.find((b) => b.type === "text");
       if (textBlock?.text) {
         return { type: "text", content: textBlock.text, streaming: false };
       }
@@ -249,8 +249,10 @@ export class ClaudeProvider implements AgentProvider {
 
     // Tool use
     if (m.type === "assistant" && m.message) {
-      const message = m.message as { content?: Array<{ type: string; id?: string; name?: string; input?: unknown }> };
-      const toolBlock = message.content?.find(b => b.type === "tool_use");
+      const message = m.message as {
+        content?: Array<{ type: string; id?: string; name?: string; input?: unknown }>;
+      };
+      const toolBlock = message.content?.find((b) => b.type === "tool_use");
       if (toolBlock) {
         return {
           type: "tool_use",
@@ -266,8 +268,10 @@ export class ClaudeProvider implements AgentProvider {
 
     // Tool result
     if (m.type === "user" && m.message) {
-      const message = m.message as { content?: Array<{ type: string; tool_use_id?: string; content?: string }> };
-      const resultBlock = message.content?.find(b => b.type === "tool_result");
+      const message = m.message as {
+        content?: Array<{ type: string; tool_use_id?: string; content?: string }>;
+      };
+      const resultBlock = message.content?.find((b) => b.type === "tool_result");
       if (resultBlock) {
         return {
           type: "tool_result",

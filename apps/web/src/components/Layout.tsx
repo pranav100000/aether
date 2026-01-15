@@ -1,22 +1,22 @@
-import { Outlet, Link, useNavigate } from "react-router-dom"
-import { useAuth } from "@/hooks/useAuth"
+import { Outlet, Link, useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
 import {
   Dropdown,
   DropdownTrigger,
   DropdownContent,
   DropdownItem,
   DropdownSeparator,
-} from "@/components/ui/dropdown"
-import { LogOut, Settings } from "lucide-react"
+} from "@/components/ui/dropdown";
+import { LogOut, Settings } from "lucide-react";
 
 export function Layout() {
-  const { user, signOut } = useAuth()
-  const navigate = useNavigate()
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
 
   const handleSignOut = async () => {
-    await signOut()
-    navigate("/login")
-  }
+    await signOut();
+    navigate("/login");
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -49,5 +49,5 @@ export function Layout() {
         <Outlet />
       </main>
     </div>
-  )
+  );
 }

@@ -1,52 +1,52 @@
-import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Spinner } from "@/components/ui/spinner"
-import { HardwareSelector } from "@/components/projects/HardwareSelector"
-import { useUserSettings } from "@/hooks/useUserSettings"
-import { IDLE_TIMEOUT_OPTIONS, type HardwareConfig } from "@/lib/api"
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+import { HardwareSelector } from "@/components/projects/HardwareSelector";
+import { useUserSettings } from "@/hooks/useUserSettings";
+import { IDLE_TIMEOUT_OPTIONS, type HardwareConfig } from "@/lib/api";
 
 export function DefaultSettings() {
-  const { settings, loading, error, update } = useUserSettings()
-  const [hardware, setHardware] = useState<HardwareConfig | null>(null)
-  const [idleTimeout, setIdleTimeout] = useState<0 | 5 | 10 | 30 | 60>(10)
-  const [saving, setSaving] = useState(false)
-  const [saveError, setSaveError] = useState<string | null>(null)
-  const [saveSuccess, setSaveSuccess] = useState(false)
+  const { settings, loading, error, update } = useUserSettings();
+  const [hardware, setHardware] = useState<HardwareConfig | null>(null);
+  const [idleTimeout, setIdleTimeout] = useState<0 | 5 | 10 | 30 | 60>(10);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   // Initialize state when settings load
   useEffect(() => {
     if (settings) {
-      setHardware(settings.default_hardware)
-      setIdleTimeout(settings.default_idle_timeout_minutes ?? 10)
+      setHardware(settings.default_hardware);
+      setIdleTimeout(settings.default_idle_timeout_minutes ?? 10);
     }
-  }, [settings])
+  }, [settings]);
 
   const handleSave = async () => {
-    if (!hardware) return
+    if (!hardware) return;
 
-    setSaving(true)
-    setSaveError(null)
-    setSaveSuccess(false)
+    setSaving(true);
+    setSaveError(null);
+    setSaveSuccess(false);
     try {
       await update({
         default_hardware: hardware,
         default_idle_timeout_minutes: idleTimeout,
-      })
-      setSaveSuccess(true)
-      setTimeout(() => setSaveSuccess(false), 3000)
+      });
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Failed to save settings")
+      setSaveError(err instanceof Error ? err.message : "Failed to save settings");
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
-  }
+  };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
         <Spinner />
       </div>
-    )
+    );
   }
 
   if (error) {
@@ -54,7 +54,7 @@ export function DefaultSettings() {
       <div className="text-center py-8 text-red-500">
         <p>{error}</p>
       </div>
-    )
+    );
   }
 
   return (
@@ -62,7 +62,8 @@ export function DefaultSettings() {
       <div>
         <h2 className="text-lg font-semibold">Default Settings</h2>
         <p className="text-sm text-muted-foreground">
-          Configure defaults for new projects. These settings will be pre-selected when creating a project.
+          Configure defaults for new projects. These settings will be pre-selected when creating a
+          project.
         </p>
       </div>
 
@@ -74,9 +75,7 @@ export function DefaultSettings() {
             This hardware configuration will be used when creating new projects.
           </p>
         </div>
-        {hardware && (
-          <HardwareSelector value={hardware} onChange={setHardware} />
-        )}
+        {hardware && <HardwareSelector value={hardware} onChange={setHardware} />}
       </div>
 
       {/* Default Idle Timeout Section */}
@@ -93,7 +92,9 @@ export function DefaultSettings() {
           onChange={(e) => setIdleTimeout(parseInt(e.target.value) as 0 | 5 | 10 | 30 | 60)}
         >
           {IDLE_TIMEOUT_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
           ))}
         </select>
       </div>
@@ -103,12 +104,8 @@ export function DefaultSettings() {
         <Button onClick={handleSave} disabled={saving || !hardware}>
           {saving ? <Spinner size="sm" /> : "Save defaults"}
         </Button>
-        {saveSuccess && (
-          <span className="text-sm text-green-600">Settings saved successfully</span>
-        )}
-        {saveError && (
-          <span className="text-sm text-red-500">{saveError}</span>
-        )}
+        {saveSuccess && <span className="text-sm text-green-600">Settings saved successfully</span>}
+        {saveError && <span className="text-sm text-red-500">{saveError}</span>}
       </div>
 
       {/* Info Box */}
@@ -131,11 +128,11 @@ export function DefaultSettings() {
             <path d="M12 8h.01" />
           </svg>
           <p className="text-sm text-muted-foreground">
-            You can override these defaults when creating individual projects. Setting idle timeout to "Never"
-            means projects will only stop when you manually stop them.
+            You can override these defaults when creating individual projects. Setting idle timeout
+            to "Never" means projects will only stop when you manually stop them.
           </p>
         </div>
       </div>
     </div>
-  )
+  );
 }

@@ -297,17 +297,17 @@ func (c *Client) GetRegion() string {
 // Volume types and operations
 
 type Volume struct {
-	ID                 string `json:"id"`
-	Name               string `json:"name"`
-	Region             string `json:"region"`
-	SizeGB             int    `json:"size_gb"`
-	State              string `json:"state"`
-	AttachedMachineID  string `json:"attached_machine_id,omitempty"`
-	AttachedAllocID    string `json:"attached_alloc_id,omitempty"`
-	CreatedAt          string `json:"created_at"`
-	Encrypted          bool   `json:"encrypted"`
-	FSType             string `json:"fstype,omitempty"`
-	SnapshotRetention  int    `json:"snapshot_retention,omitempty"`
+	ID                string `json:"id"`
+	Name              string `json:"name"`
+	Region            string `json:"region"`
+	SizeGB            int    `json:"size_gb"`
+	State             string `json:"state"`
+	AttachedMachineID string `json:"attached_machine_id,omitempty"`
+	AttachedAllocID   string `json:"attached_alloc_id,omitempty"`
+	CreatedAt         string `json:"created_at"`
+	Encrypted         bool   `json:"encrypted"`
+	FSType            string `json:"fstype,omitempty"`
+	SnapshotRetention int    `json:"snapshot_retention,omitempty"`
 }
 
 type CreateVolumeRequest struct {

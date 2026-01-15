@@ -1,11 +1,11 @@
-import { useState, useCallback } from "react"
-import { SparklesIcon, ZapIcon, BrainIcon } from "lucide-react"
-import { useAgentConnection } from "@/hooks/useAgentConnection"
-import { useAgentMessages } from "@/hooks/useAgentMessages"
-import { AgentHeader, type AgentConfigItem } from "./AgentHeader"
-import { AgentMessageList } from "./AgentMessageList"
-import { AgentPromptInput } from "./AgentPromptInput"
-import type { AgentType, AgentSettings, ServerMessage } from "@/types/agent"
+import { useState, useCallback } from "react";
+import { SparklesIcon, ZapIcon, BrainIcon } from "lucide-react";
+import { useAgentConnection } from "@/hooks/useAgentConnection";
+import { useAgentMessages } from "@/hooks/useAgentMessages";
+import { AgentHeader, type AgentConfigItem } from "./AgentHeader";
+import { AgentMessageList } from "./AgentMessageList";
+import { AgentPromptInput } from "./AgentPromptInput";
+import type { AgentType, AgentSettings, ServerMessage } from "@/types/agent";
 
 // Agent configuration
 const agentConfig: Record<AgentType, AgentConfigItem> = {
@@ -54,21 +54,21 @@ const agentConfig: Record<AgentType, AgentConfigItem> = {
     ],
     defaultModel: "anthropic/claude-sonnet-4",
   },
-}
+};
 
 export interface AgentChatProps {
-  projectId: string
-  defaultAgent?: AgentType
+  projectId: string;
+  defaultAgent?: AgentType;
 }
 
 export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps) {
-  const [agent, setAgent] = useState<AgentType>(defaultAgent)
-  const [error, setError] = useState<string | null>(null)
+  const [agent, setAgent] = useState<AgentType>(defaultAgent);
+  const [error, setError] = useState<string | null>(null);
   const [settings, setSettings] = useState<AgentSettings & { extendedThinking: boolean }>(() => ({
     model: agentConfig[defaultAgent].defaultModel,
     permissionMode: "bypassPermissions",
     extendedThinking: true,
-  }))
+  }));
 
   const {
     messages,
@@ -77,21 +77,27 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
     addUserMessage,
     setStatus,
     clear: clearMessages,
-  } = useAgentMessages()
+  } = useAgentMessages();
 
-  const handleMessage = useCallback((message: ServerMessage) => {
-    if (message.type === "error" && message.error) {
-      setError(message.error)
-    } else {
-      setError(null)
-    }
-    handleServerMessage(message)
-  }, [handleServerMessage])
+  const handleMessage = useCallback(
+    (message: ServerMessage) => {
+      if (message.type === "error" && message.error) {
+        setError(message.error);
+      } else {
+        setError(null);
+      }
+      handleServerMessage(message);
+    },
+    [handleServerMessage]
+  );
 
-  const handleError = useCallback((err: string) => {
-    setError(err)
-    setStatus("error")
-  }, [setStatus])
+  const handleError = useCallback(
+    (err: string) => {
+      setError(err);
+      setStatus("error");
+    },
+    [setStatus]
+  );
 
   const {
     status: connectionStatus,
@@ -104,50 +110,56 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
     agent,
     onMessage: handleMessage,
     onError: handleError,
-  })
+  });
 
-  const isConnected = connectionStatus === "connected"
-  const currentAgentConfig = agentConfig[agent]
+  const isConnected = connectionStatus === "connected";
+  const currentAgentConfig = agentConfig[agent];
 
-  const handleAgentChange = useCallback((newAgent: AgentType) => {
-    if (newAgent === agent) return
+  const handleAgentChange = useCallback(
+    (newAgent: AgentType) => {
+      if (newAgent === agent) return;
 
-    // Clear messages when switching agents
-    clearMessages()
-    setError(null)
+      // Clear messages when switching agents
+      clearMessages();
+      setError(null);
 
-    // Reset model to new agent's default
-    setSettings(s => ({
-      ...s,
-      model: agentConfig[newAgent].defaultModel,
-    }))
+      // Reset model to new agent's default
+      setSettings((s) => ({
+        ...s,
+        model: agentConfig[newAgent].defaultModel,
+      }));
 
-    // Switch agent (this will trigger reconnection via useEffect in useAgentConnection)
-    setAgent(newAgent)
-  }, [agent, clearMessages])
+      // Switch agent (this will trigger reconnection via useEffect in useAgentConnection)
+      setAgent(newAgent);
+    },
+    [agent, clearMessages]
+  );
 
-  const handleSubmit = useCallback((text: string, attachedFiles: string[]) => {
-    if (!text.trim() || !isConnected) return
+  const handleSubmit = useCallback(
+    (text: string, attachedFiles: string[]) => {
+      if (!text.trim() || !isConnected) return;
 
-    addUserMessage(text.trim())
+      addUserMessage(text.trim());
 
-    sendPrompt(
-      text.trim(),
-      {
-        model: settings.model,
-        permissionMode: settings.permissionMode,
-        extendedThinking: settings.extendedThinking,
-      },
-      attachedFiles.length > 0
-        ? { files: attachedFiles.map(path => ({ path, include: true })) }
-        : undefined
-    )
-  }, [isConnected, addUserMessage, sendPrompt, settings])
+      sendPrompt(
+        text.trim(),
+        {
+          model: settings.model,
+          permissionMode: settings.permissionMode,
+          extendedThinking: settings.extendedThinking,
+        },
+        attachedFiles.length > 0
+          ? { files: attachedFiles.map((path) => ({ path, include: true })) }
+          : undefined
+      );
+    },
+    [isConnected, addUserMessage, sendPrompt, settings]
+  );
 
   const handleStop = useCallback(() => {
-    sendAbort()
-    setStatus("ready")
-  }, [sendAbort, setStatus])
+    sendAbort();
+    setStatus("ready");
+  }, [sendAbort, setStatus]);
 
   return (
     <div className="relative flex size-full flex-col divide-y divide-zinc-800 overflow-hidden bg-zinc-950">
@@ -172,9 +184,7 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
       />
 
       {error && (
-        <div className="shrink-0 bg-red-900/50 px-4 py-2 text-sm text-red-200">
-          {error}
-        </div>
+        <div className="shrink-0 bg-red-900/50 px-4 py-2 text-sm text-red-200">{error}</div>
       )}
 
       <div className="grid shrink-0 gap-4 pt-4">
@@ -189,10 +199,10 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
         />
       </div>
     </div>
-  )
+  );
 }
 
 // Re-export components for flexibility
-export { AgentHeader } from "./AgentHeader"
-export { AgentMessageList } from "./AgentMessageList"
-export { AgentPromptInput } from "./AgentPromptInput"
+export { AgentHeader } from "./AgentHeader";
+export { AgentMessageList } from "./AgentMessageList";
+export { AgentPromptInput } from "./AgentPromptInput";

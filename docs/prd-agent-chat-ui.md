@@ -16,13 +16,13 @@ Enhance the AgentChat component with premium features: @files autocomplete, voic
 
 #### Components to Create
 
-| File | Purpose |
-|------|---------|
-| `frontend/src/contexts/FileTreeContext.tsx` | Global cache of all known file paths |
-| `frontend/src/components/ui/popover.tsx` | Radix popover wrapper for positioning |
-| `frontend/src/hooks/useFileAutocomplete.ts` | State management for autocomplete |
+| File                                                       | Purpose                                       |
+| ---------------------------------------------------------- | --------------------------------------------- |
+| `frontend/src/contexts/FileTreeContext.tsx`                | Global cache of all known file paths          |
+| `frontend/src/components/ui/popover.tsx`                   | Radix popover wrapper for positioning         |
+| `frontend/src/hooks/useFileAutocomplete.ts`                | State management for autocomplete             |
 | `frontend/src/components/workspace/FileMentionPopover.tsx` | File picker dropdown using PromptInputCommand |
-| `frontend/src/components/workspace/FilePill.tsx` | Removable file attachment badge |
+| `frontend/src/components/workspace/FilePill.tsx`           | Removable file attachment badge               |
 
 #### FileTreeContext Design
 
@@ -30,58 +30,59 @@ Enhance the AgentChat component with premium features: @files autocomplete, voic
 // frontend/src/contexts/FileTreeContext.tsx
 interface FileTreeContextValue {
   // All known file paths (cached as user navigates)
-  allFiles: string[]
+  allFiles: string[];
 
   // Add files to cache when directory is expanded
-  addFiles: (parentPath: string, entries: FileEntry[]) => void
+  addFiles: (parentPath: string, entries: FileEntry[]) => void;
 
   // Search files by query (fuzzy match on path)
-  searchFiles: (query: string, limit?: number) => string[]
+  searchFiles: (query: string, limit?: number) => string[];
 
   // Recursively load a directory (for initial @files search)
-  preloadDirectory: (path: string, depth?: number) => Promise<void>
+  preloadDirectory: (path: string, depth?: number) => Promise<void>;
 }
 
 // Usage in FileTreeItem - cache files when expanded
 useEffect(() => {
   if (expanded && children.length > 0) {
-    addFiles(path, children)
+    addFiles(path, children);
   }
-}, [expanded, children])
+}, [expanded, children]);
 ```
 
 #### Search Algorithm
 
 ```typescript
 function searchFiles(query: string, limit = 20): string[] {
-  if (!query) return allFiles.slice(0, limit)
+  if (!query) return allFiles.slice(0, limit);
 
-  const lowerQuery = query.toLowerCase()
+  const lowerQuery = query.toLowerCase();
 
   return allFiles
-    .filter(path => {
-      const filename = path.split('/').pop()?.toLowerCase() ?? ''
-      const pathLower = path.toLowerCase()
+    .filter((path) => {
+      const filename = path.split("/").pop()?.toLowerCase() ?? "";
+      const pathLower = path.toLowerCase();
       // Match filename first, then full path
-      return filename.includes(lowerQuery) || pathLower.includes(lowerQuery)
+      return filename.includes(lowerQuery) || pathLower.includes(lowerQuery);
     })
     .sort((a, b) => {
       // Prioritize exact filename matches
-      const aName = a.split('/').pop()?.toLowerCase() ?? ''
-      const bName = b.split('/').pop()?.toLowerCase() ?? ''
-      const aExact = aName === lowerQuery
-      const bExact = bName === lowerQuery
-      if (aExact !== bExact) return aExact ? -1 : 1
+      const aName = a.split("/").pop()?.toLowerCase() ?? "";
+      const bName = b.split("/").pop()?.toLowerCase() ?? "";
+      const aExact = aName === lowerQuery;
+      const bExact = bName === lowerQuery;
+      if (aExact !== bExact) return aExact ? -1 : 1;
       // Then by path length (shorter = more relevant)
-      return a.length - b.length
+      return a.length - b.length;
     })
-    .slice(0, limit)
+    .slice(0, limit);
 }
 ```
 
 #### Initial Preload Strategy
 
 When @files autocomplete opens:
+
 1. Search the current cache immediately
 2. If cache is small (< 50 files), trigger `preloadDirectory("/", 2)` to load 2 levels deep
 3. Show loading indicator while preloading, but display results as they come in
@@ -150,37 +151,44 @@ wsRef.current.send(JSON.stringify({
 
 ```tsx
 // frontend/src/components/workspace/FileMentionPopover.tsx
-import { Popover, PopoverContent } from "@/components/ui/popover"
+import { Popover, PopoverContent } from "@/components/ui/popover";
 import {
   PromptInputCommand,
   PromptInputCommandInput,
   PromptInputCommandList,
   PromptInputCommandItem,
   PromptInputCommandEmpty,
-} from "@/components/ai-elements/prompt-input"
-import { FileIcon, FileCodeIcon, FileTextIcon } from "lucide-react"
+} from "@/components/ai-elements/prompt-input";
+import { FileIcon, FileCodeIcon, FileTextIcon } from "lucide-react";
 
 interface FileMentionPopoverProps {
-  open: boolean
-  position: { top: number; left: number } | null
-  query: string
-  files: string[]
-  loading?: boolean
-  onSelect: (file: string) => void
-  onClose: () => void
-  onQueryChange: (query: string) => void
+  open: boolean;
+  position: { top: number; left: number } | null;
+  query: string;
+  files: string[];
+  loading?: boolean;
+  onSelect: (file: string) => void;
+  onClose: () => void;
+  onQueryChange: (query: string) => void;
 }
 
 export function FileMentionPopover({
-  open, position, query, files, loading, onSelect, onClose, onQueryChange
+  open,
+  position,
+  query,
+  files,
+  loading,
+  onSelect,
+  onClose,
+  onQueryChange,
 }: FileMentionPopoverProps) {
-  if (!open || !position) return null
+  if (!open || !position) return null;
 
   return (
     <Popover open={open} onOpenChange={(o) => !o && onClose()}>
       <PopoverContent
         className="w-80 p-0"
-        style={{ position: 'absolute', top: position.top, left: position.left }}
+        style={{ position: "absolute", top: position.top, left: position.left }}
         align="start"
       >
         <PromptInputCommand>
@@ -192,17 +200,11 @@ export function FileMentionPopover({
           />
           <PromptInputCommandList>
             {loading && (
-              <div className="py-2 px-3 text-xs text-muted-foreground">
-                Loading files...
-              </div>
+              <div className="py-2 px-3 text-xs text-muted-foreground">Loading files...</div>
             )}
             <PromptInputCommandEmpty>No files found</PromptInputCommandEmpty>
-            {files.map(file => (
-              <PromptInputCommandItem
-                key={file}
-                value={file}
-                onSelect={() => onSelect(file)}
-              >
+            {files.map((file) => (
+              <PromptInputCommandItem key={file} value={file} onSelect={() => onSelect(file)}>
                 <FileIcon className="size-4 mr-2 text-muted-foreground" />
                 <span className="truncate">{file}</span>
               </PromptInputCommandItem>
@@ -211,7 +213,7 @@ export function FileMentionPopover({
         </PromptInputCommand>
       </PopoverContent>
     </Popover>
-  )
+  );
 }
 ```
 
@@ -219,28 +221,27 @@ export function FileMentionPopover({
 
 ```tsx
 // frontend/src/components/workspace/FilePill.tsx
-import { XIcon, FileIcon } from "lucide-react"
+import { XIcon, FileIcon } from "lucide-react";
 
 interface FilePillProps {
-  path: string
-  onRemove: () => void
+  path: string;
+  onRemove: () => void;
 }
 
 export function FilePill({ path, onRemove }: FilePillProps) {
-  const filename = path.split('/').pop()
+  const filename = path.split("/").pop();
 
   return (
     <span className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-2 py-0.5 text-xs">
       <FileIcon className="size-3 text-muted-foreground" />
-      <span className="truncate max-w-[150px]" title={path}>{filename}</span>
-      <button
-        onClick={onRemove}
-        className="hover:text-destructive"
-      >
+      <span className="truncate max-w-[150px]" title={path}>
+        {filename}
+      </span>
+      <button onClick={onRemove} className="hover:text-destructive">
         <XIcon className="size-3" />
       </button>
     </span>
-  )
+  );
 }
 ```
 
@@ -382,10 +383,11 @@ useEffect(() => {
 
 ```typescript
 function getProviderFromModel(model: string): string {
-  if (model.includes("opus") || model.includes("sonnet") || model.includes("haiku")) return "anthropic"
-  if (model.includes("gpt") || model.includes("codex")) return "openai"
-  if (model.includes("openrouter:")) return "openrouter"
-  return "opencode"
+  if (model.includes("opus") || model.includes("sonnet") || model.includes("haiku"))
+    return "anthropic";
+  if (model.includes("gpt") || model.includes("codex")) return "openai";
+  if (model.includes("openrouter:")) return "openrouter";
+  return "opencode";
 }
 ```
 
@@ -426,12 +428,12 @@ import { MessageActions, MessageAction } from "@/components/ai-elements/message"
 
 #### Keyboard Shortcuts
 
-| Shortcut | Action |
-|----------|--------|
-| `Cmd+K` | Open model selector |
-| `Escape` | Close popovers/dialogs |
-| `Cmd+Enter` | Send message |
-| `@` | Open file autocomplete |
+| Shortcut    | Action                 |
+| ----------- | ---------------------- |
+| `Cmd+K`     | Open model selector    |
+| `Escape`    | Close popovers/dialogs |
+| `Cmd+Enter` | Send message           |
+| `@`         | Open file autocomplete |
 
 ---
 
@@ -452,65 +454,69 @@ The current protocol needs extensions to support file context and attachments.
 #### Client → Agent Messages
 
 **Current:**
+
 ```typescript
 interface ClientMessage {
-  type: "prompt" | "settings" | "approve" | "reject" | "abort"
-  prompt?: string
-  settings?: AgentSettings
-  toolId?: string
+  type: "prompt" | "settings" | "approve" | "reject" | "abort";
+  prompt?: string;
+  settings?: AgentSettings;
+  toolId?: string;
 }
 ```
 
 **Enhanced:**
+
 ```typescript
 interface ClientMessage {
-  type: "prompt" | "settings" | "approve" | "reject" | "abort"
-  prompt?: string
-  settings?: AgentSettings
-  toolId?: string
+  type: "prompt" | "settings" | "approve" | "reject" | "abort";
+  prompt?: string;
+  settings?: AgentSettings;
+  toolId?: string;
 
   // NEW: File context
   context?: {
     files?: Array<{
-      path: string           // Relative path from project root
-      include: boolean       // Whether to read file content
-      selection?: {          // Optional: specific lines/range
-        startLine: number
-        endLine: number
-      }
-    }>
+      path: string; // Relative path from project root
+      include: boolean; // Whether to read file content
+      selection?: {
+        // Optional: specific lines/range
+        startLine: number;
+        endLine: number;
+      };
+    }>;
     attachments?: Array<{
-      filename: string
-      mediaType: string
-      data: string           // Base64 encoded content
-    }>
-  }
+      filename: string;
+      mediaType: string;
+      data: string; // Base64 encoded content
+    }>;
+  };
 }
 ```
 
 #### Agent → Client Messages
 
 **Enhanced (additions):**
+
 ```typescript
 interface AgentMessage {
   // ... existing fields ...
 
   // NEW: Usage tracking per message
   usage?: {
-    inputTokens: number
-    outputTokens: number
-    cacheReadTokens?: number
-    cacheWriteTokens?: number
-    thinkingTokens?: number
-    cost?: number
-  }
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+    thinkingTokens?: number;
+    cost?: number;
+  };
 
   // NEW: File references in response
   fileReferences?: Array<{
-    path: string
-    startLine?: number
-    endLine?: number
-  }>
+    path: string;
+    startLine?: number;
+    endLine?: number;
+  }>;
 }
 ```
 
@@ -522,29 +528,29 @@ interface AgentMessage {
 
 ```typescript
 interface AgentConfig {
-  cwd: string
-  autoApprove: boolean
-  model?: string
-  permissionMode?: PermissionMode
-  extendedThinking?: boolean
-  conversationHistory?: ConversationMessage[]
+  cwd: string;
+  autoApprove: boolean;
+  model?: string;
+  permissionMode?: PermissionMode;
+  extendedThinking?: boolean;
+  conversationHistory?: ConversationMessage[];
 
   // NEW: File context passed with prompt
   fileContext?: Array<{
-    path: string
-    content?: string        // Pre-read content (if include: true)
+    path: string;
+    content?: string; // Pre-read content (if include: true)
     selection?: {
-      startLine: number
-      endLine: number
-    }
-  }>
+      startLine: number;
+      endLine: number;
+    };
+  }>;
 
   // NEW: Binary attachments (images, PDFs)
   attachments?: Array<{
-    filename: string
-    mediaType: string
-    data: string            // Base64
-  }>
+    filename: string;
+    mediaType: string;
+    data: string; // Base64
+  }>;
 }
 ```
 
@@ -558,22 +564,22 @@ Update `handleMessage()` to process context:
 
 ```typescript
 async function handleMessage(line: string) {
-  const msg: ClientMessage = JSON.parse(line)
+  const msg: ClientMessage = JSON.parse(line);
 
   if (msg.type === "prompt") {
     // Process file context
-    let fileContext: FileContext[] = []
+    let fileContext: FileContext[] = [];
     if (msg.context?.files) {
       fileContext = await Promise.all(
         msg.context.files.map(async (f) => {
           if (f.include) {
-            const fullPath = path.join(cwd, f.path)
-            const content = await readFile(fullPath, 'utf-8')
-            return { path: f.path, content, selection: f.selection }
+            const fullPath = path.join(cwd, f.path);
+            const content = await readFile(fullPath, "utf-8");
+            return { path: f.path, content, selection: f.selection };
           }
-          return { path: f.path }
+          return { path: f.path };
         })
-      )
+      );
     }
 
     // Pass to agent
@@ -582,9 +588,9 @@ async function handleMessage(line: string) {
       cwd,
       fileContext,
       attachments: msg.context?.attachments,
-    }
+    };
 
-    await runQuery(msg.prompt, config)
+    await runQuery(msg.prompt, config);
   }
 }
 ```
@@ -696,8 +702,8 @@ if (config.attachments?.length) {
     if (att.mediaType.startsWith("image/")) {
       await this.client.threads.addImage(thread.id, {
         data: att.data,
-        mediaType: att.mediaType
-      })
+        mediaType: att.mediaType,
+      });
     }
   }
 }
@@ -766,39 +772,41 @@ async *query(prompt: string, config: AgentConfig): AsyncIterable<AgentMessage> {
 
 ### New Files
 
-| Path | Purpose |
-|------|---------|
-| `frontend/src/contexts/FileTreeContext.tsx` | Global file path cache |
-| `frontend/src/components/ui/popover.tsx` | Radix popover component |
-| `frontend/src/hooks/useFileAutocomplete.ts` | Autocomplete hook |
-| `frontend/src/components/workspace/FileMentionPopover.tsx` | File picker UI |
-| `frontend/src/components/workspace/FilePill.tsx` | File badge component |
+| Path                                                       | Purpose                 |
+| ---------------------------------------------------------- | ----------------------- |
+| `frontend/src/contexts/FileTreeContext.tsx`                | Global file path cache  |
+| `frontend/src/components/ui/popover.tsx`                   | Radix popover component |
+| `frontend/src/hooks/useFileAutocomplete.ts`                | Autocomplete hook       |
+| `frontend/src/components/workspace/FileMentionPopover.tsx` | File picker UI          |
+| `frontend/src/components/workspace/FilePill.tsx`           | File badge component    |
 
 ### Modified Files
 
-| Path | Changes |
-|------|---------|
-| `frontend/src/components/workspace/AgentChat.tsx` | All UI enhancements |
-| `frontend/src/components/workspace/FileTree.tsx` | Integrate with FileTreeContext |
-| `frontend/src/components/workspace/FileTreeItem.tsx` | Add files to cache on expand |
-| `agent-service/src/types.ts` | Enhanced interfaces |
-| `agent-service/src/cli.ts` | Process file context |
-| `agent-service/src/agents/claude.ts` | File context + attachments |
-| `agent-service/src/agents/codex.ts` | File context + attachments |
-| `agent-service/src/agents/codebuff.ts` | File context |
-| `agent-service/src/agents/opencode.ts` | File context + attachments |
+| Path                                                 | Changes                        |
+| ---------------------------------------------------- | ------------------------------ |
+| `frontend/src/components/workspace/AgentChat.tsx`    | All UI enhancements            |
+| `frontend/src/components/workspace/FileTree.tsx`     | Integrate with FileTreeContext |
+| `frontend/src/components/workspace/FileTreeItem.tsx` | Add files to cache on expand   |
+| `agent-service/src/types.ts`                         | Enhanced interfaces            |
+| `agent-service/src/cli.ts`                           | Process file context           |
+| `agent-service/src/agents/claude.ts`                 | File context + attachments     |
+| `agent-service/src/agents/codex.ts`                  | File context + attachments     |
+| `agent-service/src/agents/codebuff.ts`               | File context                   |
+| `agent-service/src/agents/opencode.ts`               | File context + attachments     |
 
 ---
 
 ## 5. Implementation Order
 
 ### Phase 1: Frontend UI (No Backend/Agent Changes)
+
 1. Add voice input (PromptInputSpeechButton)
 2. Add file attachments (PromptInputAttachments)
 3. Replace model dropdown with ModelSelector dialog
 4. Add keyboard shortcuts (Cmd+K for model selector)
 
 ### Phase 2: @files Autocomplete (Frontend Only)
+
 1. Create FileTreeContext with file cache
 2. Modify FileTree/FileTreeItem to populate cache
 3. Create Popover component
@@ -808,16 +816,19 @@ async *query(prompt: string, config: AgentConfig): AsyncIterable<AgentMessage> {
 7. Integrate into AgentChat
 
 ### Phase 3: Agent Interface Updates
+
 1. Update types.ts with new interfaces
 2. Update cli.ts to read file content and pass to agents
 3. Update each agent provider to handle file context
 
 ### Phase 4: Image Attachments for Agents
+
 1. Update message protocol to include attachments
 2. Update Claude provider to pass images
 3. Test with other providers as supported
 
 ### Phase 5: Polish
+
 1. Add usage/cost display (Context component)
 2. Add message actions (copy, regenerate)
 3. Error handling and loading states
@@ -828,6 +839,7 @@ async *query(prompt: string, config: AgentConfig): AsyncIterable<AgentMessage> {
 ## 6. Verification Checklist
 
 ### Frontend
+
 - [ ] Type `@` shows file search dropdown
 - [ ] Dropdown shows files from cached directories
 - [ ] Expanding directories in FileTree adds files to cache
@@ -841,11 +853,13 @@ async *query(prompt: string, config: AgentConfig): AsyncIterable<AgentMessage> {
 - [ ] Selected model persists across messages
 
 ### Agent Interface
+
 - [ ] File paths sent in message context.files
 - [ ] cli.ts reads file content when include: true
 - [ ] fileContext passed to agent providers
 
 ### Agents
+
 - [ ] Claude receives file content in system prompt
 - [ ] Claude receives image attachments
 - [ ] Codex receives file content in prompt

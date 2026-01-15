@@ -1,56 +1,55 @@
-import { useState, useEffect } from "react"
-import { HARDWARE_PRESETS, type HardwareConfig } from "@/lib/api"
-import { useUserSettings } from "@/hooks/useUserSettings"
+import { useState, useEffect } from "react";
+import { HARDWARE_PRESETS, type HardwareConfig } from "@/lib/api";
+import { useUserSettings } from "@/hooks/useUserSettings";
 
 interface HardwareSelectorProps {
-  value: HardwareConfig | null
-  onChange: (config: HardwareConfig) => void
+  value: HardwareConfig | null;
+  onChange: (config: HardwareConfig) => void;
 }
 
 function formatHardwareDescription(config: HardwareConfig): string {
-  const cpuDesc = `${config.cpus} ${config.cpu_kind} CPU${config.cpus > 1 ? "s" : ""}`
-  const memDesc = config.memory_mb >= 1024 ? `${config.memory_mb / 1024}GB RAM` : `${config.memory_mb}MB RAM`
-  const storageDesc = `${config.volume_size_gb}GB storage`
-  const parts = [cpuDesc, memDesc, storageDesc]
+  const cpuDesc = `${config.cpus} ${config.cpu_kind} CPU${config.cpus > 1 ? "s" : ""}`;
+  const memDesc =
+    config.memory_mb >= 1024 ? `${config.memory_mb / 1024}GB RAM` : `${config.memory_mb}MB RAM`;
+  const storageDesc = `${config.volume_size_gb}GB storage`;
+  const parts = [cpuDesc, memDesc, storageDesc];
   if (config.gpu_kind) {
-    parts.push(config.gpu_kind.toUpperCase())
+    parts.push(config.gpu_kind.toUpperCase());
   }
-  return parts.join(", ")
+  return parts.join(", ");
 }
 
 export function HardwareSelector({ value, onChange }: HardwareSelectorProps) {
-  const { settings } = useUserSettings()
-  const [mode, setMode] = useState<"preset" | "custom">("preset")
-  const [selectedPreset, setSelectedPreset] = useState<string>("default")
+  const { settings } = useUserSettings();
+  const [mode, setMode] = useState<"preset" | "custom">("preset");
+  const [selectedPreset, setSelectedPreset] = useState<string>("default");
 
   // Initialize value from settings when they load
   useEffect(() => {
     if (settings && value === null) {
-      onChange(settings.default_hardware)
+      onChange(settings.default_hardware);
     }
-  }, [settings, value, onChange])
+  }, [settings, value, onChange]);
 
-  const defaultConfig = settings?.default_hardware
+  const defaultConfig = settings?.default_hardware;
 
   const handlePresetChange = (presetId: string) => {
-    setSelectedPreset(presetId)
+    setSelectedPreset(presetId);
     if (presetId === "default" && defaultConfig) {
-      onChange(defaultConfig)
+      onChange(defaultConfig);
     } else {
-      const preset = HARDWARE_PRESETS.find((p) => p.id === presetId)
+      const preset = HARDWARE_PRESETS.find((p) => p.id === presetId);
       if (preset) {
-        onChange(preset.config)
+        onChange(preset.config);
       }
     }
-  }
+  };
 
   // Show loading state until we have a value
   if (value === null) {
     return (
-      <div className="text-sm text-muted-foreground p-4 border rounded-md">
-        Loading defaults...
-      </div>
-    )
+      <div className="text-sm text-muted-foreground p-4 border rounded-md">Loading defaults...</div>
+    );
   }
 
   return (
@@ -115,7 +114,9 @@ export function HardwareSelector({ value, onChange }: HardwareSelectorProps) {
             <select
               className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
               value={value.cpu_kind}
-              onChange={(e) => onChange({ ...value, cpu_kind: e.target.value as "shared" | "performance" })}
+              onChange={(e) =>
+                onChange({ ...value, cpu_kind: e.target.value as "shared" | "performance" })
+              }
             >
               <option value="shared">Shared</option>
               <option value="performance">Performance</option>
@@ -193,5 +194,5 @@ export function HardwareSelector({ value, onChange }: HardwareSelectorProps) {
         </div>
       )}
     </div>
-  )
+  );
 }

@@ -1,48 +1,48 @@
-import { useState } from "react"
-import { Link, useNavigate } from "react-router-dom"
-import { useAuth } from "@/hooks/useAuth"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { GoogleIcon } from "@/components/icons/GoogleIcon"
-import { GithubIcon } from "@/components/icons/GithubIcon"
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { GoogleIcon } from "@/components/icons/GoogleIcon";
+import { GithubIcon } from "@/components/icons/GithubIcon";
 
 export function Login() {
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [oauthLoading, setOauthLoading] = useState<string | null>(null)
-  const { signIn, signInWithOAuth } = useAuth()
-  const navigate = useNavigate()
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState<string | null>(null);
+  const { signIn, signInWithOAuth } = useAuth();
+  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError(null)
-    setLoading(true)
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
 
     try {
-      await signIn(email, password)
-      navigate("/")
+      await signIn(email, password);
+      navigate("/");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to sign in")
+      setError(err instanceof Error ? err.message : "Failed to sign in");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const handleOAuthSignIn = async (provider: "google" | "github") => {
-    setError(null)
-    setOauthLoading(provider)
+    setError(null);
+    setOauthLoading(provider);
 
     try {
-      await signInWithOAuth(provider)
+      await signInWithOAuth(provider);
     } catch (err) {
-      setError(err instanceof Error ? err.message : `Failed to sign in with ${provider}`)
-      setOauthLoading(null)
+      setError(err instanceof Error ? err.message : `Failed to sign in with ${provider}`);
+      setOauthLoading(null);
     }
-  }
+  };
 
-  const isDisabled = loading || oauthLoading !== null
+  const isDisabled = loading || oauthLoading !== null;
 
   return (
     <div className="flex min-h-screen items-center justify-center">
@@ -54,9 +54,7 @@ export function Login() {
 
         <div className="space-y-4">
           {error && (
-            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-              {error}
-            </div>
+            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
           )}
 
           <div className="grid grid-cols-2 gap-3">
@@ -87,9 +85,7 @@ export function Login() {
               <span className="w-full border-t" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">
-                Or continue with
-              </span>
+              <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
             </div>
           </div>
 
@@ -124,7 +120,12 @@ export function Login() {
               />
             </div>
 
-            <Button type="submit" className="w-full" loading={loading} disabled={oauthLoading !== null}>
+            <Button
+              type="submit"
+              className="w-full"
+              loading={loading}
+              disabled={oauthLoading !== null}
+            >
               Sign in
             </Button>
           </form>
@@ -138,5 +139,5 @@ export function Login() {
         </p>
       </div>
     </div>
-  )
+  );
 }

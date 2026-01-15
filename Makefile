@@ -185,9 +185,13 @@ fmt: fmt-go fmt-ts
 
 fmt-go:
 	@echo "Formatting Go code..."
-	@command -v goimports >/dev/null 2>&1 || { echo "ERROR: goimports not installed. Run: go install golang.org/x/tools/cmd/goimports@latest"; exit 1; }
-	@gofmt -w -s apps/api apps/gateway libs/go
-	@goimports -w -local aether apps/api apps/gateway libs/go
+	@GOIMPORTS="$$(go env GOPATH)/bin/goimports"; \
+	if [ ! -x "$$GOIMPORTS" ]; then \
+		echo "ERROR: goimports not installed. Run: go install golang.org/x/tools/cmd/goimports@latest"; \
+		exit 1; \
+	fi; \
+	gofmt -w -s apps/api apps/gateway libs/go && \
+	$$GOIMPORTS -w -local aether apps/api apps/gateway libs/go
 
 fmt-ts:
 	@echo "Formatting TypeScript code..."

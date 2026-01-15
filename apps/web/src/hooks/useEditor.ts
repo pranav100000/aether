@@ -1,53 +1,53 @@
-import { useState, useCallback, useRef } from "react"
-import type { FileOperationsProvider } from "./useWorkspaceConnection"
+import { useState, useCallback, useRef } from "react";
+import type { FileOperationsProvider } from "./useWorkspaceConnection";
 
 export interface OpenFile {
-  path: string
-  content: string
-  originalContent: string
-  dirty: boolean
-  saving: boolean
-  loading: boolean
-  error: string | null
+  path: string;
+  content: string;
+  originalContent: string;
+  dirty: boolean;
+  saving: boolean;
+  loading: boolean;
+  error: string | null;
 }
 
 interface UseEditorOptions {
   /** WebSocket file operations provider - required for all file operations */
-  fileOps: FileOperationsProvider
+  fileOps: FileOperationsProvider;
 }
 
 interface UseEditorReturn {
-  openFiles: OpenFile[]
-  activeFile: string | null
-  openFile: (path: string) => Promise<void>
-  closeFile: (path: string) => boolean // returns false if user cancelled due to unsaved changes
-  setActiveFile: (path: string) => void
-  updateContent: (path: string, content: string) => void
-  saveFile: (path: string) => Promise<void>
-  saveAllFiles: () => Promise<void>
-  hasUnsavedChanges: () => boolean
-  getFile: (path: string) => OpenFile | undefined
+  openFiles: OpenFile[];
+  activeFile: string | null;
+  openFile: (path: string) => Promise<void>;
+  closeFile: (path: string) => boolean; // returns false if user cancelled due to unsaved changes
+  setActiveFile: (path: string) => void;
+  updateContent: (path: string, content: string) => void;
+  saveFile: (path: string) => Promise<void>;
+  saveAllFiles: () => Promise<void>;
+  hasUnsavedChanges: () => boolean;
+  getFile: (path: string) => OpenFile | undefined;
 }
 
 export function useEditor({ fileOps }: UseEditorOptions): UseEditorReturn {
-  const [openFiles, setOpenFiles] = useState<OpenFile[]>([])
-  const [activeFile, setActiveFile] = useState<string | null>(null)
-  const saveTimeouts = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+  const [openFiles, setOpenFiles] = useState<OpenFile[]>([]);
+  const [activeFile, setActiveFile] = useState<string | null>(null);
+  const saveTimeouts = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const getFile = useCallback(
     (path: string): OpenFile | undefined => {
-      return openFiles.find((f) => f.path === path)
+      return openFiles.find((f) => f.path === path);
     },
     [openFiles]
-  )
+  );
 
   const openFile = useCallback(
     async (path: string) => {
       // Check if already open
-      const existing = openFiles.find((f) => f.path === path)
+      const existing = openFiles.find((f) => f.path === path);
       if (existing) {
-        setActiveFile(path)
-        return
+        setActiveFile(path);
+        return;
       }
 
       // Add placeholder while loading
@@ -59,13 +59,13 @@ export function useEditor({ fileOps }: UseEditorOptions): UseEditorReturn {
         saving: false,
         loading: true,
         error: null,
-      }
+      };
 
-      setOpenFiles((prev) => [...prev, newFile])
-      setActiveFile(path)
+      setOpenFiles((prev) => [...prev, newFile]);
+      setActiveFile(path);
 
       try {
-        const fileInfo = await fileOps.readFile(path)
+        const fileInfo = await fileOps.readFile(path);
         setOpenFiles((prev) =>
           prev.map((f) =>
             f.path === path
@@ -77,7 +77,7 @@ export function useEditor({ fileOps }: UseEditorOptions): UseEditorReturn {
                 }
               : f
           )
-        )
+        );
       } catch (err) {
         setOpenFiles((prev) =>
           prev.map((f) =>
@@ -89,15 +89,15 @@ export function useEditor({ fileOps }: UseEditorOptions): UseEditorReturn {
                 }
               : f
           )
-        )
+        );
       }
     },
     [fileOps, openFiles]
-  )
+  );
 
   const closeFile = useCallback(
     (path: string): boolean => {
-      const file = openFiles.find((f) => f.path === path)
+      const file = openFiles.find((f) => f.path === path);
       if (file?.dirty) {
         // In a real implementation, you'd show a confirmation dialog
         // For now, we'll just close anyway
@@ -105,24 +105,24 @@ export function useEditor({ fileOps }: UseEditorOptions): UseEditorReturn {
       }
 
       // Clear any pending save timeout
-      const timeout = saveTimeouts.current.get(path)
+      const timeout = saveTimeouts.current.get(path);
       if (timeout) {
-        clearTimeout(timeout)
-        saveTimeouts.current.delete(path)
+        clearTimeout(timeout);
+        saveTimeouts.current.delete(path);
       }
 
-      setOpenFiles((prev) => prev.filter((f) => f.path !== path))
+      setOpenFiles((prev) => prev.filter((f) => f.path !== path));
 
       // If this was the active file, switch to another
       if (activeFile === path) {
-        const remaining = openFiles.filter((f) => f.path !== path)
-        setActiveFile(remaining.length > 0 ? remaining[remaining.length - 1].path : null)
+        const remaining = openFiles.filter((f) => f.path !== path);
+        setActiveFile(remaining.length > 0 ? remaining[remaining.length - 1].path : null);
       }
 
-      return true
+      return true;
     },
     [openFiles, activeFile]
-  )
+  );
 
   const updateContent = useCallback((path: string, content: string) => {
     setOpenFiles((prev) =>
@@ -135,20 +135,20 @@ export function useEditor({ fileOps }: UseEditorOptions): UseEditorReturn {
             }
           : f
       )
-    )
-  }, [])
+    );
+  }, []);
 
   const saveFile = useCallback(
     async (path: string) => {
-      const file = openFiles.find((f) => f.path === path)
-      if (!file || !file.dirty) return
+      const file = openFiles.find((f) => f.path === path);
+      if (!file || !file.dirty) return;
 
       setOpenFiles((prev) =>
         prev.map((f) => (f.path === path ? { ...f, saving: true, error: null } : f))
-      )
+      );
 
       try {
-        await fileOps.writeFile(path, file.content)
+        await fileOps.writeFile(path, file.content);
         setOpenFiles((prev) =>
           prev.map((f) =>
             f.path === path
@@ -160,7 +160,7 @@ export function useEditor({ fileOps }: UseEditorOptions): UseEditorReturn {
                 }
               : f
           )
-        )
+        );
       } catch (err) {
         setOpenFiles((prev) =>
           prev.map((f) =>
@@ -172,21 +172,21 @@ export function useEditor({ fileOps }: UseEditorOptions): UseEditorReturn {
                 }
               : f
           )
-        )
-        throw err
+        );
+        throw err;
       }
     },
     [fileOps, openFiles]
-  )
+  );
 
   const saveAllFiles = useCallback(async () => {
-    const dirtyFiles = openFiles.filter((f) => f.dirty)
-    await Promise.all(dirtyFiles.map((f) => saveFile(f.path)))
-  }, [openFiles, saveFile])
+    const dirtyFiles = openFiles.filter((f) => f.dirty);
+    await Promise.all(dirtyFiles.map((f) => saveFile(f.path)));
+  }, [openFiles, saveFile]);
 
   const hasUnsavedChanges = useCallback((): boolean => {
-    return openFiles.some((f) => f.dirty)
-  }, [openFiles])
+    return openFiles.some((f) => f.dirty);
+  }, [openFiles]);
 
   return {
     openFiles,
@@ -199,5 +199,5 @@ export function useEditor({ fileOps }: UseEditorOptions): UseEditorReturn {
     saveAllFiles,
     hasUnsavedChanges,
     getFile,
-  }
+  };
 }

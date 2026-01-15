@@ -5,11 +5,13 @@ Agent-agnostic cloud development environment. Spin up instant cloud VMs and conn
 ## Tech Stack
 
 ### Backend
+
 - **Go** with Chi router
 - **Fly.io** Machines API for VM orchestration
 - **Supabase** for auth and database (Postgres)
 
 ### Frontend
+
 - **Vite** + **React** + **TypeScript**
 - **Tailwind CSS** + **shadcn/ui**
 - **React Router** for navigation
@@ -85,32 +87,35 @@ pnpm dev
 ## API Endpoints
 
 ### Public
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/health` | Health check |
+
+| Method | Endpoint  | Description  |
+| ------ | --------- | ------------ |
+| GET    | `/health` | Health check |
 
 ### Protected (requires auth)
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/projects` | List user's projects |
-| POST | `/projects` | Create a new project |
-| GET | `/projects/:id` | Get project details |
-| PATCH | `/projects/:id` | Update project |
-| DELETE | `/projects/:id` | Delete project |
-| POST | `/projects/:id/start` | Start project VM |
-| POST | `/projects/:id/stop` | Stop project VM |
-| GET | `/projects/:id/terminal` | WebSocket terminal |
+
+| Method | Endpoint                 | Description          |
+| ------ | ------------------------ | -------------------- |
+| GET    | `/projects`              | List user's projects |
+| POST   | `/projects`              | Create a new project |
+| GET    | `/projects/:id`          | Get project details  |
+| PATCH  | `/projects/:id`          | Update project       |
+| DELETE | `/projects/:id`          | Delete project       |
+| POST   | `/projects/:id/start`    | Start project VM     |
+| POST   | `/projects/:id/stop`     | Stop project VM      |
+| GET    | `/projects/:id/terminal` | WebSocket terminal   |
 
 ### Legacy (no auth)
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/machines` | List all machines |
-| POST | `/machines` | Create a machine |
-| GET | `/machines/:id` | Get machine status |
-| POST | `/machines/:id/start` | Start machine |
-| POST | `/machines/:id/stop` | Stop machine |
-| DELETE | `/machines/:id` | Destroy machine |
-| GET | `/machines/:id/terminal` | WebSocket terminal |
+
+| Method | Endpoint                 | Description        |
+| ------ | ------------------------ | ------------------ |
+| GET    | `/machines`              | List all machines  |
+| POST   | `/machines`              | Create a machine   |
+| GET    | `/machines/:id`          | Get machine status |
+| POST   | `/machines/:id/start`    | Start machine      |
+| POST   | `/machines/:id/stop`     | Stop machine       |
+| DELETE | `/machines/:id`          | Destroy machine    |
+| GET    | `/machines/:id/terminal` | WebSocket terminal |
 
 ## Project Structure
 
@@ -151,6 +156,7 @@ aether/
 ## Environment Variables
 
 See [docs/ENV.md](docs/ENV.md) for complete environment variable documentation including:
+
 - Required variables for production and local development
 - Optional configuration with defaults
 - Validation rules and configuration conflicts

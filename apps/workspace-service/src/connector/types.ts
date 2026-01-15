@@ -8,28 +8,28 @@ export interface VMConnector {
   /**
    * Initialize the connector with configuration
    */
-  initialize(config: VMConnectorConfig): Promise<void>
+  initialize(config: VMConnectorConfig): Promise<void>;
 
   /**
    * Send raw message to the proxy (will be JSON stringified if object)
    */
-  send(data: unknown): void
+  send(data: unknown): void;
 
   /**
    * Register handler for incoming raw messages
    * @param handler - Called with parsed JSON for each message received
    */
-  onMessage(handler: (data: unknown) => Promise<void>): void
+  onMessage(handler: (data: unknown) => Promise<void>): void;
 
   /**
    * Register handler for connection close events
    */
-  onClose(handler: () => void): void
+  onClose(handler: () => void): void;
 
   /**
    * Close the connection
    */
-  close(): void
+  close(): void;
 }
 
 /**
@@ -39,10 +39,10 @@ export interface VMConnectorConfig {
   /**
    * Agent type (claude, codex, codebuff, opencode)
    */
-  agentType: string
+  agentType: string;
 
   /**
    * Environment variables passed from the proxy
    */
-  environment?: Record<string, string>
+  environment?: Record<string, string>;
 }

@@ -2,57 +2,45 @@ import {
   Conversation,
   ConversationContent,
   ConversationScrollButton,
-} from "@/components/ai-elements/conversation"
-import {
-  Message,
-  MessageContent,
-  MessageResponse,
-} from "@/components/ai-elements/message"
-import { Loader } from "@/components/ai-elements/loader"
-import {
-  Tool,
-  ToolHeader,
-  ToolContent,
-} from "@/components/ai-elements/tool"
-import {
-  Reasoning,
-  ReasoningContent,
-  ReasoningTrigger,
-} from "@/components/ai-elements/reasoning"
-import { ToolRenderer, getToolIcon, getToolColor } from "@/components/tools"
-import { cn } from "@/lib/utils"
+} from "@/components/ai-elements/conversation";
+import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
+import { Loader } from "@/components/ai-elements/loader";
+import { Tool, ToolHeader, ToolContent } from "@/components/ai-elements/tool";
+import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/components/ai-elements/reasoning";
+import { ToolRenderer, getToolIcon, getToolColor } from "@/components/tools";
+import { cn } from "@/lib/utils";
 import type {
   ChatMessage,
   ChatStatus,
   TextMessage,
   ToolMessage,
   ThinkingMessage,
-} from "@/hooks/useAgentMessages"
-import type { AgentType, ToolResponsePayload } from "@/types/agent"
-import type { LucideIcon } from "lucide-react"
+} from "@/hooks/useAgentMessages";
+import type { AgentType, ToolResponsePayload } from "@/types/agent";
+import type { LucideIcon } from "lucide-react";
 
 export interface AgentMessageListProps {
-  messages: ChatMessage[]
-  status: ChatStatus
-  agent: AgentType
-  agentIcon: LucideIcon
-  agentName: string
-  agentColor: string
+  messages: ChatMessage[];
+  status: ChatStatus;
+  agent: AgentType;
+  agentIcon: LucideIcon;
+  agentName: string;
+  agentColor: string;
   /** Callback for human-in-the-loop tool responses */
-  onToolResponse?: (response: ToolResponsePayload) => void
+  onToolResponse?: (response: ToolResponsePayload) => void;
 }
 
 // Type guards for rendering
 function isTextMessage(msg: ChatMessage): msg is TextMessage {
-  return msg.role === "assistant" && (msg as TextMessage).variant === "text"
+  return msg.role === "assistant" && (msg as TextMessage).variant === "text";
 }
 
 function isToolMessage(msg: ChatMessage): msg is ToolMessage {
-  return msg.role === "assistant" && (msg as ToolMessage).variant === "tool"
+  return msg.role === "assistant" && (msg as ToolMessage).variant === "tool";
 }
 
 function isThinkingMessage(msg: ChatMessage): msg is ThinkingMessage {
-  return msg.role === "assistant" && (msg as ThinkingMessage).variant === "thinking"
+  return msg.role === "assistant" && (msg as ThinkingMessage).variant === "thinking";
 }
 
 export function AgentMessageList({
@@ -64,7 +52,7 @@ export function AgentMessageList({
   agentColor,
   onToolResponse,
 }: AgentMessageListProps) {
-  const showEmptyState = messages.length === 0
+  const showEmptyState = messages.length === 0;
 
   return (
     <Conversation className="flex-1">
@@ -86,9 +74,7 @@ export function AgentMessageList({
             <Message key={msg.id} from={msg.role === "user" ? "user" : "assistant"}>
               <MessageContent>
                 {/* User message */}
-                {msg.role === "user" && (
-                  <MessageResponse>{msg.content}</MessageResponse>
-                )}
+                {msg.role === "user" && <MessageResponse>{msg.content}</MessageResponse>}
 
                 {/* Thinking message */}
                 {isThinkingMessage(msg) && (
@@ -145,5 +131,5 @@ export function AgentMessageList({
       </ConversationContent>
       <ConversationScrollButton />
     </Conversation>
-  )
+  );
 }

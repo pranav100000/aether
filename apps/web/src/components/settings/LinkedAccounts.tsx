@@ -1,8 +1,8 @@
-import { useState } from "react"
-import type { Provider, UserIdentity } from "@supabase/supabase-js"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Spinner } from "@/components/ui/spinner"
+import { useState } from "react";
+import type { Provider, UserIdentity } from "@supabase/supabase-js";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Dialog,
   DialogContent,
@@ -10,18 +10,18 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
-import { useAuth } from "@/hooks/useAuth"
-import { GoogleIcon } from "@/components/icons/GoogleIcon"
-import { GithubIcon } from "@/components/icons/GithubIcon"
-import { EmailIcon } from "@/components/icons/EmailIcon"
+} from "@/components/ui/dialog";
+import { useAuth } from "@/hooks/useAuth";
+import { GoogleIcon } from "@/components/icons/GoogleIcon";
+import { GithubIcon } from "@/components/icons/GithubIcon";
+import { EmailIcon } from "@/components/icons/EmailIcon";
 
 interface LinkedAccountInfo {
-  provider: string
-  name: string
-  description: string
-  icon: React.ComponentType<{ className?: string }>
-  isOAuth: boolean
+  provider: string;
+  name: string;
+  description: string;
+  icon: React.ComponentType<{ className?: string }>;
+  isOAuth: boolean;
 }
 
 const LINKED_ACCOUNTS: LinkedAccountInfo[] = [
@@ -46,15 +46,15 @@ const LINKED_ACCOUNTS: LinkedAccountInfo[] = [
     icon: GithubIcon,
     isOAuth: true,
   },
-]
+];
 
 interface AccountCardProps {
-  account: LinkedAccountInfo
-  identity: UserIdentity | undefined
-  isConnected: boolean
-  canDisconnect: boolean
-  onConnect: () => Promise<void>
-  onDisconnect: (identity: UserIdentity) => Promise<void>
+  account: LinkedAccountInfo;
+  identity: UserIdentity | undefined;
+  isConnected: boolean;
+  canDisconnect: boolean;
+  onConnect: () => Promise<void>;
+  onDisconnect: (identity: UserIdentity) => Promise<void>;
 }
 
 function AccountCard({
@@ -65,36 +65,36 @@ function AccountCard({
   onConnect,
   onDisconnect,
 }: AccountCardProps) {
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [showDisconnectDialog, setShowDisconnectDialog] = useState(false)
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showDisconnectDialog, setShowDisconnectDialog] = useState(false);
 
-  const Icon = account.icon
+  const Icon = account.icon;
 
   const handleConnect = async () => {
-    setLoading(true)
-    setError(null)
+    setLoading(true);
+    setError(null);
     try {
-      await onConnect()
+      await onConnect();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to connect")
-      setLoading(false)
+      setError(err instanceof Error ? err.message : "Failed to connect");
+      setLoading(false);
     }
-  }
+  };
 
   const handleDisconnect = async () => {
-    if (!identity) return
-    setLoading(true)
-    setError(null)
+    if (!identity) return;
+    setLoading(true);
+    setError(null);
     try {
-      await onDisconnect(identity)
-      setShowDisconnectDialog(false)
+      await onDisconnect(identity);
+      setShowDisconnectDialog(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to disconnect")
+      setError(err instanceof Error ? err.message : "Failed to disconnect");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <>
@@ -113,9 +113,7 @@ function AccountCard({
                 )}
                 <h3 className="font-medium">{account.name}</h3>
               </div>
-              <p className="text-sm text-muted-foreground mt-1">
-                {account.description}
-              </p>
+              <p className="text-sm text-muted-foreground mt-1">{account.description}</p>
             </div>
           </div>
 
@@ -127,21 +125,12 @@ function AccountCard({
                   size="sm"
                   onClick={() => setShowDisconnectDialog(true)}
                   disabled={loading || !canDisconnect}
-                  title={
-                    !canDisconnect
-                      ? "Cannot disconnect last sign-in method"
-                      : undefined
-                  }
+                  title={!canDisconnect ? "Cannot disconnect last sign-in method" : undefined}
                 >
                   {loading ? <Spinner size="sm" /> : "Disconnect"}
                 </Button>
               ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleConnect}
-                  disabled={loading}
-                >
+                <Button variant="outline" size="sm" onClick={handleConnect} disabled={loading}>
                   {loading ? <Spinner size="sm" /> : "Connect"}
                 </Button>
               )}
@@ -156,9 +145,7 @@ function AccountCard({
         )}
 
         {!account.isOAuth && isConnected && (
-          <p className="text-sm text-muted-foreground">
-            Always connected — primary sign-in method
-          </p>
+          <p className="text-sm text-muted-foreground">Always connected — primary sign-in method</p>
         )}
 
         {error && <p className="text-sm text-red-500">{error}</p>}
@@ -169,8 +156,8 @@ function AccountCard({
           <DialogHeader>
             <DialogTitle>Disconnect {account.name}?</DialogTitle>
             <DialogDescription>
-              You will no longer be able to sign in using your {account.name}{" "}
-              account. You can reconnect it at any time.
+              You will no longer be able to sign in using your {account.name} account. You can
+              reconnect it at any time.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -188,45 +175,45 @@ function AccountCard({
         </DialogContent>
       </Dialog>
     </>
-  )
+  );
 }
 
 interface EmailAccountCardProps {
-  isConnected: boolean
-  email: string | undefined
-  onSetPassword: (password: string) => Promise<void>
+  isConnected: boolean;
+  email: string | undefined;
+  onSetPassword: (password: string) => Promise<void>;
 }
 
 function EmailAccountCard({ isConnected, email, onSetPassword }: EmailAccountCardProps) {
-  const [password, setPassword] = useState("")
-  const [confirmPassword, setConfirmPassword] = useState("")
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
 
   const handleSetPassword = async () => {
     if (password.length < 6) {
-      setError("Password must be at least 6 characters")
-      return
+      setError("Password must be at least 6 characters");
+      return;
     }
     if (password !== confirmPassword) {
-      setError("Passwords do not match")
-      return
+      setError("Passwords do not match");
+      return;
     }
 
-    setLoading(true)
-    setError(null)
+    setLoading(true);
+    setError(null);
     try {
-      await onSetPassword(password)
-      setSuccess(true)
-      setPassword("")
-      setConfirmPassword("")
+      await onSetPassword(password);
+      setSuccess(true);
+      setPassword("");
+      setConfirmPassword("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to set password")
+      setError(err instanceof Error ? err.message : "Failed to set password");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="border rounded-lg p-4 space-y-3">
@@ -252,9 +239,7 @@ function EmailAccountCard({ isConnected, email, onSetPassword }: EmailAccountCar
       </div>
 
       {isConnected ? (
-        <p className="text-sm text-muted-foreground">
-          Connected as {email}
-        </p>
+        <p className="text-sm text-muted-foreground">Connected as {email}</p>
       ) : (
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
@@ -291,51 +276,44 @@ function EmailAccountCard({ isConnected, email, onSetPassword }: EmailAccountCar
       )}
       {error && <p className="text-sm text-red-500">{error}</p>}
     </div>
-  )
+  );
 }
 
 export function LinkedAccounts() {
-  const {
-    user,
-    loading,
-    linkIdentity,
-    unlinkIdentity,
-    setPassword,
-    getIdentityByProvider,
-  } = useAuth()
+  const { user, loading, linkIdentity, unlinkIdentity, setPassword, getIdentityByProvider } =
+    useAuth();
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
         <Spinner />
       </div>
-    )
+    );
   }
 
-  const identities = user?.identities ?? []
-  const totalLinkedCount = identities.length
-  const hasEmailIdentity = !!getIdentityByProvider("email")
-  const oauthProviders = LINKED_ACCOUNTS.filter((a) => a.isOAuth)
+  const identities = user?.identities ?? [];
+  const totalLinkedCount = identities.length;
+  const hasEmailIdentity = !!getIdentityByProvider("email");
+  const oauthProviders = LINKED_ACCOUNTS.filter((a) => a.isOAuth);
 
   const handleConnect = async (provider: Provider) => {
-    await linkIdentity(provider)
-  }
+    await linkIdentity(provider);
+  };
 
   const handleDisconnect = async (identity: UserIdentity) => {
-    await unlinkIdentity(identity)
-  }
+    await unlinkIdentity(identity);
+  };
 
   const handleSetPassword = async (password: string) => {
-    await setPassword(password)
-  }
+    await setPassword(password);
+  };
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold">Linked Accounts</h2>
         <p className="text-sm text-muted-foreground">
-          Manage how you sign in to your account. You can link multiple
-          providers.
+          Manage how you sign in to your account. You can link multiple providers.
         </p>
       </div>
 
@@ -347,9 +325,9 @@ export function LinkedAccounts() {
         />
 
         {oauthProviders.map((account) => {
-          const identity = getIdentityByProvider(account.provider)
-          const isConnected = !!identity
-          const canDisconnect = totalLinkedCount > 1
+          const identity = getIdentityByProvider(account.provider);
+          const isConnected = !!identity;
+          const canDisconnect = totalLinkedCount > 1;
 
           return (
             <AccountCard
@@ -361,9 +339,9 @@ export function LinkedAccounts() {
               onConnect={() => handleConnect(account.provider as Provider)}
               onDisconnect={handleDisconnect}
             />
-          )
+          );
         })}
       </div>
     </div>
-  )
+  );
 }

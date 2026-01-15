@@ -1,57 +1,62 @@
-import { useState } from "react"
-import { ExternalLink, Square } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { useState } from "react";
+import { ExternalLink, Square } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface PreviewButtonProps {
-  projectId: string
-  activePorts: number[]
-  previewToken?: string
+  projectId: string;
+  activePorts: number[];
+  previewToken?: string;
   /** WebSocket-based killPort function */
-  onKillPort: (port: number) => Promise<void>
+  onKillPort: (port: number) => Promise<void>;
 }
 
 // Preview domain from env (e.g., "149.248.213.170.nip.io" for dev or "preview.aether.dev" for prod)
-const PREVIEW_DOMAIN = import.meta.env.VITE_PREVIEW_DOMAIN || "localhost:8081"
+const PREVIEW_DOMAIN = import.meta.env.VITE_PREVIEW_DOMAIN || "localhost:8081";
 
 function getPreviewUrl(projectId: string, port: number, token?: string): string {
   // For localhost, use direct port access (no subdomain proxy)
   if (PREVIEW_DOMAIN.startsWith("localhost")) {
-    return `http://localhost:${port}`
+    return `http://localhost:${port}`;
   }
 
-  const prefix = projectId.substring(0, 8)
+  const prefix = projectId.substring(0, 8);
   // Format: {port}-{prefix}[-{token}].{domain}
-  const subdomain = token ? `${port}-${prefix}-${token}` : `${port}-${prefix}`
+  const subdomain = token ? `${port}-${prefix}-${token}` : `${port}-${prefix}`;
   // TODO: Use https once we have a custom domain with wildcard SSL cert
-  return `http://${subdomain}.${PREVIEW_DOMAIN}`
+  return `http://${subdomain}.${PREVIEW_DOMAIN}`;
 }
 
-export function PreviewButton({ projectId, activePorts, previewToken, onKillPort }: PreviewButtonProps) {
-  const [killingPorts, setKillingPorts] = useState<Set<number>>(new Set())
+export function PreviewButton({
+  projectId,
+  activePorts,
+  previewToken,
+  onKillPort,
+}: PreviewButtonProps) {
+  const [killingPorts, setKillingPorts] = useState<Set<number>>(new Set());
 
   const openPreview = (port: number) => {
-    const url = getPreviewUrl(projectId, port, previewToken)
-    window.open(url, "_blank")
-  }
+    const url = getPreviewUrl(projectId, port, previewToken);
+    window.open(url, "_blank");
+  };
 
   const handleKillPort = async (port: number) => {
-    setKillingPorts((prev) => new Set(prev).add(port))
+    setKillingPorts((prev) => new Set(prev).add(port));
     try {
-      await onKillPort(port)
+      await onKillPort(port);
       // Port will be removed from activePorts via WebSocket port_change event
     } catch (error) {
-      console.error("Failed to kill port:", error)
+      console.error("Failed to kill port:", error);
     } finally {
       setKillingPorts((prev) => {
-        const next = new Set(prev)
-        next.delete(port)
-        return next
-      })
+        const next = new Set(prev);
+        next.delete(port);
+        return next;
+      });
     }
-  }
+  };
 
   if (activePorts.length === 0) {
-    return null
+    return null;
   }
 
   return (
@@ -86,5 +91,5 @@ export function PreviewButton({ projectId, activePorts, previewToken, onKillPort
         </div>
       ))}
     </div>
-  )
+  );
 }

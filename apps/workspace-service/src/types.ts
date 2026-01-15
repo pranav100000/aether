@@ -34,4 +34,4 @@ export {
 
   // Usage stats
   type UsageStats,
-} from "@aether/types"
+} from "@aether/types";

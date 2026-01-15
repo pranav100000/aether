@@ -1,43 +1,49 @@
-import { RefreshCwIcon, SettingsIcon, BrainIcon, ShieldCheckIcon, FileEditIcon } from "lucide-react"
+import {
+  RefreshCwIcon,
+  SettingsIcon,
+  BrainIcon,
+  ShieldCheckIcon,
+  FileEditIcon,
+} from "lucide-react";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { cn } from "@/lib/utils"
-import type { AgentType, PermissionMode, AgentSettings } from "@/types/agent"
-import type { LucideIcon } from "lucide-react"
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
+import type { AgentType, PermissionMode, AgentSettings } from "@/types/agent";
+import type { LucideIcon } from "lucide-react";
 
 export interface ModelOption {
-  value: string
-  label: string
+  value: string;
+  label: string;
 }
 
 export interface AgentConfigItem {
-  name: string
-  icon: LucideIcon
-  color: string
-  models: ModelOption[]
-  defaultModel: string
+  name: string;
+  icon: LucideIcon;
+  color: string;
+  models: ModelOption[];
+  defaultModel: string;
 }
 
 export interface AgentHeaderProps {
-  agent: AgentType
-  agentConfig: Record<AgentType, AgentConfigItem>
-  settings: AgentSettings & { extendedThinking: boolean }
-  isConnected: boolean
-  onAgentChange: (agent: AgentType) => void
-  onSettingsChange: (settings: AgentSettings & { extendedThinking: boolean }) => void
-  onReconnect: () => void
+  agent: AgentType;
+  agentConfig: Record<AgentType, AgentConfigItem>;
+  settings: AgentSettings & { extendedThinking: boolean };
+  isConnected: boolean;
+  onAgentChange: (agent: AgentType) => void;
+  onSettingsChange: (settings: AgentSettings & { extendedThinking: boolean }) => void;
+  onReconnect: () => void;
 }
 
 export function AgentHeader({
@@ -49,8 +55,8 @@ export function AgentHeader({
   onSettingsChange,
   onReconnect,
 }: AgentHeaderProps) {
-  const currentAgentConfig = agentConfig[agent]
-  const AgentIcon = currentAgentConfig.icon
+  const currentAgentConfig = agentConfig[agent];
+  const AgentIcon = currentAgentConfig.icon;
 
   return (
     <div className="flex shrink-0 items-center justify-between px-4 py-2">
@@ -66,8 +72,8 @@ export function AgentHeader({
           </SelectTrigger>
           <SelectContent>
             {(Object.keys(agentConfig) as AgentType[]).map((agentKey) => {
-              const config = agentConfig[agentKey]
-              const Icon = config.icon
+              const config = agentConfig[agentKey];
+              const Icon = config.icon;
               return (
                 <SelectItem key={agentKey} value={agentKey}>
                   <div className="flex items-center gap-2">
@@ -75,15 +81,12 @@ export function AgentHeader({
                     <span>{config.name}</span>
                   </div>
                 </SelectItem>
-              )
+              );
             })}
           </SelectContent>
         </Select>
 
-        <span className={cn(
-          "size-2 rounded-full",
-          isConnected ? "bg-green-500" : "bg-red-500"
-        )} />
+        <span className={cn("size-2 rounded-full", isConnected ? "bg-green-500" : "bg-red-500")} />
 
         <Select
           value={settings.model ?? currentAgentConfig.defaultModel}
@@ -91,7 +94,8 @@ export function AgentHeader({
         >
           <SelectTrigger className="h-8 w-[140px] border-zinc-700 bg-zinc-900 text-xs">
             <SelectValue>
-              {currentAgentConfig.models.find(m => m.value === settings.model)?.label ?? settings.model}
+              {currentAgentConfig.models.find((m) => m.value === settings.model)?.label ??
+                settings.model}
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
@@ -147,7 +151,9 @@ export function AgentHeader({
             <div className="px-2 pb-2">
               <Select
                 value={settings.permissionMode ?? "default"}
-                onValueChange={(v) => onSettingsChange({ ...settings, permissionMode: v as PermissionMode })}
+                onValueChange={(v) =>
+                  onSettingsChange({ ...settings, permissionMode: v as PermissionMode })
+                }
               >
                 <SelectTrigger className="h-8 text-xs">
                   <SelectValue />
@@ -180,7 +186,9 @@ export function AgentHeader({
             <div className="flex items-center justify-between px-2 py-2">
               <span className="text-xs text-zinc-400">Extended thinking</span>
               <button
-                onClick={() => onSettingsChange({ ...settings, extendedThinking: !settings.extendedThinking })}
+                onClick={() =>
+                  onSettingsChange({ ...settings, extendedThinking: !settings.extendedThinking })
+                }
                 className={cn(
                   "relative h-5 w-9 rounded-full transition-colors",
                   settings.extendedThinking ? "bg-blue-600" : "bg-zinc-700"
@@ -198,5 +206,5 @@ export function AgentHeader({
         </DropdownMenu>
       </div>
     </div>
-  )
+  );
 }

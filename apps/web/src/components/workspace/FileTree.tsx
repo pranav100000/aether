@@ -1,69 +1,67 @@
-import { useState, useCallback, useMemo } from "react"
-import { RefreshCw, FilePlus, FolderPlus } from "lucide-react"
-import { FileTreeItem } from "./FileTreeItem"
-import { Spinner } from "@/components/ui/spinner"
-import { useFileTreeContext } from "@/contexts/FileTreeContext"
-import { buildTreeFromPaths } from "@/lib/file-tree-utils"
+import { useState, useCallback, useMemo } from "react";
+import { RefreshCw, FilePlus, FolderPlus } from "lucide-react";
+import { FileTreeItem } from "./FileTreeItem";
+import { Spinner } from "@/components/ui/spinner";
+import { useFileTreeContext } from "@/contexts/FileTreeContext";
+import { buildTreeFromPaths } from "@/lib/file-tree-utils";
 
 interface FileTreeProps {
-  projectId: string
-  onFileSelect: (path: string) => void
-  selectedPath?: string
+  projectId: string;
+  onFileSelect: (path: string) => void;
+  selectedPath?: string;
 }
 
 export function FileTree({ projectId, onFileSelect, selectedPath }: FileTreeProps) {
-  const [creating, setCreating] = useState<"file" | "folder" | null>(null)
-  const [createName, setCreateName] = useState("")
+  const [creating, setCreating] = useState<"file" | "folder" | null>(null);
+  const [createName, setCreateName] = useState("");
 
-  const { allFiles, directories, isLoading, error, refresh, createFile, createDirectory } = useFileTreeContext()
+  const { allFiles, directories, isLoading, error, refresh, createFile, createDirectory } =
+    useFileTreeContext();
 
   // Build tree structure from flat paths
   const treeNodes = useMemo(() => {
-    return buildTreeFromPaths(allFiles, directories)
-  }, [allFiles, directories])
+    return buildTreeFromPaths(allFiles, directories);
+  }, [allFiles, directories]);
 
   const handleCreate = useCallback(async () => {
     if (!createName || !creating) {
-      setCreating(null)
-      return
+      setCreating(null);
+      return;
     }
 
     try {
-      const createPath = "/" + createName
+      const createPath = "/" + createName;
       if (creating === "folder") {
-        await createDirectory(createPath)
+        await createDirectory(createPath);
       } else {
-        await createFile(createPath)
+        await createFile(createPath);
       }
     } catch (err) {
-      console.error("Failed to create:", err)
-      alert("Failed to create: " + (err instanceof Error ? err.message : "Unknown error"))
+      console.error("Failed to create:", err);
+      alert("Failed to create: " + (err instanceof Error ? err.message : "Unknown error"));
     } finally {
-      setCreating(null)
-      setCreateName("")
+      setCreating(null);
+      setCreateName("");
     }
-  }, [createName, creating, createFile, createDirectory])
+  }, [createName, creating, createFile, createDirectory]);
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-32">
         <Spinner size="md" />
       </div>
-    )
+    );
   }
 
   if (error) {
     return (
       <div className="p-4 text-center">
         <p className="text-destructive text-sm mb-2">{error}</p>
-        <button
-          onClick={refresh}
-          className="text-sm text-muted-foreground hover:text-foreground"
-        >
+        <button onClick={refresh} className="text-sm text-muted-foreground hover:text-foreground">
           Try again
         </button>
       </div>
-    )
+    );
   }
 
   return (
@@ -88,11 +86,7 @@ export function FileTree({ projectId, onFileSelect, selectedPath }: FileTreeProp
           >
             <FolderPlus className="w-4 h-4 text-muted-foreground" />
           </button>
-          <button
-            className="p-1 rounded hover:bg-muted"
-            onClick={refresh}
-            title="Refresh"
-          >
+          <button className="p-1 rounded hover:bg-muted" onClick={refresh} title="Refresh">
             <RefreshCw className="w-4 h-4 text-muted-foreground" />
           </button>
         </div>
@@ -108,10 +102,10 @@ export function FileTree({ projectId, onFileSelect, selectedPath }: FileTreeProp
             onChange={(e) => setCreateName(e.target.value)}
             onBlur={handleCreate}
             onKeyDown={(e) => {
-              if (e.key === "Enter") handleCreate()
+              if (e.key === "Enter") handleCreate();
               if (e.key === "Escape") {
-                setCreating(null)
-                setCreateName("")
+                setCreating(null);
+                setCreateName("");
               }
             }}
             placeholder={creating === "folder" ? "folder name" : "file name"}
@@ -124,9 +118,7 @@ export function FileTree({ projectId, onFileSelect, selectedPath }: FileTreeProp
       {/* Tree content */}
       <div className="flex-1 overflow-y-auto">
         {treeNodes.length === 0 ? (
-          <div className="p-4 text-center text-muted-foreground text-sm">
-            No files yet
-          </div>
+          <div className="p-4 text-center text-muted-foreground text-sm">No files yet</div>
         ) : (
           treeNodes.map((node) => (
             <FileTreeItem
@@ -141,5 +133,5 @@ export function FileTree({ projectId, onFileSelect, selectedPath }: FileTreeProp
         )}
       </div>
     </div>
-  )
+  );
 }

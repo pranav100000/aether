@@ -1,30 +1,30 @@
-import { X, Circle } from "lucide-react"
-import type { OpenFile } from "@/hooks/useEditor"
-import { cn } from "@/lib/utils"
-import { FileIcon } from "@/components/icons/FileIcon"
-import { basename } from "@/lib/path-utils"
+import { X, Circle } from "lucide-react";
+import type { OpenFile } from "@/hooks/useEditor";
+import { cn } from "@/lib/utils";
+import { FileIcon } from "@/components/icons/FileIcon";
+import { basename } from "@/lib/path-utils";
 
 interface EditorTabsProps {
-  files: OpenFile[]
-  activeFile: string | null
-  onSelect: (path: string) => void
-  onClose: (path: string) => void
+  files: OpenFile[];
+  activeFile: string | null;
+  onSelect: (path: string) => void;
+  onClose: (path: string) => void;
 }
 
 function getFileName(path: string): string {
-  return basename(path)
+  return basename(path);
 }
 
 export function EditorTabs({ files, activeFile, onSelect, onClose }: EditorTabsProps) {
   if (files.length === 0) {
-    return null
+    return null;
   }
 
   return (
     <div className="flex items-center bg-[#1a1a1a] border-b border-border overflow-x-auto">
       {files.map((file) => {
-        const isActive = file.path === activeFile
-        const fileName = getFileName(file.path)
+        const isActive = file.path === activeFile;
+        const fileName = getFileName(file.path);
 
         return (
           <div
@@ -54,16 +54,16 @@ export function EditorTabs({ files, activeFile, onSelect, onClose }: EditorTabsP
                 isActive && "opacity-100"
               )}
               onClick={(e) => {
-                e.stopPropagation()
-                onClose(file.path)
+                e.stopPropagation();
+                onClose(file.path);
               }}
               title="Close"
             >
               <X className="w-3 h-3" />
             </button>
           </div>
-        )
+        );
       })}
     </div>
-  )
+  );
 }

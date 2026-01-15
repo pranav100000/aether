@@ -1,65 +1,65 @@
-import { useState } from "react"
-import { Link, useNavigate } from "react-router-dom"
-import { useAuth } from "@/hooks/useAuth"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { GoogleIcon } from "@/components/icons/GoogleIcon"
-import { GithubIcon } from "@/components/icons/GithubIcon"
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { GoogleIcon } from "@/components/icons/GoogleIcon";
+import { GithubIcon } from "@/components/icons/GithubIcon";
 
 export function Signup() {
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [confirmPassword, setConfirmPassword] = useState("")
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [oauthLoading, setOauthLoading] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
-  const { signUp, signInWithOAuth } = useAuth()
-  const navigate = useNavigate()
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+  const { signUp, signInWithOAuth } = useAuth();
+  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError(null)
+    e.preventDefault();
+    setError(null);
 
     if (password !== confirmPassword) {
-      setError("Passwords do not match")
-      return
+      setError("Passwords do not match");
+      return;
     }
 
     if (password.length < 6) {
-      setError("Password must be at least 6 characters")
-      return
+      setError("Password must be at least 6 characters");
+      return;
     }
 
-    setLoading(true)
+    setLoading(true);
 
     try {
-      const { user } = await signUp(email, password)
+      const { user } = await signUp(email, password);
       if (user?.identities?.length === 0) {
-        setError("An account with this email already exists")
+        setError("An account with this email already exists");
       } else {
-        setSuccess(true)
+        setSuccess(true);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to sign up")
+      setError(err instanceof Error ? err.message : "Failed to sign up");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const handleOAuthSignIn = async (provider: "google" | "github") => {
-    setError(null)
-    setOauthLoading(provider)
+    setError(null);
+    setOauthLoading(provider);
 
     try {
-      await signInWithOAuth(provider)
+      await signInWithOAuth(provider);
     } catch (err) {
-      setError(err instanceof Error ? err.message : `Failed to sign in with ${provider}`)
-      setOauthLoading(null)
+      setError(err instanceof Error ? err.message : `Failed to sign in with ${provider}`);
+      setOauthLoading(null);
     }
-  }
+  };
 
-  const isDisabled = loading || oauthLoading !== null
+  const isDisabled = loading || oauthLoading !== null;
 
   if (success) {
     return (
@@ -76,7 +76,7 @@ export function Signup() {
           </Button>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -89,9 +89,7 @@ export function Signup() {
 
         <div className="space-y-4">
           {error && (
-            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-              {error}
-            </div>
+            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
           )}
 
           <div className="grid grid-cols-2 gap-3">
@@ -174,7 +172,12 @@ export function Signup() {
               />
             </div>
 
-            <Button type="submit" className="w-full" loading={loading} disabled={oauthLoading !== null}>
+            <Button
+              type="submit"
+              className="w-full"
+              loading={loading}
+              disabled={oauthLoading !== null}
+            >
               Sign up
             </Button>
           </form>
@@ -188,5 +191,5 @@ export function Signup() {
         </p>
       </div>
     </div>
-  )
+  );
 }

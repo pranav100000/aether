@@ -1,13 +1,13 @@
-import { X, Plus, Terminal } from "lucide-react"
-import type { TerminalSession } from "@/hooks/useTerminalSessions"
-import { cn } from "@/lib/utils"
+import { X, Plus, Terminal } from "lucide-react";
+import type { TerminalSession } from "@/hooks/useTerminalSessions";
+import { cn } from "@/lib/utils";
 
 interface TerminalTabsProps {
-  sessions: TerminalSession[]
-  activeSessionId: string | null
-  onSelect: (id: string) => void
-  onClose: (id: string) => void
-  onCreate: () => void
+  sessions: TerminalSession[];
+  activeSessionId: string | null;
+  onSelect: (id: string) => void;
+  onClose: (id: string) => void;
+  onCreate: () => void;
 }
 
 export function TerminalTabs({
@@ -17,12 +17,12 @@ export function TerminalTabs({
   onClose,
   onCreate,
 }: TerminalTabsProps) {
-  const canClose = sessions.length > 1
+  const canClose = sessions.length > 1;
 
   return (
     <div className="flex items-center bg-[#1a1a1a] border-b border-border overflow-x-auto">
       {sessions.map((session) => {
-        const isActive = session.id === activeSessionId
+        const isActive = session.id === activeSessionId;
 
         return (
           <div
@@ -47,8 +47,8 @@ export function TerminalTabs({
                   isActive && "opacity-100"
                 )}
                 onClick={(e) => {
-                  e.stopPropagation()
-                  onClose(session.id)
+                  e.stopPropagation();
+                  onClose(session.id);
                 }}
                 title="Close terminal"
               >
@@ -56,7 +56,7 @@ export function TerminalTabs({
               </button>
             )}
           </div>
-        )
+        );
       })}
       <button
         className="flex items-center justify-center px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-[#222]"
@@ -66,5 +66,5 @@ export function TerminalTabs({
         <Plus className="w-4 h-4" />
       </button>
     </div>
-  )
+  );
 }

@@ -1,23 +1,23 @@
-import { useReducer, useCallback, useRef } from "react"
-import type { ServerMessage, HistoryMessage, ToolData, ToolStatus } from "@/types/agent"
-import type { ToolUIPart } from "ai"
+import { useReducer, useCallback, useRef } from "react";
+import type { ServerMessage, HistoryMessage, ToolData, ToolStatus } from "@/types/agent";
+import type { ToolUIPart } from "ai";
 
 // Map backend ToolStatus to frontend ToolUIPart state
 function mapToolStatus(status: ToolStatus): ToolUIPart["state"] {
   switch (status) {
     case "pending":
-      return "input-streaming"
+      return "input-streaming";
     case "running":
-      return "input-available"
+      return "input-available";
     case "complete":
-      return "output-available"
+      return "output-available";
     case "error":
-      return "output-error"
+      return "output-error";
     case "awaiting_input":
       // Use "approval-requested" for human-in-the-loop tools awaiting user input
-      return "approval-requested"
+      return "approval-requested";
     default:
-      return "input-available"
+      return "input-available";
   }
 }
 
@@ -26,60 +26,60 @@ function mapToolStatus(status: ToolStatus): ToolUIPart["state"] {
 // =============================================================================
 
 interface BaseMessage {
-  id: string
-  timestamp: Date
+  id: string;
+  timestamp: Date;
 }
 
 export interface UserMessage extends BaseMessage {
-  role: "user"
-  content: string
+  role: "user";
+  content: string;
 }
 
 export interface TextMessage extends BaseMessage {
-  role: "assistant"
-  variant: "text"
-  content: string
+  role: "assistant";
+  variant: "text";
+  content: string;
 }
 
 export interface ToolMessage extends BaseMessage {
-  role: "assistant"
-  variant: "tool"
+  role: "assistant";
+  variant: "tool";
   tool: {
-    id: string
-    name: string
-    input: Record<string, unknown>
-    status: ToolUIPart["state"]
-    result?: string
-    error?: string
-  }
+    id: string;
+    name: string;
+    input: Record<string, unknown>;
+    status: ToolUIPart["state"];
+    result?: string;
+    error?: string;
+  };
 }
 
 export interface ThinkingMessage extends BaseMessage {
-  role: "assistant"
-  variant: "thinking"
-  content: string
-  isStreaming: boolean
-  duration?: number
+  role: "assistant";
+  variant: "thinking";
+  content: string;
+  isStreaming: boolean;
+  duration?: number;
 }
 
-export type ChatMessage = UserMessage | TextMessage | ToolMessage | ThinkingMessage
+export type ChatMessage = UserMessage | TextMessage | ToolMessage | ThinkingMessage;
 
-export type ChatStatus = "ready" | "submitted" | "streaming" | "error"
+export type ChatStatus = "ready" | "submitted" | "streaming" | "error";
 
 // =============================================================================
 // Type Guards
 // =============================================================================
 
 function isTextMessage(msg: ChatMessage): msg is TextMessage {
-  return msg.role === "assistant" && (msg as TextMessage).variant === "text"
+  return msg.role === "assistant" && (msg as TextMessage).variant === "text";
 }
 
 function isToolMessage(msg: ChatMessage): msg is ToolMessage {
-  return msg.role === "assistant" && (msg as ToolMessage).variant === "tool"
+  return msg.role === "assistant" && (msg as ToolMessage).variant === "tool";
 }
 
 function isThinkingMessage(msg: ChatMessage): msg is ThinkingMessage {
-  return msg.role === "assistant" && (msg as ThinkingMessage).variant === "thinking"
+  return msg.role === "assistant" && (msg as ThinkingMessage).variant === "thinking";
 }
 
 // =============================================================================
@@ -94,7 +94,7 @@ type MessageAction =
   | { type: "APPEND_THINKING"; content: string }
   | { type: "FINISH_THINKING"; duration: number }
   | { type: "RESTORE_HISTORY"; messages: ChatMessage[] }
-  | { type: "CLEAR" }
+  | { type: "CLEAR" };
 
 // =============================================================================
 // Reducer - Clean, predictable state transitions
@@ -111,17 +111,14 @@ function messagesReducer(state: ChatMessage[], action: MessageAction): ChatMessa
           content: action.content,
           timestamp: new Date(),
         },
-      ]
+      ];
 
     case "APPEND_TEXT": {
-      const last = state.at(-1)
+      const last = state.at(-1);
 
       // Append to existing text message
       if (last && isTextMessage(last)) {
-        return [
-          ...state.slice(0, -1),
-          { ...last, content: last.content + action.content },
-        ]
+        return [...state.slice(0, -1), { ...last, content: last.content + action.content }];
       }
 
       // Create new text message
@@ -134,7 +131,7 @@ function messagesReducer(state: ChatMessage[], action: MessageAction): ChatMessa
           content: action.content,
           timestamp: new Date(),
         },
-      ]
+      ];
     }
 
     case "ADD_TOOL":
@@ -152,7 +149,7 @@ function messagesReducer(state: ChatMessage[], action: MessageAction): ChatMessa
             status: mapToolStatus(action.tool.status),
           },
         },
-      ]
+      ];
 
     case "UPDATE_TOOL_RESULT":
       return state.map((msg) => {
@@ -165,20 +162,17 @@ function messagesReducer(state: ChatMessage[], action: MessageAction): ChatMessa
               result: action.result,
               error: action.error,
             },
-          }
+          };
         }
-        return msg
-      })
+        return msg;
+      });
 
     case "APPEND_THINKING": {
-      const last = state.at(-1)
+      const last = state.at(-1);
 
       // Append to existing streaming thinking
       if (last && isThinkingMessage(last) && last.isStreaming) {
-        return [
-          ...state.slice(0, -1),
-          { ...last, content: last.content + action.content },
-        ]
+        return [...state.slice(0, -1), { ...last, content: last.content + action.content }];
       }
 
       // Create new thinking message
@@ -192,28 +186,25 @@ function messagesReducer(state: ChatMessage[], action: MessageAction): ChatMessa
           timestamp: new Date(),
           isStreaming: true,
         },
-      ]
+      ];
     }
 
     case "FINISH_THINKING": {
-      const last = state.at(-1)
+      const last = state.at(-1);
       if (last && isThinkingMessage(last)) {
-        return [
-          ...state.slice(0, -1),
-          { ...last, isStreaming: false, duration: action.duration },
-        ]
+        return [...state.slice(0, -1), { ...last, isStreaming: false, duration: action.duration }];
       }
-      return state
+      return state;
     }
 
     case "RESTORE_HISTORY":
-      return action.messages
+      return action.messages;
 
     case "CLEAR":
-      return []
+      return [];
 
     default:
-      return state
+      return state;
   }
 }
 
@@ -241,7 +232,7 @@ function historyToChatMessage(histMsg: HistoryMessage): ChatMessage {
         result: histMsg.tool.result,
         error: histMsg.tool.error,
       },
-    }
+    };
   }
 
   // User message
@@ -251,7 +242,7 @@ function historyToChatMessage(histMsg: HistoryMessage): ChatMessage {
       role: "user",
       content: histMsg.content,
       timestamp: new Date(histMsg.timestamp),
-    }
+    };
   }
 
   // Assistant text message
@@ -261,7 +252,7 @@ function historyToChatMessage(histMsg: HistoryMessage): ChatMessage {
     variant: "text",
     content: histMsg.content,
     timestamp: new Date(histMsg.timestamp),
-  }
+  };
 }
 
 // =============================================================================
@@ -269,87 +260,87 @@ function historyToChatMessage(histMsg: HistoryMessage): ChatMessage {
 // =============================================================================
 
 export interface UseAgentMessagesReturn {
-  messages: ChatMessage[]
-  status: ChatStatus
-  dispatch: React.Dispatch<MessageAction>
-  setStatus: (status: ChatStatus) => void
-  generateId: () => string
-  handleServerMessage: (message: ServerMessage) => void
-  addUserMessage: (content: string) => string
-  clear: () => void
+  messages: ChatMessage[];
+  status: ChatStatus;
+  dispatch: React.Dispatch<MessageAction>;
+  setStatus: (status: ChatStatus) => void;
+  generateId: () => string;
+  handleServerMessage: (message: ServerMessage) => void;
+  addUserMessage: (content: string) => string;
+  clear: () => void;
 }
 
 export function useAgentMessages(): UseAgentMessagesReturn {
-  const [messages, dispatch] = useReducer(messagesReducer, [])
+  const [messages, dispatch] = useReducer(messagesReducer, []);
   const [status, setStatusState] = useReducer(
     (_: ChatStatus, newStatus: ChatStatus) => newStatus,
     "ready"
-  )
+  );
 
-  const messageIdRef = useRef(0)
-  const thinkingStartRef = useRef<number | null>(null)
+  const messageIdRef = useRef(0);
+  const thinkingStartRef = useRef<number | null>(null);
 
   const generateId = useCallback(() => {
-    messageIdRef.current += 1
-    return `msg-${messageIdRef.current}`
-  }, [])
+    messageIdRef.current += 1;
+    return `msg-${messageIdRef.current}`;
+  }, []);
 
   const setStatus = useCallback((newStatus: ChatStatus) => {
-    setStatusState(newStatus)
-  }, [])
+    setStatusState(newStatus);
+  }, []);
 
   const addUserMessage = useCallback(
     (content: string) => {
-      const id = generateId()
-      dispatch({ type: "ADD_USER_MESSAGE", id, content })
-      setStatus("submitted")
-      return id
+      const id = generateId();
+      dispatch({ type: "ADD_USER_MESSAGE", id, content });
+      setStatus("submitted");
+      return id;
     },
     [generateId, setStatus]
-  )
+  );
 
   const handleServerMessage = useCallback(
     (message: ServerMessage) => {
       switch (message.type) {
         case "init":
-          break
+          break;
 
         case "history":
           if (message.history) {
-            const restoredMessages = message.history.map(historyToChatMessage)
-            dispatch({ type: "RESTORE_HISTORY", messages: restoredMessages })
+            const restoredMessages = message.history.map(historyToChatMessage);
+            dispatch({ type: "RESTORE_HISTORY", messages: restoredMessages });
 
             const maxId = restoredMessages.reduce((max, m) => {
-              const num = parseInt(m.id.replace("msg-", ""), 10)
-              return isNaN(num) ? max : Math.max(max, num)
-            }, 0)
-            messageIdRef.current = maxId
+              const num = parseInt(m.id.replace("msg-", ""), 10);
+              return isNaN(num) ? max : Math.max(max, num);
+            }, 0);
+            messageIdRef.current = maxId;
           }
-          break
+          break;
 
         case "thinking":
           if (message.content) {
             if (thinkingStartRef.current === null) {
-              thinkingStartRef.current = Date.now()
+              thinkingStartRef.current = Date.now();
             }
-            dispatch({ type: "APPEND_THINKING", content: message.content })
+            dispatch({ type: "APPEND_THINKING", content: message.content });
           }
-          break
+          break;
 
         case "text":
           if (message.content) {
-            setStatus("streaming")
+            setStatus("streaming");
 
             // Finalize thinking if active
             if (thinkingStartRef.current !== null) {
-              const duration = Math.ceil((Date.now() - thinkingStartRef.current) / 1000)
-              dispatch({ type: "FINISH_THINKING", duration })
-              thinkingStartRef.current = null
+              const duration = Math.ceil((Date.now() - thinkingStartRef.current) / 1000);
+              dispatch({ type: "FINISH_THINKING", duration });
+              thinkingStartRef.current = null;
             }
 
-            dispatch({ type: "APPEND_TEXT", content: message.content })
+            dispatch({ type: "APPEND_TEXT", content: message.content });
           }
-          break
+          break;
 
         case "tool_use":
           if (message.tool) {
@@ -362,9 +353,9 @@ export function useAgentMessages(): UseAgentMessagesReturn {
                 input: message.tool.input,
                 status: message.tool.status,
               },
-            })
+            });
           }
-          break
+          break;
 
         case "tool_result":
           if (message.toolId) {
@@ -373,29 +364,29 @@ export function useAgentMessages(): UseAgentMessagesReturn {
               toolId: message.toolId,
               result: message.result,
               error: message.error,
-            })
+            });
           }
-          break
+          break;
 
         case "error":
-          setStatus("error")
-          break
+          setStatus("error");
+          break;
 
         case "done":
-          setStatus("ready")
-          thinkingStartRef.current = null
-          break
+          setStatus("ready");
+          thinkingStartRef.current = null;
+          break;
       }
     },
     [generateId, setStatus]
-  )
+  );
 
   const clear = useCallback(() => {
-    dispatch({ type: "CLEAR" })
-    messageIdRef.current = 0
-    thinkingStartRef.current = null
-    setStatus("ready")
-  }, [setStatus])
+    dispatch({ type: "CLEAR" });
+    messageIdRef.current = 0;
+    thinkingStartRef.current = null;
+    setStatus("ready");
+  }, [setStatus]);
 
   return {
     messages,
@@ -406,5 +397,5 @@ export function useAgentMessages(): UseAgentMessagesReturn {
     handleServerMessage,
     addUserMessage,
     clear,
-  }
+  };
 }

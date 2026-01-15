@@ -1,22 +1,18 @@
-import { useEffect, useRef, useCallback } from "react"
-import { useTerminalSessions } from "@/hooks/useTerminalSessions"
-import { TerminalTabs } from "./TerminalTabs"
-import { TerminalInstance, type TerminalInstanceHandle } from "./TerminalInstance"
-import { useFileTreeContext } from "@/contexts/FileTreeContext"
+import { useEffect, useRef, useCallback } from "react";
+import { useTerminalSessions } from "@/hooks/useTerminalSessions";
+import { TerminalTabs } from "./TerminalTabs";
+import { TerminalInstance, type TerminalInstanceHandle } from "./TerminalInstance";
+import { useFileTreeContext } from "@/contexts/FileTreeContext";
 
 interface MultiTerminalProps {
-  projectId: string
-  onDisconnect?: () => void
-  onPortChange?: (action: "open" | "close", port: number) => void
+  projectId: string;
+  onDisconnect?: () => void;
+  onPortChange?: (action: "open" | "close", port: number) => void;
 }
 
-export function MultiTerminal({
-  projectId,
-  onDisconnect,
-  onPortChange,
-}: MultiTerminalProps) {
+export function MultiTerminal({ projectId, onDisconnect, onPortChange }: MultiTerminalProps) {
   // Get handleFileChange from context for websocket file_change events
-  const { handleFileChange } = useFileTreeContext()
+  const { handleFileChange } = useFileTreeContext();
   const {
     sessions,
     activeSessionId,
@@ -25,62 +21,62 @@ export function MultiTerminal({
     setActiveSession,
     nextSession,
     previousSession,
-  } = useTerminalSessions()
+  } = useTerminalSessions();
 
-  const containerRef = useRef<HTMLDivElement>(null)
-  const terminalRefs = useRef<Map<string, TerminalInstanceHandle>>(new Map())
+  const containerRef = useRef<HTMLDivElement>(null);
+  const terminalRefs = useRef<Map<string, TerminalInstanceHandle>>(new Map());
 
   // Keyboard shortcuts
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0
-      const modifier = isMac ? e.metaKey : e.ctrlKey
+      const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
+      const modifier = isMac ? e.metaKey : e.ctrlKey;
 
       if (modifier && e.shiftKey && e.key.toLowerCase() === "t") {
-        e.preventDefault()
-        createSession()
+        e.preventDefault();
+        createSession();
       } else if (modifier && e.shiftKey && e.key.toLowerCase() === "w") {
-        e.preventDefault()
+        e.preventDefault();
         if (activeSessionId && sessions.length > 1) {
-          closeSession(activeSessionId)
+          closeSession(activeSessionId);
         }
       } else if (modifier && !e.shiftKey && e.key === "Tab") {
-        e.preventDefault()
-        nextSession()
+        e.preventDefault();
+        nextSession();
       } else if (modifier && e.shiftKey && e.key === "Tab") {
-        e.preventDefault()
-        previousSession()
+        e.preventDefault();
+        previousSession();
       }
     },
     [activeSessionId, sessions.length, createSession, closeSession, nextSession, previousSession]
-  )
+  );
 
   useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
+    const container = containerRef.current;
+    if (!container) return;
 
-    container.addEventListener("keydown", handleKeyDown)
-    return () => container.removeEventListener("keydown", handleKeyDown)
-  }, [handleKeyDown])
+    container.addEventListener("keydown", handleKeyDown);
+    return () => container.removeEventListener("keydown", handleKeyDown);
+  }, [handleKeyDown]);
 
   // Focus active terminal when session changes
   useEffect(() => {
     if (activeSessionId) {
-      const terminalHandle = terminalRefs.current.get(activeSessionId)
-      terminalHandle?.focus()
+      const terminalHandle = terminalRefs.current.get(activeSessionId);
+      terminalHandle?.focus();
     }
-  }, [activeSessionId])
+  }, [activeSessionId]);
 
   const setTerminalRef = useCallback(
     (id: string) => (handle: TerminalInstanceHandle | null) => {
       if (handle) {
-        terminalRefs.current.set(id, handle)
+        terminalRefs.current.set(id, handle);
       } else {
-        terminalRefs.current.delete(id)
+        terminalRefs.current.delete(id);
       }
     },
     []
-  )
+  );
 
   return (
     <div ref={containerRef} className="h-full flex flex-col bg-[#0a0a0a]" tabIndex={-1}>
@@ -111,5 +107,5 @@ export function MultiTerminal({
         ))}
       </div>
     </div>
-  )
+  );
 }

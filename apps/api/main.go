@@ -12,14 +12,14 @@ import (
 	"aether/apps/api/fly"
 	"aether/apps/api/handlers"
 	authmw "aether/apps/api/middleware"
-	"aether/libs/go/logging"
 	"aether/apps/api/workspace"
+	"aether/libs/go/logging"
 
+	sentryhttp "github.com/getsentry/sentry-go/http"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/joho/godotenv"
-	sentryhttp "github.com/getsentry/sentry-go/http"
 )
 
 func main() {
@@ -52,7 +52,7 @@ func main() {
 	if err := config.ValidateStartupConfig(logger); err != nil {
 		logger.Error("startup validation failed", "error", err)
 		sentryCleanup()
-		os.Exit(1)
+		os.Exit(1) //nolint:gocritic // sentryCleanup called explicitly above
 	}
 
 	port := getEnv("API_PORT", "8080")

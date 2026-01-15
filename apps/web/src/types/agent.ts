@@ -28,7 +28,7 @@ export {
   // Storage types
   type StoredMessage,
   type ChatHistory,
-} from "@aether/types"
+} from "@aether/types";
 
 // Backwards compatibility alias
-export type { StoredMessage as HistoryMessage } from "@aether/types"
+export type { StoredMessage as HistoryMessage } from "@aether/types";

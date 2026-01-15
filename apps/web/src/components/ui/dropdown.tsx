@@ -1,39 +1,39 @@
-import * as React from "react"
-import { cn } from "@/lib/utils"
+import * as React from "react";
+import { cn } from "@/lib/utils";
 
 interface DropdownProps {
-  children: React.ReactNode
+  children: React.ReactNode;
 }
 
 interface DropdownContextValue {
-  open: boolean
-  setOpen: (open: boolean) => void
+  open: boolean;
+  setOpen: (open: boolean) => void;
 }
 
-const DropdownContext = React.createContext<DropdownContextValue | null>(null)
+const DropdownContext = React.createContext<DropdownContextValue | null>(null);
 
 function useDropdown() {
-  const context = React.useContext(DropdownContext)
+  const context = React.useContext(DropdownContext);
   if (!context) {
-    throw new Error("Dropdown components must be used within a Dropdown")
+    throw new Error("Dropdown components must be used within a Dropdown");
   }
-  return context
+  return context;
 }
 
 export function Dropdown({ children }: DropdownProps) {
-  const [open, setOpen] = React.useState(false)
-  const ref = React.useRef<HTMLDivElement>(null)
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (ref.current && !ref.current.contains(event.target as Node)) {
-        setOpen(false)
+        setOpen(false);
       }
     }
 
-    document.addEventListener("mousedown", handleClickOutside)
-    return () => document.removeEventListener("mousedown", handleClickOutside)
-  }, [])
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   return (
     <DropdownContext.Provider value={{ open, setOpen }}>
@@ -41,16 +41,16 @@ export function Dropdown({ children }: DropdownProps) {
         {children}
       </div>
     </DropdownContext.Provider>
-  )
+  );
 }
 
 interface DropdownTriggerProps {
-  children: React.ReactNode
-  className?: string
+  children: React.ReactNode;
+  className?: string;
 }
 
 export function DropdownTrigger({ children, className }: DropdownTriggerProps) {
-  const { open, setOpen } = useDropdown()
+  const { open, setOpen } = useDropdown();
 
   return (
     <button
@@ -77,19 +77,19 @@ export function DropdownTrigger({ children, className }: DropdownTriggerProps) {
         <path d="m6 9 6 6 6-6" />
       </svg>
     </button>
-  )
+  );
 }
 
 interface DropdownContentProps {
-  children: React.ReactNode
-  className?: string
-  align?: "left" | "right"
+  children: React.ReactNode;
+  className?: string;
+  align?: "left" | "right";
 }
 
 export function DropdownContent({ children, className, align = "right" }: DropdownContentProps) {
-  const { open } = useDropdown()
+  const { open } = useDropdown();
 
-  if (!open) return null
+  if (!open) return null;
 
   return (
     <div
@@ -101,23 +101,23 @@ export function DropdownContent({ children, className, align = "right" }: Dropdo
     >
       {children}
     </div>
-  )
+  );
 }
 
 interface DropdownItemProps {
-  children: React.ReactNode
-  onClick?: () => void
-  className?: string
-  destructive?: boolean
+  children: React.ReactNode;
+  onClick?: () => void;
+  className?: string;
+  destructive?: boolean;
 }
 
 export function DropdownItem({ children, onClick, className, destructive }: DropdownItemProps) {
-  const { setOpen } = useDropdown()
+  const { setOpen } = useDropdown();
 
   const handleClick = () => {
-    onClick?.()
-    setOpen(false)
-  }
+    onClick?.();
+    setOpen(false);
+  };
 
   return (
     <button
@@ -133,9 +133,9 @@ export function DropdownItem({ children, onClick, className, destructive }: Drop
     >
       {children}
     </button>
-  )
+  );
 }
 
 export function DropdownSeparator() {
-  return <div className="my-1 h-px bg-border" />
+  return <div className="my-1 h-px bg-border" />;
 }

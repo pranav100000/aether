@@ -23,13 +23,13 @@ Enable Aether users to seamlessly connect their GitHub accounts and work with re
 
 We will use a **GitHub App** (not OAuth App) for repository access because:
 
-| Aspect | OAuth App | GitHub App |
-|--------|-----------|------------|
-| Permissions | All-or-nothing per scope | Granular per-repo |
-| Installation | User grants access | User installs on specific repos |
-| Rate limits | 5,000/hr per user | 5,000/hr per installation |
-| Token refresh | Manual | Automatic |
-| Org support | Limited | Full support |
+| Aspect        | OAuth App                | GitHub App                      |
+| ------------- | ------------------------ | ------------------------------- |
+| Permissions   | All-or-nothing per scope | Granular per-repo               |
+| Installation  | User grants access       | User installs on specific repos |
+| Rate limits   | 5,000/hr per user        | 5,000/hr per installation       |
+| Token refresh | Manual                   | Automatic                       |
+| Org support   | Limited                  | Full support                    |
 
 **Note:** We already have an OAuth App for authentication (sign-in). The GitHub App is separate and specifically for repo operations.
 
@@ -37,17 +37,18 @@ We will use a **GitHub App** (not OAuth App) for repository access because:
 
 ## Phases Overview
 
-| Phase | Scope | Description |
-|-------|-------|-------------|
-| **Phase 1: MVP** | Import + Core Git + Branches | Complete workflow for daily use |
-| **Phase 2: Pull Requests** | Create & view PRs | GitHub collaboration features |
-| **Phase 3: Repo Management** | Create & fork repos | Advanced repo operations |
+| Phase                        | Scope                        | Description                     |
+| ---------------------------- | ---------------------------- | ------------------------------- |
+| **Phase 1: MVP**             | Import + Core Git + Branches | Complete workflow for daily use |
+| **Phase 2: Pull Requests**   | Create & view PRs            | GitHub collaboration features   |
+| **Phase 3: Repo Management** | Create & fork repos          | Advanced repo operations        |
 
 ---
 
 ## Phase 1: MVP (Import + Core Git + Branches)
 
 ### Goal
+
 Users can connect GitHub, import repositories, and perform a complete git workflow including commits, push/pull, and branch management.
 
 ### Features
@@ -55,6 +56,7 @@ Users can connect GitHub, import repositories, and perform a complete git workfl
 #### 1.1 GitHub App Installation Flow
 
 **User Flow:**
+
 1. User navigates to Settings → GitHub
 2. Clicks "Connect GitHub"
 3. Redirected to GitHub App installation page
@@ -63,11 +65,13 @@ Users can connect GitHub, import repositories, and perform a complete git workfl
 6. Aether stores installation, shows connected status
 
 **Backend Requirements:**
+
 - GitHub App registered with required permissions
 - Callback endpoint to handle installation
 - Store installation ID and metadata in database
 
 **UI Components:**
+
 - Settings page GitHub section
 - Installation status display
 - "Manage on GitHub" link to modify access
@@ -75,6 +79,7 @@ Users can connect GitHub, import repositories, and perform a complete git workfl
 #### 1.2 Import Repository
 
 **User Flow:**
+
 1. Create new project → "Import from GitHub" option
 2. Or existing project → "Import repo" in Git panel
 3. Select installation (if multiple accounts/orgs)
@@ -84,12 +89,14 @@ Users can connect GitHub, import repositories, and perform a complete git workfl
 7. Progress indicator → Success → Ready to use
 
 **Backend Requirements:**
+
 - List repos accessible via installation
 - Generate installation access token
 - Clone repo into project VM filesystem
 - Configure git remote with credentials
 
 **UI Components:**
+
 - Import modal with repo picker
 - Search/filter functionality
 - Branch selector
@@ -98,6 +105,7 @@ Users can connect GitHub, import repositories, and perform a complete git workfl
 #### 1.3 Git Status & Diff
 
 **Features:**
+
 - Show current branch name
 - List changed files with status icons:
   - M = Modified
@@ -108,6 +116,7 @@ Users can connect GitHub, import repositories, and perform a complete git workfl
 - Refresh status on file changes
 
 **UI Components:**
+
 - Git panel in workspace sidebar
 - File tree with status icons
 - Diff viewer modal/panel
@@ -115,6 +124,7 @@ Users can connect GitHub, import repositories, and perform a complete git workfl
 #### 1.4 Stage & Commit
 
 **Features:**
+
 - Stage individual files
 - Stage all changes
 - Unstage files
@@ -123,6 +133,7 @@ Users can connect GitHub, import repositories, and perform a complete git workfl
 - View recent commit history
 
 **UI Components:**
+
 - Checkbox or click-to-stage files
 - "Stage All" / "Unstage All" buttons
 - Commit message textarea
@@ -131,6 +142,7 @@ Users can connect GitHub, import repositories, and perform a complete git workfl
 #### 1.5 Push & Pull
 
 **Features:**
+
 - Push commits to remote
 - Pull latest from remote
 - Show ahead/behind count
@@ -138,6 +150,7 @@ Users can connect GitHub, import repositories, and perform a complete git workfl
 - Handle merge conflicts (show affected files)
 
 **UI Components:**
+
 - Push button with commit count
 - Pull button with incoming count
 - Conflict resolution UI (list files, link to editor)
@@ -145,6 +158,7 @@ Users can connect GitHub, import repositories, and perform a complete git workfl
 #### 1.6 Branch Management
 
 **Features:**
+
 - View current branch
 - List all local and remote branches
 - Switch branches (with uncommitted changes warning)
@@ -153,6 +167,7 @@ Users can connect GitHub, import repositories, and perform a complete git workfl
 - Delete remote branch (with confirmation)
 
 **UI Components:**
+
 - Branch selector dropdown
 - Create branch dialog
 - Delete branch confirmation
@@ -227,14 +242,17 @@ POST   /api/projects/:id/git/checkout         - Switch branch
 #### GitHub App Setup
 
 **Required Permissions:**
+
 - Repository contents: Read & Write
 - Metadata: Read
 
 **Callback URL:**
+
 - `https://api.aether.dev/github/callback` (production)
 - `http://localhost:8080/github/callback` (development)
 
 **Environment Variables:**
+
 ```
 GITHUB_APP_ID=123456
 GITHUB_APP_PRIVATE_KEY=-----BEGIN RSA PRIVATE KEY-----...
@@ -379,6 +397,7 @@ func (h *GitHandler) Push(ctx context.Context, projectID, userID string) error {
 ## Phase 2: Pull Requests
 
 ### Goal
+
 Users can create pull requests and view PR status directly from Aether.
 
 ### Features
@@ -386,6 +405,7 @@ Users can create pull requests and view PR status directly from Aether.
 #### 2.1 Create Pull Request
 
 **User Flow:**
+
 1. User has commits on a feature branch
 2. Opens "Create PR" from Git panel
 3. Selects base branch (e.g., main)
@@ -395,6 +415,7 @@ Users can create pull requests and view PR status directly from Aether.
 7. PR created on GitHub, link shown
 
 **UI Components:**
+
 - Create PR dialog
 - Branch selector (source → target)
 - Title/description inputs
@@ -404,6 +425,7 @@ Users can create pull requests and view PR status directly from Aether.
 #### 2.2 View Pull Requests
 
 **Features:**
+
 - List open PRs for the repo
 - Show PR status:
   - Checks (CI passing/failing)
@@ -412,6 +434,7 @@ Users can create pull requests and view PR status directly from Aether.
 - Click to open PR on GitHub
 
 **UI Components:**
+
 - PR list in Git panel
 - Status badges/icons
 - Quick actions (view on GitHub)
@@ -429,6 +452,7 @@ GET  /api/projects/:id/github/pulls/:number   - Get PR details
 ## Phase 3: Repo Management
 
 ### Goal
+
 Users can create new repositories and fork existing ones.
 
 ### Features
@@ -436,6 +460,7 @@ Users can create new repositories and fork existing ones.
 #### 3.1 Create Repository
 
 **User Flow:**
+
 1. Project with no linked repo
 2. User clicks "Create GitHub Repo"
 3. Enters repo name, description
@@ -445,6 +470,7 @@ Users can create new repositories and fork existing ones.
 7. Repo created, project files pushed
 
 **UI Components:**
+
 - Create repo dialog
 - Name/description inputs
 - Visibility toggle
@@ -453,6 +479,7 @@ Users can create new repositories and fork existing ones.
 #### 3.2 Fork Repository
 
 **User Flow:**
+
 1. User wants to contribute to a repo they don't own
 2. Clicks "Fork" on import screen
 3. Repo forked to their account
@@ -460,17 +487,20 @@ Users can create new repositories and fork existing ones.
 5. Upstream remote configured
 
 **UI Components:**
+
 - Fork option in import flow
 - Fork confirmation dialog
 
 #### 3.3 Repository Settings
 
 **Features:**
+
 - View linked repo info (stars, forks, etc.)
 - Change default branch
 - Unlink repo from project
 
 **UI Components:**
+
 - Repo info card in settings
 - Unlink confirmation
 
@@ -511,12 +541,12 @@ PATCH  /api/projects/:id/github/repo          - Update repo settings
 
 ## Success Metrics
 
-| Metric | Description |
-|--------|-------------|
-| GitHub connection rate | % of users who connect GitHub |
-| Import success rate | % of imports that complete successfully |
-| Git operations/user/week | Engagement with git features |
-| Time to first push | How quickly users push after import |
+| Metric                   | Description                             |
+| ------------------------ | --------------------------------------- |
+| GitHub connection rate   | % of users who connect GitHub           |
+| Import success rate      | % of imports that complete successfully |
+| Git operations/user/week | Engagement with git features            |
+| Time to first push       | How quickly users push after import     |
 
 ---
 

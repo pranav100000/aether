@@ -1,22 +1,25 @@
-import { useState, useCallback, useEffect, useMemo } from "react"
-import { useParams, useNavigate, Link } from "react-router-dom"
-import { ChevronLeft, PanelLeft, PanelBottom, PanelRight } from "lucide-react"
-import { useProject } from "@/hooks/useProject"
-import { useEditor } from "@/hooks/useEditor"
-import { useWorkspaceConnection, type FileOperationsProvider } from "@/hooks/useWorkspaceConnection"
-import { Button } from "@/components/ui/button"
-import { Spinner } from "@/components/ui/spinner"
-import { StatusBadge } from "@/components/projects/StatusBadge"
-import { MultiTerminal } from "@/components/workspace/MultiTerminal"
-import { FileTree } from "@/components/workspace/FileTree"
-import { Editor } from "@/components/workspace/Editor"
-import { EditorTabs } from "@/components/workspace/EditorTabs"
-import { WorkspaceLayout, WorkspaceEmptyState } from "@/components/workspace/WorkspaceLayout"
-import { PreviewButton } from "@/components/workspace/PreviewButton"
-import { AgentChat } from "@/components/workspace/AgentChat"
-import { FileTreeProvider } from "@/contexts/FileTreeContext"
-import { basename } from "@/lib/path-utils"
-import type { Project } from "@/lib/api"
+import { useState, useCallback, useEffect, useMemo } from "react";
+import { useParams, useNavigate, Link } from "react-router-dom";
+import { ChevronLeft, PanelLeft, PanelBottom, PanelRight } from "lucide-react";
+import { useProject } from "@/hooks/useProject";
+import { useEditor } from "@/hooks/useEditor";
+import {
+  useWorkspaceConnection,
+  type FileOperationsProvider,
+} from "@/hooks/useWorkspaceConnection";
+import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+import { StatusBadge } from "@/components/projects/StatusBadge";
+import { MultiTerminal } from "@/components/workspace/MultiTerminal";
+import { FileTree } from "@/components/workspace/FileTree";
+import { Editor } from "@/components/workspace/Editor";
+import { EditorTabs } from "@/components/workspace/EditorTabs";
+import { WorkspaceLayout, WorkspaceEmptyState } from "@/components/workspace/WorkspaceLayout";
+import { PreviewButton } from "@/components/workspace/PreviewButton";
+import { AgentChat } from "@/components/workspace/AgentChat";
+import { FileTreeProvider } from "@/contexts/FileTreeContext";
+import { basename } from "@/lib/path-utils";
+import type { Project } from "@/lib/api";
 
 /**
  * Inner component that renders the workspace content (file tree + editor).
@@ -31,13 +34,13 @@ function WorkspaceContent({
   terminalOpen,
   rightSidebarOpen,
 }: {
-  project: Project
-  fileOps: FileOperationsProvider
-  onDisconnect: () => void
-  onPortChange: (action: "open" | "close", port: number) => void
-  leftSidebarOpen: boolean
-  terminalOpen: boolean
-  rightSidebarOpen: boolean
+  project: Project;
+  fileOps: FileOperationsProvider;
+  onDisconnect: () => void;
+  onPortChange: (action: "open" | "close", port: number) => void;
+  leftSidebarOpen: boolean;
+  terminalOpen: boolean;
+  rightSidebarOpen: boolean;
 }) {
   // Editor hook with WebSocket file operations
   const {
@@ -49,44 +52,44 @@ function WorkspaceContent({
     updateContent,
     saveFile,
     getFile,
-  } = useEditor({ fileOps })
+  } = useEditor({ fileOps });
 
   const handleFileSelect = useCallback(
     (path: string) => {
-      openFile(path)
+      openFile(path);
     },
     [openFile]
-  )
+  );
 
   const handleContentChange = useCallback(
     (content: string) => {
       if (activeFile) {
-        updateContent(activeFile, content)
+        updateContent(activeFile, content);
       }
     },
     [activeFile, updateContent]
-  )
+  );
 
   const handleSave = useCallback(() => {
     if (activeFile) {
-      saveFile(activeFile)
+      saveFile(activeFile);
     }
-  }, [activeFile, saveFile])
+  }, [activeFile, saveFile]);
 
   const handleCloseFile = useCallback(
     (path: string) => {
-      const file = getFile(path)
+      const file = getFile(path);
       if (file?.dirty) {
         if (!confirm(`"${basename(path)}" has unsaved changes. Close anyway?`)) {
-          return
+          return;
         }
       }
-      closeFile(path)
+      closeFile(path);
     },
     [closeFile, getFile]
-  )
+  );
 
-  const activeFileData = activeFile ? getFile(activeFile) : undefined
+  const activeFileData = activeFile ? getFile(activeFile) : undefined;
 
   return (
     <WorkspaceLayout
@@ -118,13 +121,19 @@ function WorkspaceContent({
           )}
         </>
       }
-      terminal={<MultiTerminal projectId={project.id} onDisconnect={onDisconnect} onPortChange={onPortChange} />}
+      terminal={
+        <MultiTerminal
+          projectId={project.id}
+          onDisconnect={onDisconnect}
+          onPortChange={onPortChange}
+        />
+      }
       rightPanel={<AgentChat projectId={project.id} defaultAgent="codebuff" />}
       leftSidebarOpen={leftSidebarOpen}
       terminalOpen={terminalOpen}
       rightPanelOpen={rightSidebarOpen}
     />
-  )
+  );
 }
 
 /**
@@ -139,41 +148,41 @@ function ConnectedWorkspace({
   onPortChange,
   onKillPortReady,
 }: {
-  project: Project
-  onDisconnect: () => void
-  leftSidebarOpen: boolean
-  terminalOpen: boolean
-  rightSidebarOpen: boolean
-  onPortChange: (action: "open" | "close", port: number) => void
-  onKillPortReady: (killPort: (port: number) => Promise<void>) => void
+  project: Project;
+  onDisconnect: () => void;
+  leftSidebarOpen: boolean;
+  terminalOpen: boolean;
+  rightSidebarOpen: boolean;
+  onPortChange: (action: "open" | "close", port: number) => void;
+  onKillPortReady: (killPort: (port: number) => Promise<void>) => void;
 }) {
   const [fileTreeChangeHandler, setFileTreeChangeHandler] = useState<
     ((action: string, path: string, isDirectory: boolean) => void) | null
-  >(null)
+  >(null);
 
   // Connect to workspace via WebSocket
   const workspace = useWorkspaceConnection({
     projectId: project.id,
     onFileChange: fileTreeChangeHandler || undefined,
     onPortChange,
-  })
+  });
 
   // Auto-connect when mounted
   useEffect(() => {
-    workspace.connect()
-    return () => workspace.disconnect()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    workspace.connect();
+    return () => workspace.disconnect();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Notify parent when killPort is ready
   useEffect(() => {
     if (workspace.status === "connected") {
-      onKillPortReady(workspace.killPort)
+      onKillPortReady(workspace.killPort);
     }
-  }, [workspace.status, workspace.killPort, onKillPortReady])
+  }, [workspace.status, workspace.killPort, onKillPortReady]);
 
   // Create file operations provider from workspace connection
   const fileOps: FileOperationsProvider | undefined = useMemo(() => {
-    if (workspace.status !== "connected") return undefined
+    if (workspace.status !== "connected") return undefined;
     return {
       readFile: workspace.readFile,
       writeFile: workspace.writeFile,
@@ -182,8 +191,17 @@ function ConnectedWorkspace({
       mkdir: workspace.mkdir,
       deleteFile: workspace.deleteFile,
       renameFile: workspace.renameFile,
-    }
-  }, [workspace.status, workspace.readFile, workspace.writeFile, workspace.listFiles, workspace.listFilesTree, workspace.mkdir, workspace.deleteFile, workspace.renameFile])
+    };
+  }, [
+    workspace.status,
+    workspace.readFile,
+    workspace.writeFile,
+    workspace.listFiles,
+    workspace.listFilesTree,
+    workspace.mkdir,
+    workspace.deleteFile,
+    workspace.renameFile,
+  ]);
 
   // Show connecting state
   if (workspace.status === "connecting" || workspace.status === "disconnected") {
@@ -194,7 +212,7 @@ function ConnectedWorkspace({
           <p className="text-muted-foreground">Connecting to workspace...</p>
         </div>
       </div>
-    )
+    );
   }
 
   // Show error state
@@ -210,7 +228,7 @@ function ConnectedWorkspace({
           <Button onClick={() => workspace.connect()}>Retry</Button>
         </div>
       </div>
-    )
+    );
   }
 
   // Connected - render workspace with file operations
@@ -234,49 +252,49 @@ function ConnectedWorkspace({
         />
       )}
     </FileTreeProvider>
-  )
+  );
 }
 
 export function Workspace() {
-  const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
-  const { project, loading, error, start, stop, refresh } = useProject(id!)
-  const [starting, setStarting] = useState(false)
-  const [leftSidebarOpen, setLeftSidebarOpen] = useState(true)
-  const [terminalOpen, setTerminalOpen] = useState(false)
-  const [rightSidebarOpen, setRightSidebarOpen] = useState(true)
-  const [activePorts, setActivePorts] = useState<number[]>([])
-  const [killPort, setKillPort] = useState<((port: number) => Promise<void>) | null>(null)
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const { project, loading, error, start, stop, refresh } = useProject(id!);
+  const [starting, setStarting] = useState(false);
+  const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
+  const [terminalOpen, setTerminalOpen] = useState(false);
+  const [rightSidebarOpen, setRightSidebarOpen] = useState(true);
+  const [activePorts, setActivePorts] = useState<number[]>([]);
+  const [killPort, setKillPort] = useState<((port: number) => Promise<void>) | null>(null);
 
   const handleKillPortReady = useCallback((fn: (port: number) => Promise<void>) => {
-    setKillPort(() => fn)
-  }, [])
+    setKillPort(() => fn);
+  }, []);
 
   const handlePortChange = useCallback((action: "open" | "close", port: number) => {
     setActivePorts((prev) => {
       if (action === "open") {
-        return prev.includes(port) ? prev : [...prev, port].sort((a, b) => a - b)
+        return prev.includes(port) ? prev : [...prev, port].sort((a, b) => a - b);
       } else {
-        return prev.filter((p) => p !== port)
+        return prev.filter((p) => p !== port);
       }
-    })
-  }, [])
+    });
+  }, []);
 
   const handleStart = async () => {
-    setStarting(true)
+    setStarting(true);
     try {
-      await start()
+      await start();
     } finally {
-      setStarting(false)
+      setStarting(false);
     }
-  }
+  };
 
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Spinner size="lg" />
       </div>
-    )
+    );
   }
 
   if (error || !project) {
@@ -289,7 +307,7 @@ export function Workspace() {
           </Button>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -376,9 +394,7 @@ export function Workspace() {
             <div className="text-center">
               <Spinner size="lg" className="mx-auto mb-4" />
               <p className="text-muted-foreground">Starting your environment...</p>
-              <p className="text-muted-foreground/60 text-sm mt-2">
-                This may take a few seconds.
-              </p>
+              <p className="text-muted-foreground/60 text-sm mt-2">This may take a few seconds.</p>
             </div>
           </div>
         ) : project.status === "stopping" ? (
@@ -394,9 +410,7 @@ export function Workspace() {
               <div className="text-destructive text-5xl mb-4">!</div>
               <p className="text-destructive mb-2">Failed to start environment</p>
               {project.error_message && (
-                <p className="text-muted-foreground text-sm mb-4">
-                  {project.error_message}
-                </p>
+                <p className="text-muted-foreground text-sm mb-4">{project.error_message}</p>
               )}
               <Button onClick={handleStart} loading={starting}>
                 Try again
@@ -406,9 +420,7 @@ export function Workspace() {
         ) : (
           <div className="h-full flex items-center justify-center">
             <div className="text-center">
-              <p className="text-muted-foreground mb-4">
-                Your environment is stopped.
-              </p>
+              <p className="text-muted-foreground mb-4">Your environment is stopped.</p>
               <Button onClick={handleStart} loading={starting}>
                 Start environment
               </Button>
@@ -417,5 +429,5 @@ export function Workspace() {
         )}
       </main>
     </div>
-  )
+  );
 }

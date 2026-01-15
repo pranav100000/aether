@@ -14,4 +14,4 @@ export const HIDDEN_ENTRIES = new Set([
   ".DS_Store",
   "Thumbs.db",
   "lost+found",
-])
+]);

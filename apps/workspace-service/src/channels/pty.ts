@@ -1,18 +1,18 @@
-import { spawn, type IPty, type IExitEvent } from "bun-pty"
-import { logger } from "../logging"
-import type { TerminalInputMessage, TerminalResizeMessage, TerminalOutputMessage } from "./types"
+import { spawn, type IPty, type IExitEvent } from "bun-pty";
+import { logger } from "../logging";
+import type { TerminalInputMessage, TerminalResizeMessage, TerminalOutputMessage } from "./types";
 
 export interface PTYHandlerConfig {
-  cwd: string
-  env?: Record<string, string>
-  cols?: number
-  rows?: number
+  cwd: string;
+  env?: Record<string, string>;
+  cols?: number;
+  rows?: number;
 }
 
 export class PTYHandler {
-  private ptyProcess: IPty | null = null
-  private sendFn: ((msg: TerminalOutputMessage) => void) | null = null
-  private log = logger.child({ channel: "pty" })
+  private ptyProcess: IPty | null = null;
+  private sendFn: ((msg: TerminalOutputMessage) => void) | null = null;
+  private log = logger.child({ channel: "pty" });
 
   constructor(private config: PTYHandlerConfig) {}
 
@@ -20,9 +20,9 @@ export class PTYHandler {
    * Initialize PTY and start shell
    */
   initialize(send: (msg: TerminalOutputMessage) => void): void {
-    this.sendFn = send
+    this.sendFn = send;
 
-    const shell = Bun.env.SHELL || "bash"
+    const shell = Bun.env.SHELL || "bash";
 
     this.ptyProcess = spawn(shell, [], {
       name: "xterm-256color",
@@ -34,18 +34,18 @@ export class PTYHandler {
         ...this.config.env,
         TERM: "xterm-256color",
       } as Record<string, string>,
-    })
+    });
 
     // Forward PTY output to WebSocket
     this.ptyProcess.onData((data: string) => {
-      this.send(data)
-    })
+      this.send(data);
+    });
 
     this.ptyProcess.onExit(({ exitCode, signal }: IExitEvent) => {
-      this.log.info("shell exited", { exit_code: exitCode, signal })
-    })
+      this.log.info("shell exited", { exit_code: exitCode, signal });
+    });
 
-    this.log.info("started shell", { shell, cwd: this.config.cwd })
+    this.log.info("started shell", { shell, cwd: this.config.cwd });
   }
 
   /**
@@ -53,18 +53,18 @@ export class PTYHandler {
    */
   handleMessage(msg: TerminalInputMessage | TerminalResizeMessage): void {
     if (!this.ptyProcess) {
-      throw new Error("PTY not initialized - call initialize() first")
+      throw new Error("PTY not initialized - call initialize() first");
     }
 
     switch (msg.type) {
       case "input":
-        this.ptyProcess.write(msg.data)
-        break
+        this.ptyProcess.write(msg.data);
+        break;
 
       case "resize":
-        this.ptyProcess.resize(msg.cols, msg.rows)
-        this.log.debug("resized", { cols: msg.cols, rows: msg.rows })
-        break
+        this.ptyProcess.resize(msg.cols, msg.rows);
+        this.log.debug("resized", { cols: msg.cols, rows: msg.rows });
+        break;
     }
   }
 
@@ -76,7 +76,7 @@ export class PTYHandler {
       channel: "terminal",
       type: "output",
       data,
-    })
+    });
   }
 
   /**
@@ -84,9 +84,9 @@ export class PTYHandler {
    */
   close(): void {
     if (this.ptyProcess) {
-      this.ptyProcess.kill()
-      this.ptyProcess = null
-      this.log.info("closed")
+      this.ptyProcess.kill();
+      this.ptyProcess = null;
+      this.log.info("closed");
     }
   }
 }

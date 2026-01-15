@@ -65,12 +65,14 @@ File changes on VM
 #### New Endpoint: `GET /projects/:id/files/tree`
 
 **Request:**
+
 ```
 GET /projects/:id/files/tree
 Authorization: Bearer <token>
 ```
 
 **Response:**
+
 ```json
 {
   "paths": [
@@ -80,15 +82,12 @@ Authorization: Bearer <token>
     "/package.json",
     "/tsconfig.json"
   ],
-  "directories": [
-    "/src",
-    "/src/lib",
-    "/src/components"
-  ]
+  "directories": ["/src", "/src/lib", "/src/components"]
 }
 ```
 
 **Behavior:**
+
 - Recursively walk `/home/coder/project` via SFTP
 - Filter hidden entries server-side: `node_modules`, `.git`, `__pycache__`, `.venv`, `venv`, `.env`, `dist`, `build`, `.next`, `.cache`, `.DS_Store`, `Thumbs.db`, `lost+found`
 - Return relative paths (strip `/home/coder/project` prefix)
@@ -96,6 +95,7 @@ Authorization: Bearer <token>
 - No metadata (size, modified date) - paths only for minimal payload
 
 **Error Cases:**
+
 - 401: Unauthorized
 - 404: Project not found
 - 400: Project not running / no VM
@@ -104,6 +104,7 @@ Authorization: Bearer <token>
 #### Existing Endpoints (No Changes)
 
 These endpoints remain unchanged:
+
 - `GET /projects/:id/files?path=...` - Read file content
 - `PUT /projects/:id/files?path=...` - Write file
 - `DELETE /projects/:id/files?path=...` - Delete file
@@ -113,6 +114,7 @@ These endpoints remain unchanged:
 #### Websocket Messages (No Changes)
 
 Existing `file_change` messages continue to work:
+
 ```json
 {
   "type": "file_change",
@@ -126,64 +128,66 @@ Existing `file_change` messages continue to work:
 #### FileTreeContext Changes
 
 **New State:**
+
 ```typescript
 interface FileTreeContextValue {
-  allFiles: string[]           // All file paths
-  directories: string[]        // All directory paths
-  isLoading: boolean          // Initial load state
-  error: string | null        // Load error
-  searchFiles: (query: string, limit?: number) => string[]
-  handleFileChange: (action: string, path: string) => void
-  refresh: () => Promise<void> // Manual refresh if needed
+  allFiles: string[]; // All file paths
+  directories: string[]; // All directory paths
+  isLoading: boolean; // Initial load state
+  error: string | null; // Load error
+  searchFiles: (query: string, limit?: number) => string[];
+  handleFileChange: (action: string, path: string) => void;
+  refresh: () => Promise<void>; // Manual refresh if needed
 }
 ```
 
 **Removed:**
+
 - `loadedDirs: Set<string>` - No longer tracking loaded directories
 - `isPreloading: boolean` - No preloading
 - `preloadDirectory()` - Deleted
 - `addFiles()` - Replaced by initial load
 
 **New Method:**
+
 ```typescript
 const handleFileChange = (action: string, path: string) => {
-  setAllFiles(prev => {
-    if (action === 'create') {
+  setAllFiles((prev) => {
+    if (action === "create") {
       // Add if not exists
-      return prev.includes(path) ? prev : [...prev, path].sort()
-    } else if (action === 'delete') {
+      return prev.includes(path) ? prev : [...prev, path].sort();
+    } else if (action === "delete") {
       // Remove if exists
-      return prev.filter(p => p !== path)
+      return prev.filter((p) => p !== path);
     }
-    return prev // 'modify' doesn't change paths
-  })
+    return prev; // 'modify' doesn't change paths
+  });
 
   // Also update directories if path is a directory
   // Determine by checking if any files have this as prefix
-}
+};
 ```
 
 #### FileTree Component Changes
 
 **New Behavior:**
+
 - Consume `allFiles` and `directories` from FileTreeContext
 - Derive tree structure client-side using `buildTreeFromPaths()`
 - No API calls for directory listing
 - Expansion state is local UI state only
 
 **Helper Function:**
+
 ```typescript
 interface TreeNode {
-  name: string
-  path: string
-  type: 'file' | 'directory'
-  children?: TreeNode[]
+  name: string;
+  path: string;
+  type: "file" | "directory";
+  children?: TreeNode[];
 }
 
-function buildTreeFromPaths(
-  files: string[],
-  directories: string[]
-): TreeNode[] {
+function buildTreeFromPaths(files: string[], directories: string[]): TreeNode[] {
   // Build tree structure from flat paths
   // Group by parent directory
   // Sort: directories first, then alphabetically
@@ -193,10 +197,12 @@ function buildTreeFromPaths(
 #### FileTreeItem Component Changes
 
 **Removed:**
+
 - `api.listFiles()` calls for loading children
 - Loading state for directory expansion
 
 **New Behavior:**
+
 - Children are computed from paths, not fetched
 - Expansion just toggles local state
 - Instant expansion (no loading delay)
@@ -204,16 +210,19 @@ function buildTreeFromPaths(
 #### Workspace Component Changes
 
 **Removed:**
+
 - `fileTreeRefreshTrigger` state
 - `handleFileChange` that increments trigger
 
 **New:**
+
 - Pass websocket `file_change` events to FileTreeContext
 - Wire up `handleFileChange(action, path)` callback
 
 #### API Layer Changes
 
 **New Method:**
+
 ```typescript
 async listFilesTree(projectId: string): Promise<{ paths: string[], directories: string[] }> {
   return apiRequest(`/projects/${projectId}/files/tree`)
@@ -223,37 +232,38 @@ async listFilesTree(projectId: string): Promise<{ paths: string[], directories: 
 #### Constants
 
 **New File:** `frontend/src/constants/files.ts`
+
 ```typescript
 export const HIDDEN_ENTRIES = new Set([
-  'node_modules',
-  '.git',
-  '__pycache__',
-  '.venv',
-  'venv',
-  '.env',
-  'dist',
-  'build',
-  '.next',
-  '.cache',
-  '.DS_Store',
-  'Thumbs.db',
-  'lost+found',
-])
+  "node_modules",
+  ".git",
+  "__pycache__",
+  ".venv",
+  "venv",
+  ".env",
+  "dist",
+  "build",
+  ".next",
+  ".cache",
+  ".DS_Store",
+  "Thumbs.db",
+  "lost+found",
+]);
 ```
 
 ## Files to Modify
 
-| File | Action | Description |
-|------|--------|-------------|
-| `backend/sftp/client.go` | Modify | Add `ListAllFiles()` method |
-| `backend/handlers/files.go` | Modify | Add `ListTree()` handler |
-| `backend/main.go` | Modify | Add `/files/tree` route |
-| `frontend/src/lib/api.ts` | Modify | Add `listFilesTree()` method |
-| `frontend/src/constants/files.ts` | Create | Centralized `HIDDEN_ENTRIES` |
-| `frontend/src/contexts/FileTreeContext.tsx` | Modify | Major refactor |
-| `frontend/src/components/workspace/FileTree.tsx` | Modify | Derive tree from paths |
-| `frontend/src/components/workspace/FileTreeItem.tsx` | Modify | Remove fetch calls |
-| `frontend/src/pages/Workspace.tsx` | Modify | Remove refresh trigger |
+| File                                                 | Action | Description                  |
+| ---------------------------------------------------- | ------ | ---------------------------- |
+| `backend/sftp/client.go`                             | Modify | Add `ListAllFiles()` method  |
+| `backend/handlers/files.go`                          | Modify | Add `ListTree()` handler     |
+| `backend/main.go`                                    | Modify | Add `/files/tree` route      |
+| `frontend/src/lib/api.ts`                            | Modify | Add `listFilesTree()` method |
+| `frontend/src/constants/files.ts`                    | Create | Centralized `HIDDEN_ENTRIES` |
+| `frontend/src/contexts/FileTreeContext.tsx`          | Modify | Major refactor               |
+| `frontend/src/components/workspace/FileTree.tsx`     | Modify | Derive tree from paths       |
+| `frontend/src/components/workspace/FileTreeItem.tsx` | Modify | Remove fetch calls           |
+| `frontend/src/pages/Workspace.tsx`                   | Modify | Remove refresh trigger       |
 
 ## Code to Delete
 
@@ -277,6 +287,7 @@ export const HIDDEN_ENTRIES = new Set([
 ### Large Projects
 
 For MVP, return all files. If projects exceed reasonable size:
+
 - Most user projects are <5,000 files (excluding node_modules)
 - Hidden entry filtering removes the largest directories
 - Future: Add pagination if needed

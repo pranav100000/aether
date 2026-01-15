@@ -1,14 +1,14 @@
-import { useEffect, useRef } from "react"
-import { cn } from "@/lib/utils"
-import { FileIcon } from "@/components/icons/FileIcon"
+import { useEffect, useRef } from "react";
+import { cn } from "@/lib/utils";
+import { FileIcon } from "@/components/icons/FileIcon";
 
 interface FileMentionPopoverProps {
-  open: boolean
-  position: { top: number; left: number } | null
-  files: string[]
-  loading?: boolean
-  selectedIndex: number
-  onSelect: (file: string) => void
+  open: boolean;
+  position: { top: number; left: number } | null;
+  files: string[];
+  loading?: boolean;
+  selectedIndex: number;
+  onSelect: (file: string) => void;
 }
 
 export function FileMentionPopover({
@@ -19,16 +19,16 @@ export function FileMentionPopover({
   selectedIndex,
   onSelect,
 }: FileMentionPopoverProps) {
-  const listRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null);
 
   // Scroll selected item into view
   useEffect(() => {
-    if (!open || !listRef.current) return
-    const selectedElement = listRef.current.querySelector('[data-selected="true"]')
-    selectedElement?.scrollIntoView({ block: "nearest" })
-  }, [open, selectedIndex])
+    if (!open || !listRef.current) return;
+    const selectedElement = listRef.current.querySelector('[data-selected="true"]');
+    selectedElement?.scrollIntoView({ block: "nearest" });
+  }, [open, selectedIndex]);
 
-  if (!open || !position) return null
+  if (!open || !position) return null;
 
   return (
     <div
@@ -46,9 +46,7 @@ export function FileMentionPopover({
           </div>
         )}
         {!loading && files.length === 0 && (
-          <div className="py-3 px-3 text-xs text-muted-foreground text-center">
-            No files found
-          </div>
+          <div className="py-3 px-3 text-xs text-muted-foreground text-center">No files found</div>
         )}
         {files.map((file, index) => (
           <div
@@ -57,9 +55,7 @@ export function FileMentionPopover({
             onClick={() => onSelect(file)}
             className={cn(
               "flex items-center gap-2 rounded px-2 py-1.5 text-sm cursor-pointer",
-              index === selectedIndex
-                ? "bg-accent text-accent-foreground"
-                : "hover:bg-accent/50"
+              index === selectedIndex ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"
             )}
           >
             <FileIcon path={file} size="md" colorClassName="text-muted-foreground" />
@@ -68,5 +64,5 @@ export function FileMentionPopover({
         ))}
       </div>
     </div>
-  )
+  );
 }

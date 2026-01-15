@@ -1,4 +1,4 @@
-import { supabase } from "./supabase"
+import { supabase } from "./supabase";
 
 // Re-export types from shared package for backwards compatibility
 export {
@@ -15,10 +15,10 @@ export {
   type ConnectedProvider,
   type ListProvidersResponse,
   type ApiError,
-} from "@aether/types"
+} from "@aether/types";
 
 // Local type alias for backwards compatibility
-export type { StartProjectResponse as StartResponse } from "@aether/types"
+export type { StartProjectResponse as StartResponse } from "@aether/types";
 
 import type {
   Project,
@@ -30,31 +30,31 @@ import type {
   ListProvidersResponse,
   ApiError,
   StartProjectResponse as StartResponse,
-} from "@aether/types"
+} from "@aether/types";
 
-const API_URL = import.meta.env.VITE_API_URL
+const API_URL = import.meta.env.VITE_API_URL;
 
 if (!API_URL) {
-  throw new Error("Missing VITE_API_URL environment variable")
+  throw new Error("Missing VITE_API_URL environment variable");
 }
 
 async function getAuthHeaders(): Promise<HeadersInit> {
   const {
     data: { session },
-  } = await supabase.auth.getSession()
+  } = await supabase.auth.getSession();
 
   if (!session?.access_token) {
-    throw new Error("Not authenticated")
+    throw new Error("Not authenticated");
   }
 
   return {
     Authorization: `Bearer ${session.access_token}`,
     "Content-Type": "application/json",
-  }
+  };
 }
 
 async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const headers = await getAuthHeaders()
+  const headers = await getAuthHeaders();
 
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
@@ -62,107 +62,107 @@ async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T
       ...headers,
       ...options.headers,
     },
-  })
+  });
 
   if (!response.ok) {
     const error: ApiError = await response.json().catch(() => ({
       error: `Request failed with status ${response.status}`,
-    }))
-    throw new Error(error.error)
+    }));
+    throw new Error(error.error);
   }
 
   if (response.status === 204) {
-    return undefined as T
+    return undefined as T;
   }
 
-  return response.json()
+  return response.json();
 }
 
 export const api = {
   async listProjects(): Promise<{ projects: Project[] }> {
-    return apiRequest("/projects")
+    return apiRequest("/projects");
   },
 
   async getProject(id: string): Promise<Project> {
-    return apiRequest(`/projects/${id}`)
+    return apiRequest(`/projects/${id}`);
   },
 
   async createProject(input: CreateProjectInput): Promise<Project> {
     return apiRequest("/projects", {
       method: "POST",
       body: JSON.stringify(input),
-    })
+    });
   },
 
   async updateProject(id: string, input: UpdateProjectInput): Promise<Project> {
     return apiRequest(`/projects/${id}`, {
       method: "PATCH",
       body: JSON.stringify(input),
-    })
+    });
   },
 
   async deleteProject(id: string): Promise<void> {
     return apiRequest(`/projects/${id}`, {
       method: "DELETE",
-    })
+    });
   },
 
   async startProject(id: string): Promise<StartResponse> {
     return apiRequest(`/projects/${id}/start`, {
       method: "POST",
-    })
+    });
   },
 
   async stopProject(id: string): Promise<{ status: string }> {
     return apiRequest(`/projects/${id}/stop`, {
       method: "POST",
-    })
+    });
   },
 
   getTerminalUrl(projectId: string): string {
-    const wsUrl = API_URL.replace("http", "ws")
-    return `${wsUrl}/projects/${projectId}/terminal`
+    const wsUrl = API_URL.replace("http", "ws");
+    return `${wsUrl}/projects/${projectId}/terminal`;
   },
 
   getAgentUrl(projectId: string, agent: "claude" | "codex" | "opencode" | "codebuff"): string {
     // Production mode: WebSocket to Go backend
-    const wsUrl = API_URL.replace("http", "ws")
-    return `${wsUrl}/projects/${projectId}/agent/${agent}`
+    const wsUrl = API_URL.replace("http", "ws");
+    return `${wsUrl}/projects/${projectId}/agent/${agent}`;
   },
 
   getWorkspaceUrl(projectId: string): string {
     // Unified workspace WebSocket (terminal + agent + files + ports)
-    const wsUrl = API_URL.replace("http", "ws")
-    return `${wsUrl}/projects/${projectId}/workspace`
+    const wsUrl = API_URL.replace("http", "ws");
+    return `${wsUrl}/projects/${projectId}/workspace`;
   },
 
   // API Keys operations
   async getApiKeys(): Promise<ListProvidersResponse> {
-    return apiRequest("/user/api-keys")
+    return apiRequest("/user/api-keys");
   },
 
   async addApiKey(provider: string, apiKey: string): Promise<ConnectedProvider> {
     return apiRequest("/user/api-keys", {
       method: "POST",
       body: JSON.stringify({ provider, api_key: apiKey }),
-    })
+    });
   },
 
   async removeApiKey(provider: string): Promise<void> {
     return apiRequest(`/user/api-keys/${provider}`, {
       method: "DELETE",
-    })
+    });
   },
 
   // User Settings operations
   async getUserSettings(): Promise<UserSettings> {
-    return apiRequest("/user/settings")
+    return apiRequest("/user/settings");
   },
 
   async updateUserSettings(input: UpdateUserSettingsInput): Promise<UserSettings> {
     return apiRequest("/user/settings", {
       method: "PUT",
       body: JSON.stringify(input),
-    })
+    });
   },
-}
+};

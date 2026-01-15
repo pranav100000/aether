@@ -1,12 +1,15 @@
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Spinner } from "@/components/ui/spinner"
-import { useApiKeys } from "@/hooks/useApiKeys"
-import { LinkedAccounts } from "./LinkedAccounts"
-import type { ConnectedProvider } from "@/lib/api"
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
+import { useApiKeys } from "@/hooks/useApiKeys";
+import { LinkedAccounts } from "./LinkedAccounts";
+import type { ConnectedProvider } from "@/lib/api";
 
-const PROVIDER_INFO: Record<string, { name: string; description: string; placeholder: string; helpUrl: string }> = {
+const PROVIDER_INFO: Record<
+  string,
+  { name: string; description: string; placeholder: string; helpUrl: string }
+> = {
   anthropic: {
     name: "Anthropic (Claude)",
     description: "Use Claude Code CLI in your projects",
@@ -25,51 +28,51 @@ const PROVIDER_INFO: Record<string, { name: string; description: string; placeho
     placeholder: "sk-or-...",
     helpUrl: "https://openrouter.ai/keys",
   },
-}
+};
 
 interface ProviderCardProps {
-  provider: ConnectedProvider
-  onConnect: (apiKey: string) => Promise<void>
-  onDisconnect: () => Promise<void>
+  provider: ConnectedProvider;
+  onConnect: (apiKey: string) => Promise<void>;
+  onDisconnect: () => Promise<void>;
 }
 
 function ProviderCard({ provider, onConnect, onDisconnect }: ProviderCardProps) {
-  const [apiKey, setApiKey] = useState("")
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [apiKey, setApiKey] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const info = PROVIDER_INFO[provider.provider]
-  if (!info) return null
+  const info = PROVIDER_INFO[provider.provider];
+  if (!info) return null;
 
   const handleConnect = async () => {
     if (!apiKey.trim()) {
-      setError("API key is required")
-      return
+      setError("API key is required");
+      return;
     }
 
-    setLoading(true)
-    setError(null)
+    setLoading(true);
+    setError(null);
     try {
-      await onConnect(apiKey)
-      setApiKey("")
+      await onConnect(apiKey);
+      setApiKey("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to connect")
+      setError(err instanceof Error ? err.message : "Failed to connect");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const handleDisconnect = async () => {
-    setLoading(true)
-    setError(null)
+    setLoading(true);
+    setError(null);
     try {
-      await onDisconnect()
+      await onDisconnect();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to disconnect")
+      setError(err instanceof Error ? err.message : "Failed to disconnect");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="border rounded-lg p-4 space-y-3">
@@ -86,12 +89,7 @@ function ProviderCard({ provider, onConnect, onDisconnect }: ProviderCardProps) 
           <p className="text-sm text-muted-foreground mt-1">{info.description}</p>
         </div>
         {provider.connected && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleDisconnect}
-            disabled={loading}
-          >
+          <Button variant="outline" size="sm" onClick={handleDisconnect} disabled={loading}>
             {loading ? <Spinner size="sm" /> : "Disconnect"}
           </Button>
         )}
@@ -131,18 +129,18 @@ function ProviderCard({ provider, onConnect, onDisconnect }: ProviderCardProps) 
 
       {error && <p className="text-sm text-red-500">{error}</p>}
     </div>
-  )
+  );
 }
 
 export function ConnectedAccounts() {
-  const { providers, loading, error, addKey, removeKey } = useApiKeys()
+  const { providers, loading, error, addKey, removeKey } = useApiKeys();
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
         <Spinner />
       </div>
-    )
+    );
   }
 
   if (error) {
@@ -150,7 +148,7 @@ export function ConnectedAccounts() {
       <div className="text-center py-8 text-red-500">
         <p>{error}</p>
       </div>
-    )
+    );
   }
 
   return (
@@ -195,12 +193,12 @@ export function ConnectedAccounts() {
               <path d="M12 8h.01" />
             </svg>
             <p className="text-sm text-muted-foreground">
-              Your API keys are encrypted and only used to run agents in your cloud environments.
-              We never access your keys for any other purpose.
+              Your API keys are encrypted and only used to run agents in your cloud environments. We
+              never access your keys for any other purpose.
             </p>
           </div>
         </div>
       </div>
     </div>
-  )
+  );
 }

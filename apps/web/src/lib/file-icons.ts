@@ -1,5 +1,5 @@
-import { basename, extname } from "pathe"
-import type { IconType } from "react-icons"
+import { basename, extname } from "pathe";
+import type { IconType } from "react-icons";
 import {
   DiJavascript1,
   DiPython,
@@ -14,7 +14,7 @@ import {
   DiRuby,
   DiPhp,
   DiSwift,
-} from "react-icons/di"
+} from "react-icons/di";
 import {
   SiTypescript,
   SiCplusplus,
@@ -37,13 +37,13 @@ import {
   SiDart,
   SiNim,
   SiGnubash,
-} from "react-icons/si"
-import { TbFileTypeXml } from "react-icons/tb"
-import { VscFile, VscFileCode, VscTerminalPowershell } from "react-icons/vsc"
+} from "react-icons/si";
+import { TbFileTypeXml } from "react-icons/tb";
+import { VscFile, VscFileCode, VscTerminalPowershell } from "react-icons/vsc";
 
 export interface FileIconConfig {
-  icon: IconType
-  color: string
+  icon: IconType;
+  color: string;
 }
 
 // Extension to icon mapping
@@ -136,7 +136,7 @@ export const FILE_ICON_MAP: Record<string, FileIconConfig> = {
   ml: { icon: SiOcaml, color: "text-orange-400" },
   mli: { icon: SiOcaml, color: "text-orange-400" },
   nim: { icon: SiNim, color: "text-yellow-400" },
-}
+};
 
 // Filename-based mappings (for files without extensions or special names)
 export const FILENAME_ICON_MAP: Record<string, FileIconConfig> = {
@@ -156,27 +156,27 @@ export const FILENAME_ICON_MAP: Record<string, FileIconConfig> = {
   "tsconfig.json": { icon: SiTypescript, color: "text-blue-400" },
   "pyproject.toml": { icon: DiPython, color: "text-green-400" },
   "requirements.txt": { icon: DiPython, color: "text-green-400" },
-}
+};
 
 // Default fallback icon
 export const DEFAULT_FILE_ICON: FileIconConfig = {
   icon: VscFile,
   color: "text-gray-400",
-}
+};
 
 export function getFileIconConfig(pathOrName: string): FileIconConfig {
-  const fileName = basename(pathOrName)
-  const ext = extname(pathOrName).slice(1).toLowerCase() // Remove leading dot
+  const fileName = basename(pathOrName);
+  const ext = extname(pathOrName).slice(1).toLowerCase(); // Remove leading dot
 
   // Check filename-based mappings first (for special files like Dockerfile)
   if (FILENAME_ICON_MAP[fileName]) {
-    return FILENAME_ICON_MAP[fileName]
+    return FILENAME_ICON_MAP[fileName];
   }
 
   // Then check extension-based mappings
   if (ext && FILE_ICON_MAP[ext]) {
-    return FILE_ICON_MAP[ext]
+    return FILE_ICON_MAP[ext];
   }
 
-  return DEFAULT_FILE_ICON
+  return DEFAULT_FILE_ICON;
 }

@@ -1,15 +1,15 @@
-import { useEffect, useRef } from "react"
-import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels"
-import type { ImperativePanelHandle } from "react-resizable-panels"
+import { useEffect, useRef } from "react";
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+import type { ImperativePanelHandle } from "react-resizable-panels";
 
 interface WorkspaceLayoutProps {
-  sidebar: React.ReactNode
-  editor: React.ReactNode
-  terminal: React.ReactNode
-  rightPanel?: React.ReactNode
-  leftSidebarOpen: boolean
-  terminalOpen: boolean
-  rightPanelOpen?: boolean
+  sidebar: React.ReactNode;
+  editor: React.ReactNode;
+  terminal: React.ReactNode;
+  rightPanel?: React.ReactNode;
+  leftSidebarOpen: boolean;
+  terminalOpen: boolean;
+  rightPanelOpen?: boolean;
 }
 
 export function WorkspaceLayout({
@@ -21,39 +21,39 @@ export function WorkspaceLayout({
   terminalOpen,
   rightPanelOpen = false,
 }: WorkspaceLayoutProps) {
-  const sidebarPanelRef = useRef<ImperativePanelHandle>(null)
-  const terminalPanelRef = useRef<ImperativePanelHandle>(null)
-  const rightPanelRef = useRef<ImperativePanelHandle>(null)
+  const sidebarPanelRef = useRef<ImperativePanelHandle>(null);
+  const terminalPanelRef = useRef<ImperativePanelHandle>(null);
+  const rightPanelRef = useRef<ImperativePanelHandle>(null);
 
   useEffect(() => {
     if (sidebarPanelRef.current) {
       if (leftSidebarOpen) {
-        sidebarPanelRef.current.expand()
+        sidebarPanelRef.current.expand();
       } else {
-        sidebarPanelRef.current.collapse()
+        sidebarPanelRef.current.collapse();
       }
     }
-  }, [leftSidebarOpen])
+  }, [leftSidebarOpen]);
 
   useEffect(() => {
     if (terminalPanelRef.current) {
       if (terminalOpen) {
-        terminalPanelRef.current.expand()
+        terminalPanelRef.current.expand();
       } else {
-        terminalPanelRef.current.collapse()
+        terminalPanelRef.current.collapse();
       }
     }
-  }, [terminalOpen])
+  }, [terminalOpen]);
 
   useEffect(() => {
     if (rightPanelRef.current) {
       if (rightPanelOpen) {
-        rightPanelRef.current.expand()
+        rightPanelRef.current.expand();
       } else {
-        rightPanelRef.current.collapse()
+        rightPanelRef.current.collapse();
       }
     }
-  }, [rightPanelOpen])
+  }, [rightPanelOpen]);
 
   return (
     <div className="h-full flex flex-col bg-[#1a1a1a]">
@@ -70,7 +70,9 @@ export function WorkspaceLayout({
               collapsible
               collapsedSize={0}
             >
-              <div className={`h-full bg-[#1e1e1e] border-r border-border overflow-hidden ${leftSidebarOpen ? '' : 'hidden'}`}>
+              <div
+                className={`h-full bg-[#1e1e1e] border-r border-border overflow-hidden ${leftSidebarOpen ? "" : "hidden"}`}
+              >
                 {sidebar}
               </div>
             </Panel>
@@ -82,9 +84,7 @@ export function WorkspaceLayout({
 
             {/* Editor area */}
             <Panel defaultSize={rightPanelOpen ? 55 : 80} minSize={30}>
-              <div className="h-full flex flex-col overflow-hidden">
-                {editor}
-              </div>
+              <div className="h-full flex flex-col overflow-hidden">{editor}</div>
             </Panel>
 
             {/* Resize handle between editor and right panel */}
@@ -102,7 +102,9 @@ export function WorkspaceLayout({
                 collapsible
                 collapsedSize={0}
               >
-                <div className={`h-full bg-[#1e1e1e] border-l border-border overflow-hidden ${rightPanelOpen ? '' : 'hidden'}`}>
+                <div
+                  className={`h-full bg-[#1e1e1e] border-l border-border overflow-hidden ${rightPanelOpen ? "" : "hidden"}`}
+                >
                   {rightPanel}
                 </div>
               </Panel>
@@ -124,25 +126,25 @@ export function WorkspaceLayout({
           collapsible
           collapsedSize={0}
         >
-          <div className={`h-full ${terminalOpen ? '' : 'hidden'}`}>
-            {terminal}
-          </div>
+          <div className={`h-full ${terminalOpen ? "" : "hidden"}`}>{terminal}</div>
         </Panel>
       </PanelGroup>
     </div>
-  )
+  );
 }
 
 interface WorkspaceEmptyStateProps {
-  message?: string
+  message?: string;
 }
 
-export function WorkspaceEmptyState({ message = "Select a file to start editing" }: WorkspaceEmptyStateProps) {
+export function WorkspaceEmptyState({
+  message = "Select a file to start editing",
+}: WorkspaceEmptyStateProps) {
   return (
     <div className="h-full flex items-center justify-center bg-[#1a1a1a]">
       <div className="text-center">
         <p className="text-muted-foreground text-sm">{message}</p>
       </div>
     </div>
-  )
+  );
 }

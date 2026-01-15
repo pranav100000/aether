@@ -1,15 +1,15 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { ChevronRightIcon, FolderIcon, FolderOpenIcon } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { buildTreeFromFilePaths, type TreeNode } from "@/lib/file-tree-utils"
-import { FileIcon } from "@/components/icons/FileIcon"
+import { useState } from "react";
+import { ChevronRightIcon, FolderIcon, FolderOpenIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { buildTreeFromFilePaths, type TreeNode } from "@/lib/file-tree-utils";
+import { FileIcon } from "@/components/icons/FileIcon";
 
 interface FileTreeViewProps {
-  files: string[]
-  maxVisible?: number
-  className?: string
+  files: string[];
+  maxVisible?: number;
+  className?: string;
 }
 
 /**
@@ -17,13 +17,15 @@ interface FileTreeViewProps {
  * Automatically builds tree structure from flat file paths.
  */
 export function FileTreeView({ files, maxVisible = 100, className }: FileTreeViewProps) {
-  const visibleFiles = files.slice(0, maxVisible)
-  const remaining = files.length - maxVisible
+  const visibleFiles = files.slice(0, maxVisible);
+  const remaining = files.length - maxVisible;
 
-  const treeNodes = buildTreeFromFilePaths(visibleFiles)
+  const treeNodes = buildTreeFromFilePaths(visibleFiles);
 
   return (
-    <div className={cn("rounded-lg border border-zinc-800 bg-zinc-900/50 overflow-hidden", className)}>
+    <div
+      className={cn("rounded-lg border border-zinc-800 bg-zinc-900/50 overflow-hidden", className)}
+    >
       <div className="max-h-60 overflow-auto">
         {treeNodes.map((node) => (
           <TreeNodeItem key={node.path} node={node} level={0} />
@@ -35,17 +37,17 @@ export function FileTreeView({ files, maxVisible = 100, className }: FileTreeVie
         </div>
       )}
     </div>
-  )
+  );
 }
 
 interface TreeNodeItemProps {
-  node: TreeNode
-  level: number
+  node: TreeNode;
+  level: number;
 }
 
 function TreeNodeItem({ node, level }: TreeNodeItemProps) {
-  const [expanded, setExpanded] = useState(true)
-  const isDirectory = node.type === "directory"
+  const [expanded, setExpanded] = useState(true);
+  const isDirectory = node.type === "directory";
 
   return (
     <div>
@@ -60,10 +62,7 @@ function TreeNodeItem({ node, level }: TreeNodeItemProps) {
         {isDirectory ? (
           <>
             <ChevronRightIcon
-              className={cn(
-                "size-3.5 text-zinc-500 transition-transform",
-                expanded && "rotate-90"
-              )}
+              className={cn("size-3.5 text-zinc-500 transition-transform", expanded && "rotate-90")}
             />
             {expanded ? (
               <FolderOpenIcon className="size-3.5 text-blue-400 flex-shrink-0" />
@@ -88,5 +87,5 @@ function TreeNodeItem({ node, level }: TreeNodeItemProps) {
         </div>
       )}
     </div>
-  )
+  );
 }

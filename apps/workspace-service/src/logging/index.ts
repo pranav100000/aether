@@ -1,8 +1,9 @@
-import pino from "pino"
-import * as Sentry from "@sentry/bun"
+import pino from "pino";
+import * as Sentry from "@sentry/bun";
 
 // Initialize Sentry
-const SENTRY_DSN = "https://cd2942e3079c4f215326dfcb9eea424c@o4510703250505728.ingest.us.sentry.io/4510707850936320"
+const SENTRY_DSN =
+  "https://cd2942e3079c4f215326dfcb9eea424c@o4510703250505728.ingest.us.sentry.io/4510707850936320";
 Sentry.init({
   dsn: SENTRY_DSN,
   environment: Bun.env.ENVIRONMENT || "development",
@@ -13,7 +14,7 @@ Sentry.init({
   ],
   // Enable logs to be sent to Sentry
   enableLogs: true,
-})
+});
 
 /**
  * Logger wraps pino to provide a stable API that doesn't leak implementation details.
@@ -23,40 +24,40 @@ Sentry.init({
  * 3. Control the API surface
  */
 export class Logger {
-  private pino: pino.Logger
+  private pino: pino.Logger;
 
   constructor(pinoInstance: pino.Logger) {
-    this.pino = pinoInstance
+    this.pino = pinoInstance;
   }
 
   /**
    * Create a child logger with additional context
    */
   child(bindings: Record<string, unknown>): Logger {
-    return new Logger(this.pino.child(bindings))
+    return new Logger(this.pino.child(bindings));
   }
 
   debug(msg: string, data?: Record<string, unknown>): void {
     if (data) {
-      this.pino.debug(data, msg)
+      this.pino.debug(data, msg);
     } else {
-      this.pino.debug(msg)
+      this.pino.debug(msg);
     }
   }
 
   info(msg: string, data?: Record<string, unknown>): void {
     if (data) {
-      this.pino.info(data, msg)
+      this.pino.info(data, msg);
     } else {
-      this.pino.info(msg)
+      this.pino.info(msg);
     }
   }
 
   warn(msg: string, data?: Record<string, unknown>): void {
     if (data) {
-      this.pino.warn(data, msg)
+      this.pino.warn(data, msg);
     } else {
-      this.pino.warn(msg)
+      this.pino.warn(msg);
     }
   }
 
@@ -65,33 +66,33 @@ export class Logger {
    */
   error(msg: string, data?: Record<string, unknown>): void {
     if (data) {
-      this.pino.error(data, msg)
+      this.pino.error(data, msg);
     } else {
-      this.pino.error(msg)
+      this.pino.error(msg);
     }
 
     // Capture to Sentry
     if (SENTRY_DSN) {
       Sentry.withScope((scope) => {
         if (data) {
-          scope.setExtras(data)
+          scope.setExtras(data);
         }
-        Sentry.captureMessage(msg, "error")
-      })
+        Sentry.captureMessage(msg, "error");
+      });
     }
   }
 }
 
 // Configuration from environment
-const LOG_LEVEL = Bun.env.LOG_LEVEL || "info"
-const LOG_FORMAT = Bun.env.LOG_FORMAT || (Bun.env.NODE_ENV === "development" ? "text" : "json")
+const LOG_LEVEL = Bun.env.LOG_LEVEL || "info";
+const LOG_FORMAT = Bun.env.LOG_FORMAT || (Bun.env.NODE_ENV === "development" ? "text" : "json");
 
 // Create base pino instance
 const pinoOptions: pino.LoggerOptions = {
   level: LOG_LEVEL,
-}
+};
 
-let pinoInstance: pino.Logger
+let pinoInstance: pino.Logger;
 
 if (LOG_FORMAT === "text") {
   // Pretty print for development
@@ -105,20 +106,20 @@ if (LOG_FORMAT === "text") {
         ignore: "pid,hostname",
       },
     },
-  })
+  });
 } else {
   // JSON for production
-  pinoInstance = pino(pinoOptions)
+  pinoInstance = pino(pinoOptions);
 }
 
 /** Root logger instance */
-export const logger = new Logger(pinoInstance)
+export const logger = new Logger(pinoInstance);
 
 /** Correlation context passed from the backend via WebSocket connection */
 export interface CorrelationContext {
-  requestId?: string
-  userId?: string
-  projectId?: string
+  requestId?: string;
+  userId?: string;
+  projectId?: string;
 }
 
 /**
@@ -129,15 +130,15 @@ export function createContextLogger(
   ctx: CorrelationContext,
   additional?: Record<string, unknown>
 ): Logger {
-  const bindings: Record<string, unknown> = {}
+  const bindings: Record<string, unknown> = {};
 
-  if (ctx.requestId) bindings.request_id = ctx.requestId
-  if (ctx.userId) bindings.user_id = ctx.userId
-  if (ctx.projectId) bindings.project_id = ctx.projectId
+  if (ctx.requestId) bindings.request_id = ctx.requestId;
+  if (ctx.userId) bindings.user_id = ctx.userId;
+  if (ctx.projectId) bindings.project_id = ctx.projectId;
 
   if (additional) {
-    Object.assign(bindings, additional)
+    Object.assign(bindings, additional);
   }
 
-  return Object.keys(bindings).length > 0 ? logger.child(bindings) : logger
+  return Object.keys(bindings).length > 0 ? logger.child(bindings) : logger;
 }

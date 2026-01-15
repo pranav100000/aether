@@ -1,17 +1,17 @@
-import { useState } from "react"
-import { cn } from "@/lib/utils"
-import { ConnectedAccounts } from "@/components/settings/ConnectedAccounts"
-import { DefaultSettings } from "@/components/settings/DefaultSettings"
+import { useState } from "react";
+import { cn } from "@/lib/utils";
+import { ConnectedAccounts } from "@/components/settings/ConnectedAccounts";
+import { DefaultSettings } from "@/components/settings/DefaultSettings";
 
-type Tab = "accounts" | "defaults"
+type Tab = "accounts" | "defaults";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "accounts", label: "Connected Accounts" },
   { id: "defaults", label: "Default Settings" },
-]
+];
 
 export function Settings() {
-  const [activeTab, setActiveTab] = useState<Tab>("accounts")
+  const [activeTab, setActiveTab] = useState<Tab>("accounts");
 
   return (
     <div className="container max-w-4xl py-8">
@@ -48,5 +48,5 @@ export function Settings() {
         </div>
       </div>
     </div>
-  )
+  );
 }

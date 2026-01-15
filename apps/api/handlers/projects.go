@@ -9,8 +9,8 @@ import (
 
 	"aether/apps/api/db"
 	authmw "aether/apps/api/middleware"
-	"aether/libs/go/logging"
 	"aether/apps/api/validation"
+	"aether/libs/go/logging"
 
 	"github.com/go-chi/chi/v5"
 )

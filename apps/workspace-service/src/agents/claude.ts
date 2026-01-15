@@ -1,35 +1,35 @@
-import { query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk"
-import type { AgentProvider, AgentEvent, QueryOptions, ProviderConfig } from "../types"
+import { query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { AgentProvider, AgentEvent, QueryOptions, ProviderConfig } from "../types";
 
 export class ClaudeProvider implements AgentProvider {
-  readonly name = "claude" as const
-  private cwd: string
-  private sessionId: string | null = null
-  private abortController: AbortController | null = null
+  readonly name = "claude" as const;
+  private cwd: string;
+  private sessionId: string | null = null;
+  private abortController: AbortController | null = null;
 
   constructor(config: ProviderConfig) {
-    this.cwd = config.cwd
+    this.cwd = config.cwd;
   }
 
   isConfigured(): boolean {
-    return !!Bun.env.ANTHROPIC_API_KEY
+    return !!Bun.env.ANTHROPIC_API_KEY;
   }
 
   private getModelId(model?: string): string {
     switch (model) {
       case "opus":
-        return "claude-opus-4-5-20250929"
+        return "claude-opus-4-5-20250929";
       case "sonnet":
-        return "claude-sonnet-4-5-20250929"
+        return "claude-sonnet-4-5-20250929";
       case "haiku":
-        return "claude-haiku-3-5-20250929"
+        return "claude-haiku-3-5-20250929";
       default:
-        return model || "claude-sonnet-4-5-20250929"
+        return model || "claude-sonnet-4-5-20250929";
     }
   }
 
   async *query(prompt: string, options: QueryOptions): AsyncIterable<AgentEvent> {
-    this.abortController = new AbortController()
+    this.abortController = new AbortController();
 
     try {
       const q = query({
@@ -41,64 +41,76 @@ export class ClaudeProvider implements AgentProvider {
           abortController: this.abortController,
           ...(options.thinkingTokens ? { maxThinkingTokens: options.thinkingTokens } : {}),
           ...(this.sessionId ? { resume: this.sessionId } : {}),
-          allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch", "TodoWrite", "Task"],
+          allowedTools: [
+            "Read",
+            "Write",
+            "Edit",
+            "Bash",
+            "Glob",
+            "Grep",
+            "WebSearch",
+            "WebFetch",
+            "TodoWrite",
+            "Task",
+          ],
         },
-      })
+      });
 
       for await (const msg of q) {
         // Check if aborted before processing
         if (this.abortController?.signal.aborted) {
-          yield { type: "done" }
-          return
+          yield { type: "done" };
+          return;
         }
 
         if (msg.session_id && !this.sessionId) {
-          this.sessionId = msg.session_id
+          this.sessionId = msg.session_id;
         }
 
-        const event = this.mapMessage(msg, options.autoApprove)
-        if (event) yield event
+        const event = this.mapMessage(msg, options.autoApprove);
+        if (event) yield event;
       }
 
-      yield { type: "done" }
+      yield { type: "done" };
     } catch (err) {
-      yield { type: "error", error: err instanceof Error ? err.message : String(err) }
+      yield { type: "error", error: err instanceof Error ? err.message : String(err) };
     }
   }
 
   private mapMessage(msg: SDKMessage, autoApprove: boolean): AgentEvent | null {
     switch (msg.type) {
       case "system":
-        return null
+        return null;
 
       case "assistant": {
         type ContentBlock = {
-          type: string
-          text?: string
-          thinking?: string
-          id?: string
-          name?: string
-          input?: unknown
-        }
-        const content = msg.message.content as ContentBlock[]
+          type: string;
+          text?: string;
+          thinking?: string;
+          id?: string;
+          name?: string;
+          input?: unknown;
+        };
+        const content = msg.message.content as ContentBlock[];
 
         // Check for thinking blocks
         for (const block of content) {
           if (block.type === "thinking" && block.thinking) {
-            return { type: "thinking", content: block.thinking, streaming: false }
+            return { type: "thinking", content: block.thinking, streaming: false };
           }
         }
 
         // Collect text content
         const textContent = content
-          .filter((b): b is ContentBlock & { type: "text"; text: string } =>
-            b.type === "text" && typeof b.text === "string"
+          .filter(
+            (b): b is ContentBlock & { type: "text"; text: string } =>
+              b.type === "text" && typeof b.text === "string"
           )
           .map((b) => b.text)
-          .join("")
+          .join("");
 
         if (textContent) {
-          return { type: "text", content: textContent, streaming: false }
+          return { type: "text", content: textContent, streaming: false };
         }
 
         // Handle tool use
@@ -112,49 +124,49 @@ export class ClaudeProvider implements AgentProvider {
                 input: (block.input || {}) as Record<string, unknown>,
                 status: autoApprove ? "running" : "pending",
               },
-            }
+            };
           }
         }
 
-        return null
+        return null;
       }
 
       case "result": {
-        const resultMsg = msg as { type: "result"; subtype: string; errors?: string[] }
+        const resultMsg = msg as { type: "result"; subtype: string; errors?: string[] };
         if (resultMsg.subtype.startsWith("error") && resultMsg.errors) {
-          return { type: "error", error: resultMsg.errors.join("; ") }
+          return { type: "error", error: resultMsg.errors.join("; ") };
         }
-        return null
+        return null;
       }
 
       case "stream_event": {
         if ("event" in msg) {
           const event = msg.event as {
-            type?: string
-            delta?: { type?: string; text?: string; thinking?: string }
-          }
+            type?: string;
+            delta?: { type?: string; text?: string; thinking?: string };
+          };
           if (event.type === "content_block_delta") {
             if (event.delta?.type === "text_delta" && event.delta.text) {
-              return { type: "text", content: event.delta.text, streaming: true }
+              return { type: "text", content: event.delta.text, streaming: true };
             }
             if (event.delta?.type === "thinking_delta" && event.delta.thinking) {
-              return { type: "thinking", content: event.delta.thinking, streaming: true }
+              return { type: "thinking", content: event.delta.thinking, streaming: true };
             }
           }
         }
-        return null
+        return null;
       }
 
       case "user":
-        return null
+        return null;
 
       default:
-        return null
+        return null;
     }
   }
 
   abort(): void {
-    this.abortController?.abort()
-    this.abortController = null
+    this.abortController?.abort();
+    this.abortController = null;
   }
 }

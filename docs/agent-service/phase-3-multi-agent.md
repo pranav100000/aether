@@ -45,34 +45,34 @@ Already implemented in types.ts:
 ```typescript
 // src/types.ts
 
-export type AgentType = 'claude' | 'codex' | 'opencode'
+export type AgentType = "claude" | "codex" | "opencode";
 
-export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions'
+export type PermissionMode = "default" | "acceptEdits" | "plan" | "bypassPermissions";
 
 export interface AgentConfig {
-  cwd: string
-  autoApprove: boolean
-  model?: string
-  permissionMode?: PermissionMode
-  extendedThinking?: boolean
-  conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>
+  cwd: string;
+  autoApprove: boolean;
+  model?: string;
+  permissionMode?: PermissionMode;
+  extendedThinking?: boolean;
+  conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>;
 }
 
 export interface AgentProvider {
-  readonly name: AgentType
+  readonly name: AgentType;
 
   // Check if provider is configured (has API key)
-  isConfigured(): boolean
+  isConfigured(): boolean;
 
   // Send prompt and stream responses
-  query(prompt: string, config: AgentConfig): AsyncIterable<AgentMessage>
+  query(prompt: string, config: AgentConfig): AsyncIterable<AgentMessage>;
 
   // Tool approval (for providers that support it)
-  approveToolUse?(toolId: string): void
-  rejectToolUse?(toolId: string): void
+  approveToolUse?(toolId: string): void;
+  rejectToolUse?(toolId: string): void;
 
   // Abort current operation
-  abort(): void
+  abort(): void;
 }
 ```
 
@@ -97,7 +97,8 @@ export class ClaudeProvider implements AgentProvider {
     const args = [
       "claude",
       "--print",
-      "--output-format", "stream-json",
+      "--output-format",
+      "stream-json",
       "--verbose",
       "--include-partial-messages",
     ];

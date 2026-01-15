@@ -48,63 +48,63 @@ Project VM
 ```typescript
 // frontend/src/hooks/useAgentConnection.ts
 
-import { useEffect, useRef, useState, useCallback } from 'react'
-import { useAuth } from './useAuth'
+import { useEffect, useRef, useState, useCallback } from "react";
+import { useAuth } from "./useAuth";
 
-type AgentType = 'claude' | 'codex' | 'opencode'
+type AgentType = "claude" | "codex" | "opencode";
 
 interface ToolUse {
-  id: string
-  name: string
-  input: Record<string, unknown>
-  status: 'pending' | 'approved' | 'rejected' | 'running' | 'complete'
+  id: string;
+  name: string;
+  input: Record<string, unknown>;
+  status: "pending" | "approved" | "rejected" | "running" | "complete";
 }
 
 interface AgentMessage {
-  type: 'init' | 'text' | 'tool_use' | 'tool_result' | 'thinking' | 'error' | 'done'
-  agent: AgentType
-  sessionId?: string
-  content?: string
-  streaming?: boolean
-  tool?: ToolUse
-  toolId?: string
-  result?: string
-  error?: string
+  type: "init" | "text" | "tool_use" | "tool_result" | "thinking" | "error" | "done";
+  agent: AgentType;
+  sessionId?: string;
+  content?: string;
+  streaming?: boolean;
+  tool?: ToolUse;
+  toolId?: string;
+  result?: string;
+  error?: string;
   usage?: {
-    inputTokens: number
-    outputTokens: number
-    cost: number
-  }
+    inputTokens: number;
+    outputTokens: number;
+    cost: number;
+  };
 }
 
 interface ChatMessage {
-  id: string
-  role: 'user' | 'assistant' | 'system' | 'tool'
-  content: string
-  timestamp: number
-  toolUse?: ToolUse
+  id: string;
+  role: "user" | "assistant" | "system" | "tool";
+  content: string;
+  timestamp: number;
+  toolUse?: ToolUse;
 }
 
 interface UseAgentConnectionOptions {
-  projectId: string
-  agent: AgentType
-  enabled?: boolean
+  projectId: string;
+  agent: AgentType;
+  enabled?: boolean;
 }
 
 interface UseAgentConnectionReturn {
-  isConnected: boolean
-  sessionId: string | null
-  messages: ChatMessage[]
-  isThinking: boolean
-  pendingToolCalls: ToolUse[]
-  usage: { inputTokens: number; outputTokens: number; cost: number } | null
+  isConnected: boolean;
+  sessionId: string | null;
+  messages: ChatMessage[];
+  isThinking: boolean;
+  pendingToolCalls: ToolUse[];
+  usage: { inputTokens: number; outputTokens: number; cost: number } | null;
 
-  sendPrompt: (text: string) => void
-  approve: (toolId: string) => void
-  reject: (toolId: string) => void
-  abort: () => void
-  configure: (config: { autoApprove?: boolean }) => void
-  clear: () => void
+  sendPrompt: (text: string) => void;
+  approve: (toolId: string) => void;
+  reject: (toolId: string) => void;
+  abort: () => void;
+  configure: (config: { autoApprove?: boolean }) => void;
+  clear: () => void;
 }
 
 export function useAgentConnection({
@@ -112,212 +112,217 @@ export function useAgentConnection({
   agent,
   enabled = true,
 }: UseAgentConnectionOptions): UseAgentConnectionReturn {
-  const { session } = useAuth()
-  const [isConnected, setIsConnected] = useState(false)
-  const [sessionId, setSessionId] = useState<string | null>(null)
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [isThinking, setIsThinking] = useState(false)
-  const [pendingToolCalls, setPendingToolCalls] = useState<ToolUse[]>([])
-  const [usage, setUsage] = useState<UseAgentConnectionReturn['usage']>(null)
+  const { session } = useAuth();
+  const [isConnected, setIsConnected] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [isThinking, setIsThinking] = useState(false);
+  const [pendingToolCalls, setPendingToolCalls] = useState<ToolUse[]>([]);
+  const [usage, setUsage] = useState<UseAgentConnectionReturn["usage"]>(null);
 
-  const wsRef = useRef<WebSocket | null>(null)
-  const messageIdRef = useRef(0)
+  const wsRef = useRef<WebSocket | null>(null);
+  const messageIdRef = useRef(0);
 
-  const generateId = () => `msg-${Date.now()}-${++messageIdRef.current}`
+  const generateId = () => `msg-${Date.now()}-${++messageIdRef.current}`;
 
   // Handle incoming messages
   const handleMessage = useCallback((msg: AgentMessage) => {
     switch (msg.type) {
-      case 'init':
-        setSessionId(msg.sessionId ?? null)
-        break
+      case "init":
+        setSessionId(msg.sessionId ?? null);
+        break;
 
-      case 'text':
+      case "text":
         if (msg.content) {
-          setMessages(prev => {
-            const last = prev[prev.length - 1]
-            if (last?.role === 'assistant' && msg.streaming) {
-              return [
-                ...prev.slice(0, -1),
-                { ...last, content: last.content + msg.content },
-              ]
+          setMessages((prev) => {
+            const last = prev[prev.length - 1];
+            if (last?.role === "assistant" && msg.streaming) {
+              return [...prev.slice(0, -1), { ...last, content: last.content + msg.content }];
             }
             return [
               ...prev,
               {
                 id: generateId(),
-                role: 'assistant',
+                role: "assistant",
                 content: msg.content,
                 timestamp: Date.now(),
               },
-            ]
-          })
+            ];
+          });
         }
-        break
+        break;
 
-      case 'tool_use':
+      case "tool_use":
         if (msg.tool) {
-          setMessages(prev => [
+          setMessages((prev) => [
             ...prev,
             {
               id: generateId(),
-              role: 'tool',
+              role: "tool",
               content: `${msg.tool.name}: ${JSON.stringify(msg.tool.input)}`,
               timestamp: Date.now(),
               toolUse: msg.tool,
             },
-          ])
-          if (msg.tool.status === 'pending') {
-            setPendingToolCalls(prev => [...prev, msg.tool!])
+          ]);
+          if (msg.tool.status === "pending") {
+            setPendingToolCalls((prev) => [...prev, msg.tool!]);
           }
         }
-        break
+        break;
 
-      case 'tool_result':
-        setMessages(prev =>
-          prev.map(m =>
+      case "tool_result":
+        setMessages((prev) =>
+          prev.map((m) =>
             m.toolUse?.id === msg.toolId
               ? {
                   ...m,
-                  toolUse: { ...m.toolUse!, status: 'complete' },
-                  content: m.content + '\n→ ' + msg.result,
+                  toolUse: { ...m.toolUse!, status: "complete" },
+                  content: m.content + "\n→ " + msg.result,
                 }
               : m
           )
-        )
-        setPendingToolCalls(prev => prev.filter(t => t.id !== msg.toolId))
-        break
+        );
+        setPendingToolCalls((prev) => prev.filter((t) => t.id !== msg.toolId));
+        break;
 
-      case 'thinking':
-        setIsThinking(true)
-        break
+      case "thinking":
+        setIsThinking(true);
+        break;
 
-      case 'error':
-        setMessages(prev => [
+      case "error":
+        setMessages((prev) => [
           ...prev,
           {
             id: generateId(),
-            role: 'system',
+            role: "system",
             content: `Error: ${msg.error}`,
             timestamp: Date.now(),
           },
-        ])
-        setIsThinking(false)
-        break
+        ]);
+        setIsThinking(false);
+        break;
 
-      case 'done':
-        setIsThinking(false)
+      case "done":
+        setIsThinking(false);
         if (msg.usage) {
-          setUsage(msg.usage)
+          setUsage(msg.usage);
         }
-        break
+        break;
     }
-  }, [])
+  }, []);
 
   // WebSocket connection
   useEffect(() => {
-    if (!enabled || !session?.access_token) return
+    if (!enabled || !session?.access_token) return;
 
-    let ws: WebSocket | null = null
+    let ws: WebSocket | null = null;
 
     const connect = () => {
       // Connect to Go backend (same origin as terminal)
-      const wsUrl = getAgentUrl(projectId, agent)
-      ws = new WebSocket(wsUrl, ['bearer', session.access_token])
+      const wsUrl = getAgentUrl(projectId, agent);
+      ws = new WebSocket(wsUrl, ["bearer", session.access_token]);
 
       ws.onopen = () => {
-        setIsConnected(true)
-      }
+        setIsConnected(true);
+      };
 
       ws.onmessage = (event) => {
         try {
-          const msg: AgentMessage = JSON.parse(event.data)
-          handleMessage(msg)
+          const msg: AgentMessage = JSON.parse(event.data);
+          handleMessage(msg);
         } catch {
-          console.error('Failed to parse message:', event.data)
+          console.error("Failed to parse message:", event.data);
         }
-      }
+      };
 
       ws.onerror = () => {
-        setIsConnected(false)
-      }
+        setIsConnected(false);
+      };
 
       ws.onclose = () => {
-        setIsConnected(false)
-      }
+        setIsConnected(false);
+      };
 
-      wsRef.current = ws
-    }
+      wsRef.current = ws;
+    };
 
-    connect()
+    connect();
 
     return () => {
-      ws?.close()
-      wsRef.current = null
-    }
-  }, [projectId, agent, enabled, session?.access_token, handleMessage])
+      ws?.close();
+      wsRef.current = null;
+    };
+  }, [projectId, agent, enabled, session?.access_token, handleMessage]);
 
   // Actions
   const send = useCallback((msg: object) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify(msg))
+      wsRef.current.send(JSON.stringify(msg));
     }
-  }, [])
+  }, []);
 
-  const sendPrompt = useCallback((text: string) => {
-    setMessages(prev => [
-      ...prev,
-      {
-        id: generateId(),
-        role: 'user',
-        content: text,
-        timestamp: Date.now(),
-      },
-    ])
-    setIsThinking(true)
-    send({ type: 'prompt', prompt: text })
-  }, [send])
+  const sendPrompt = useCallback(
+    (text: string) => {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: generateId(),
+          role: "user",
+          content: text,
+          timestamp: Date.now(),
+        },
+      ]);
+      setIsThinking(true);
+      send({ type: "prompt", prompt: text });
+    },
+    [send]
+  );
 
-  const approve = useCallback((toolId: string) => {
-    send({ type: 'approve', toolId })
-    setPendingToolCalls(prev =>
-      prev.map(t => (t.id === toolId ? { ...t, status: 'running' } : t))
-    )
-    setMessages(prev =>
-      prev.map(m =>
-        m.toolUse?.id === toolId
-          ? { ...m, toolUse: { ...m.toolUse!, status: 'running' } }
-          : m
-      )
-    )
-  }, [send])
+  const approve = useCallback(
+    (toolId: string) => {
+      send({ type: "approve", toolId });
+      setPendingToolCalls((prev) =>
+        prev.map((t) => (t.id === toolId ? { ...t, status: "running" } : t))
+      );
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.toolUse?.id === toolId ? { ...m, toolUse: { ...m.toolUse!, status: "running" } } : m
+        )
+      );
+    },
+    [send]
+  );
 
-  const reject = useCallback((toolId: string) => {
-    send({ type: 'reject', toolId })
-    setPendingToolCalls(prev => prev.filter(t => t.id !== toolId))
-    setMessages(prev =>
-      prev.map(m =>
-        m.toolUse?.id === toolId
-          ? { ...m, toolUse: { ...m.toolUse!, status: 'rejected' } }
-          : m
-      )
-    )
-  }, [send])
+  const reject = useCallback(
+    (toolId: string) => {
+      send({ type: "reject", toolId });
+      setPendingToolCalls((prev) => prev.filter((t) => t.id !== toolId));
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.toolUse?.id === toolId ? { ...m, toolUse: { ...m.toolUse!, status: "rejected" } } : m
+        )
+      );
+    },
+    [send]
+  );
 
   const abort = useCallback(() => {
-    send({ type: 'abort' })
-    setIsThinking(false)
-  }, [send])
+    send({ type: "abort" });
+    setIsThinking(false);
+  }, [send]);
 
-  const configure = useCallback((config: { autoApprove?: boolean }) => {
-    send({ type: 'config', config })
-  }, [send])
+  const configure = useCallback(
+    (config: { autoApprove?: boolean }) => {
+      send({ type: "config", config });
+    },
+    [send]
+  );
 
   const clear = useCallback(() => {
-    setMessages([])
-    setPendingToolCalls([])
-    setUsage(null)
-  }, [])
+    setMessages([]);
+    setPendingToolCalls([]);
+    setUsage(null);
+  }, []);
 
   return {
     isConnected,
@@ -332,15 +337,15 @@ export function useAgentConnection({
     abort,
     configure,
     clear,
-  }
+  };
 }
 
 function getAgentUrl(projectId: string, agent: AgentType): string {
   // Use same backend as terminal - just different endpoint
-  const backendUrl = import.meta.env.VITE_API_URL || ''
-  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const host = backendUrl.replace(/^https?:\/\//, '') || window.location.host
-  return `${wsProtocol}//${host}/projects/${projectId}/agent/${agent}`
+  const backendUrl = import.meta.env.VITE_API_URL || "";
+  const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const host = backendUrl.replace(/^https?:\/\//, "") || window.location.host;
+  return `${wsProtocol}//${host}/projects/${projectId}/agent/${agent}`;
 }
 ```
 
@@ -611,7 +616,7 @@ The frontend connects to the **same backend** it already uses. No new `VITE_AGEN
 
 ```typescript
 // Uses existing VITE_API_URL or same origin
-const host = import.meta.env.VITE_API_URL || window.location.origin
+const host = import.meta.env.VITE_API_URL || window.location.origin;
 ```
 
 ---

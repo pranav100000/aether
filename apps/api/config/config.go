@@ -11,9 +11,9 @@ var (
 )
 
 type Config struct {
-	LocalMode               bool
-	LocalProjectDir         string
-	LocalBaseImage          string
+	LocalMode                bool
+	LocalProjectDir          string
+	LocalBaseImage           string
 	LocalWorkspaceServiceDir string
 }
 
@@ -21,9 +21,9 @@ type Config struct {
 func Get() *Config {
 	once.Do(func() {
 		config = &Config{
-			LocalMode:               os.Getenv("LOCAL_MODE") == "true",
-			LocalProjectDir:         getEnv("LOCAL_PROJECT_DIR", "/tmp/aether-project"),
-			LocalBaseImage:          os.Getenv("LOCAL_BASE_IMAGE"), // Same image as production (e.g., pranav100000/aether-base:latest)
+			LocalMode:                os.Getenv("LOCAL_MODE") == "true",
+			LocalProjectDir:          getEnv("LOCAL_PROJECT_DIR", "/tmp/aether-project"),
+			LocalBaseImage:           os.Getenv("LOCAL_BASE_IMAGE"), // Same image as production (e.g., pranav100000/aether-base:latest)
 			LocalWorkspaceServiceDir: os.Getenv("LOCAL_WORKSPACE_SERVICE_DIR"),
 		}
 	})

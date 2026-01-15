@@ -57,18 +57,18 @@ aether is an agent-agnostic cloud development environment. Users get instant clo
 
 ## Technology Stack
 
-| Layer | Technology | Rationale |
-|-------|------------|-----------|
-| **Frontend** | React + TypeScript + Vite | Fast builds, type safety, familiar |
-| **Styling** | Tailwind CSS | Rapid iteration, consistent design |
-| **Editor** | CodeMirror 6 | Lightweight, extensible, mobile-friendly |
-| **Terminal** | xterm.js | Industry standard, WebGL rendering |
-| **Backend** | Go + Chi | Excellent concurrency, single binary, fast |
-| **Database** | Supabase (Postgres) | Auth + DB + Realtime, minimal ops |
-| **Compute** | Fly Machines | Fast boot, global regions, simple API |
-| **Storage** | Fly Volumes | Persistent, attached to machines |
-| **Payments** | Stripe | Industry standard, handles complexity |
-| **Monitoring** | Sentry + Plausible | Error tracking + privacy-friendly analytics |
+| Layer          | Technology                | Rationale                                   |
+| -------------- | ------------------------- | ------------------------------------------- |
+| **Frontend**   | React + TypeScript + Vite | Fast builds, type safety, familiar          |
+| **Styling**    | Tailwind CSS              | Rapid iteration, consistent design          |
+| **Editor**     | CodeMirror 6              | Lightweight, extensible, mobile-friendly    |
+| **Terminal**   | xterm.js                  | Industry standard, WebGL rendering          |
+| **Backend**    | Go + Chi                  | Excellent concurrency, single binary, fast  |
+| **Database**   | Supabase (Postgres)       | Auth + DB + Realtime, minimal ops           |
+| **Compute**    | Fly Machines              | Fast boot, global regions, simple API       |
+| **Storage**    | Fly Volumes               | Persistent, attached to machines            |
+| **Payments**   | Stripe                    | Industry standard, handles complexity       |
+| **Monitoring** | Sentry + Plausible        | Error tracking + privacy-friendly analytics |
 
 ---
 
@@ -676,12 +676,14 @@ plan_limits (
 ## API Routes Summary
 
 ### Phase 1
+
 ```
 GET  /health                    Health check
 WS   /terminal/:machineId       Terminal WebSocket (temporary, pre-auth)
 ```
 
 ### Phase 2
+
 ```
 GET    /projects                List user projects
 POST   /projects                Create project
@@ -694,6 +696,7 @@ WS     /projects/:id/terminal   Terminal WebSocket
 ```
 
 ### Phase 3
+
 ```
 GET    /projects/:id/files      List directory / read file
 PUT    /projects/:id/files      Write file
@@ -703,6 +706,7 @@ POST   /projects/:id/files/rename   Rename/move file
 ```
 
 ### Phase 4
+
 ```
 GET    /user/api-keys                   List connected providers
 POST   /user/api-keys                   Add/update API key
@@ -711,6 +715,7 @@ GET    /admin/analytics/agents          Agent usage analytics (internal)
 ```
 
 ### Phase 5
+
 ```
 GET    /billing/usage           Get usage summary
 POST   /billing/checkout        Create Stripe checkout session
@@ -836,49 +841,52 @@ docker push registry.fly.io/aether-vms/base:latest
 
 ## Timeline Summary
 
-| Week | Phase | Focus | Key Deliverables |
-|------|-------|-------|------------------|
-| 1 | 1 | Infrastructure | Fly Machine orchestration, base image |
-| 2 | 1 | Infrastructure | Terminal proxy, xterm.js UI |
-| 3 | 2 | Product | Supabase setup, auth, database schema |
-| 4 | 2 | Product | Project CRUD, React app, workspace page |
-| 5 | 3 | Editor | SFTP backend, file tree component |
-| 6 | 3 | Editor | CodeMirror integration, port forwarding |
-| 7 | 4 | Agents | API key storage, encryption, env injection |
-| 8 | 4 | Agents | Connected accounts UI, usage tracking |
-| 9 | 5 | Billing | Usage tracking, Stripe integration |
-| 10 | 5 | Launch | Polish, landing page, monitoring |
+| Week | Phase | Focus          | Key Deliverables                           |
+| ---- | ----- | -------------- | ------------------------------------------ |
+| 1    | 1     | Infrastructure | Fly Machine orchestration, base image      |
+| 2    | 1     | Infrastructure | Terminal proxy, xterm.js UI                |
+| 3    | 2     | Product        | Supabase setup, auth, database schema      |
+| 4    | 2     | Product        | Project CRUD, React app, workspace page    |
+| 5    | 3     | Editor         | SFTP backend, file tree component          |
+| 6    | 3     | Editor         | CodeMirror integration, port forwarding    |
+| 7    | 4     | Agents         | API key storage, encryption, env injection |
+| 8    | 4     | Agents         | Connected accounts UI, usage tracking      |
+| 9    | 5     | Billing        | Usage tracking, Stripe integration         |
+| 10   | 5     | Launch         | Polish, landing page, monitoring           |
 
 ---
 
 ## Risk Register
 
-| Risk | Probability | Impact | Mitigation | Owner |
-|------|-------------|--------|------------|-------|
-| Fly API instability | Low | High | Error handling, retries, fallback messaging | — |
-| Usage tracking gaps | Medium | High | Reconciliation cron, Fly API as source of truth | — |
-| API key security breach | Low | Critical | Encryption at rest, server-side only decryption | — |
-| Free tier abuse | High | Medium | Rate limiting, IP blocking, manual review | — |
-| Scope creep | High | Medium | Strict phase boundaries, defer to backlog | — |
-| Performance issues | Medium | Medium | Load testing, monitoring, optimization sprints | — |
+| Risk                    | Probability | Impact   | Mitigation                                      | Owner |
+| ----------------------- | ----------- | -------- | ----------------------------------------------- | ----- |
+| Fly API instability     | Low         | High     | Error handling, retries, fallback messaging     | —     |
+| Usage tracking gaps     | Medium      | High     | Reconciliation cron, Fly API as source of truth | —     |
+| API key security breach | Low         | Critical | Encryption at rest, server-side only decryption | —     |
+| Free tier abuse         | High        | Medium   | Rate limiting, IP blocking, manual review       | —     |
+| Scope creep             | High        | Medium   | Strict phase boundaries, defer to backlog       | —     |
+| Performance issues      | Medium      | Medium   | Load testing, monitoring, optimization sprints  | —     |
 
 ---
 
 ## Success Metrics
 
 ### Launch (Week 10)
+
 - [ ] 100 signups in first week
 - [ ] 10 paying customers in first month
 - [ ] <1% error rate
 - [ ] 99.5% uptime
 
 ### Month 1
+
 - [ ] 500 total users
 - [ ] 50 paying customers
 - [ ] $1,000 MRR
 - [ ] NPS > 40
 
 ### Month 3
+
 - [ ] 2,000 total users
 - [ ] 200 paying customers
 - [ ] $5,000 MRR

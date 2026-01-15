@@ -16,8 +16,8 @@ import (
 	"aether/apps/api/local"
 	"aether/libs/go/logging"
 
-	"github.com/joho/godotenv"
 	sentryhttp "github.com/getsentry/sentry-go/http"
+	"github.com/joho/godotenv"
 )
 
 func main() {
@@ -53,7 +53,7 @@ func main() {
 	if databaseURL == "" {
 		logger.Error("DATABASE_URL environment variable is required")
 		sentryCleanup()
-		os.Exit(1)
+		os.Exit(1) //nolint:gocritic // sentryCleanup called explicitly above
 	}
 
 	// Optional environment variables with defaults

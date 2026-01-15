@@ -89,25 +89,25 @@ func (h *Handler) HandleAgent(w http.ResponseWriter, r *http.Request) {
 ```typescript
 // In useAgentConnection hook (already in Phase 2)
 
-const reconnectAttempts = useRef(0)
-const maxReconnectAttempts = 5
-const reconnectDelays = [1000, 2000, 5000, 10000, 30000]
+const reconnectAttempts = useRef(0);
+const maxReconnectAttempts = 5;
+const reconnectDelays = [1000, 2000, 5000, 10000, 30000];
 
 ws.onclose = () => {
-  setIsConnected(false)
+  setIsConnected(false);
 
   if (reconnectAttempts.current < maxReconnectAttempts) {
-    const delay = reconnectDelays[reconnectAttempts.current]
-    reconnectAttempts.current++
+    const delay = reconnectDelays[reconnectAttempts.current];
+    reconnectAttempts.current++;
 
-    setTimeout(() => connect(), delay)
+    setTimeout(() => connect(), delay);
   }
-}
+};
 
 ws.onopen = () => {
-  setIsConnected(true)
-  reconnectAttempts.current = 0
-}
+  setIsConnected(true);
+  reconnectAttempts.current = 0;
+};
 ```
 
 ---
@@ -273,29 +273,29 @@ if msg.Type == "done" && msg.Usage != nil {
 ```typescript
 // In cli.ts - wrap the main loop
 
-process.on('uncaughtException', (err) => {
-  send({ type: 'error', agent, error: `Uncaught: ${err.message}` })
-  process.exit(1)
-})
+process.on("uncaughtException", (err) => {
+  send({ type: "error", agent, error: `Uncaught: ${err.message}` });
+  process.exit(1);
+});
 
-process.on('unhandledRejection', (err) => {
-  send({ type: 'error', agent, error: `Unhandled: ${String(err)}` })
-  process.exit(1)
-})
+process.on("unhandledRejection", (err) => {
+  send({ type: "error", agent, error: `Unhandled: ${String(err)}` });
+  process.exit(1);
+});
 
 // Timeout for long-running queries
-const QUERY_TIMEOUT = 5 * 60 * 1000 // 5 minutes
+const QUERY_TIMEOUT = 5 * 60 * 1000; // 5 minutes
 
 async function handleMessage(msg: ClientMessage) {
   const timeout = setTimeout(() => {
-    send({ type: 'error', agent, error: 'Query timed out' })
-    provider.abort()
-  }, QUERY_TIMEOUT)
+    send({ type: "error", agent, error: "Query timed out" });
+    provider.abort();
+  }, QUERY_TIMEOUT);
 
   try {
     // ... handle message
   } finally {
-    clearTimeout(timeout)
+    clearTimeout(timeout);
   }
 }
 ```
@@ -331,24 +331,26 @@ func (h *Handler) connectWithRetry(ip string, maxAttempts int) (*ssh.Client, err
 ```typescript
 // src/utils/logger.ts
 
-type LogLevel = 'debug' | 'info' | 'warn' | 'error'
+type LogLevel = "debug" | "info" | "warn" | "error";
 
 function log(level: LogLevel, message: string, data?: Record<string, unknown>) {
   // Log to stderr so it doesn't interfere with stdout JSON protocol
-  console.error(JSON.stringify({
-    level,
-    message,
-    timestamp: new Date().toISOString(),
-    ...data,
-  }))
+  console.error(
+    JSON.stringify({
+      level,
+      message,
+      timestamp: new Date().toISOString(),
+      ...data,
+    })
+  );
 }
 
 export const logger = {
-  debug: (msg: string, data?: Record<string, unknown>) => log('debug', msg, data),
-  info: (msg: string, data?: Record<string, unknown>) => log('info', msg, data),
-  warn: (msg: string, data?: Record<string, unknown>) => log('warn', msg, data),
-  error: (msg: string, data?: Record<string, unknown>) => log('error', msg, data),
-}
+  debug: (msg: string, data?: Record<string, unknown>) => log("debug", msg, data),
+  info: (msg: string, data?: Record<string, unknown>) => log("info", msg, data),
+  warn: (msg: string, data?: Record<string, unknown>) => log("warn", msg, data),
+  error: (msg: string, data?: Record<string, unknown>) => log("error", msg, data),
+};
 ```
 
 ### Go Backend Metrics

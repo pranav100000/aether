@@ -1,21 +1,21 @@
-"use client"
+"use client";
 
-import type { AgentType, ToolStatus, ToolResponsePayload } from "@/types/agent"
-import { CodebuffToolRenderer, getCodebuffToolIcon, getCodebuffToolColor } from "./codebuff"
-import { AlertCircleIcon } from "lucide-react"
+import type { AgentType, ToolStatus, ToolResponsePayload } from "@/types/agent";
+import { CodebuffToolRenderer, getCodebuffToolIcon, getCodebuffToolColor } from "./codebuff";
+import { AlertCircleIcon } from "lucide-react";
 
 export interface ToolRendererProps {
-  agent: AgentType
-  name: string
-  input: Record<string, unknown>
-  result?: string
-  error?: string
+  agent: AgentType;
+  name: string;
+  input: Record<string, unknown>;
+  result?: string;
+  error?: string;
   /** Current tool status - used for human-in-the-loop tools */
-  status?: ToolStatus
+  status?: ToolStatus;
   /** Tool ID - needed for sending responses */
-  toolId?: string
+  toolId?: string;
   /** Callback for human-in-the-loop tool responses */
-  onToolResponse?: (response: ToolResponsePayload) => void
+  onToolResponse?: (response: ToolResponsePayload) => void;
 }
 
 // Main tool renderer that routes to agent-specific renderers
@@ -41,7 +41,7 @@ export function ToolRenderer({
           toolId={toolId}
           onToolResponse={onToolResponse}
         />
-      )
+      );
     // TODO: Add Claude, Codex, OpenCode renderers
     case "claude":
     case "codex":
@@ -58,7 +58,7 @@ export function ToolRenderer({
           toolId={toolId}
           onToolResponse={onToolResponse}
         />
-      )
+      );
   }
 }
 
@@ -66,10 +66,10 @@ export function ToolRenderer({
 export function getToolIcon(agent: AgentType, toolName: string) {
   switch (agent) {
     case "codebuff":
-      return getCodebuffToolIcon(toolName)
+      return getCodebuffToolIcon(toolName);
     // TODO: Add Claude, Codex, OpenCode icon getters
     default:
-      return getCodebuffToolIcon(toolName) || AlertCircleIcon
+      return getCodebuffToolIcon(toolName) || AlertCircleIcon;
   }
 }
 
@@ -77,12 +77,12 @@ export function getToolIcon(agent: AgentType, toolName: string) {
 export function getToolColor(agent: AgentType, toolName: string): string {
   switch (agent) {
     case "codebuff":
-      return getCodebuffToolColor(toolName)
+      return getCodebuffToolColor(toolName);
     // TODO: Add Claude, Codex, OpenCode color getters
     default:
-      return getCodebuffToolColor(toolName) || "text-zinc-400"
+      return getCodebuffToolColor(toolName) || "text-zinc-400";
   }
 }
 
 // Re-export shared components
-export * from "./shared"
+export * from "./shared";

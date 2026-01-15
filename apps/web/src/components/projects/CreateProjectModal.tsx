@@ -1,55 +1,51 @@
-import { useState, useEffect, type FormEvent } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { HardwareSelector } from "./HardwareSelector"
-import { useUserSettings } from "@/hooks/useUserSettings"
-import {
-  IDLE_TIMEOUT_OPTIONS,
-  type HardwareConfig,
-  type IdleTimeoutMinutes,
-} from "@/lib/api"
+import { useState, useEffect, type FormEvent } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { HardwareSelector } from "./HardwareSelector";
+import { useUserSettings } from "@/hooks/useUserSettings";
+import { IDLE_TIMEOUT_OPTIONS, type HardwareConfig, type IdleTimeoutMinutes } from "@/lib/api";
 
 interface CreateProjectModalProps {
-  onClose: () => void
+  onClose: () => void;
   onCreate: (
     name: string,
     description?: string,
     hardware?: HardwareConfig,
     idleTimeoutMinutes?: IdleTimeoutMinutes
-  ) => Promise<void>
+  ) => Promise<void>;
 }
 
 export function CreateProjectModal({ onClose, onCreate }: CreateProjectModalProps) {
-  const { settings } = useUserSettings()
-  const [name, setName] = useState("")
-  const [description, setDescription] = useState("")
-  const [hardware, setHardware] = useState<HardwareConfig | null>(null)
-  const [idleTimeout, setIdleTimeout] = useState<0 | 5 | 10 | 30 | 60 | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { settings } = useUserSettings();
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [hardware, setHardware] = useState<HardwareConfig | null>(null);
+  const [idleTimeout, setIdleTimeout] = useState<0 | 5 | 10 | 30 | 60 | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Initialize idle timeout from settings
   useEffect(() => {
     if (settings && idleTimeout === null) {
-      setIdleTimeout(settings.default_idle_timeout_minutes ?? 10)
+      setIdleTimeout(settings.default_idle_timeout_minutes ?? 10);
     }
-  }, [settings, idleTimeout])
+  }, [settings, idleTimeout]);
 
   const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault()
-    if (!hardware || idleTimeout === null) return
+    e.preventDefault();
+    if (!hardware || idleTimeout === null) return;
 
-    setError(null)
-    setLoading(true)
+    setError(null);
+    setLoading(true);
 
     try {
-      await onCreate(name, description || undefined, hardware, idleTimeout)
-      onClose()
+      await onCreate(name, description || undefined, hardware, idleTimeout);
+      onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create project")
-      setLoading(false)
+      setError(err instanceof Error ? err.message : "Failed to create project");
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
@@ -98,7 +94,9 @@ export function CreateProjectModal({ onClose, onCreate }: CreateProjectModalProp
                   onChange={(e) => setIdleTimeout(parseInt(e.target.value) as 0 | 5 | 10 | 30 | 60)}
                 >
                   {IDLE_TIMEOUT_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
                   ))}
                 </select>
                 <p className="text-xs text-muted-foreground mt-1">
@@ -123,5 +121,5 @@ export function CreateProjectModal({ onClose, onCreate }: CreateProjectModalProp
         </form>
       </div>
     </div>
-  )
+  );
 }

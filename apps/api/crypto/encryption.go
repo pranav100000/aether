@@ -13,10 +13,10 @@ import (
 )
 
 var (
-	ErrMasterKeyNotSet   = errors.New("ENCRYPTION_MASTER_KEY environment variable not set")
-	ErrMasterKeyInvalid  = errors.New("ENCRYPTION_MASTER_KEY must be 32 bytes (64 hex characters)")
+	ErrMasterKeyNotSet    = errors.New("ENCRYPTION_MASTER_KEY environment variable not set")
+	ErrMasterKeyInvalid   = errors.New("ENCRYPTION_MASTER_KEY must be 32 bytes (64 hex characters)")
 	ErrCiphertextTooShort = errors.New("ciphertext too short")
-	ErrDecryptionFailed  = errors.New("decryption failed")
+	ErrDecryptionFailed   = errors.New("decryption failed")
 )
 
 // Encryptor handles AES-256-GCM encryption/decryption

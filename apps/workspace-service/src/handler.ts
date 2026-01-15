@@ -1,7 +1,7 @@
-import { readFile } from "node:fs/promises"
-import path from "node:path"
-import { createProvider, isAgentConfigured } from "./agents"
-import { buildFullPrompt } from "./utils/context"
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { createProvider, isAgentConfigured } from "./agents";
+import { buildFullPrompt } from "./utils/context";
 import type {
   AgentType,
   ClientMessage,
@@ -10,7 +10,7 @@ import type {
   AgentProvider,
   ChatHistory,
   ToolResponsePayload,
-} from "./types"
+} from "./types";
 import {
   loadHistory,
   saveHistory,
@@ -18,82 +18,87 @@ import {
   addUserMessage,
   addAssistantMessage,
   updateToolResult,
-} from "./storage"
+} from "./storage";
 
 export interface MessageSender {
-  send(msg: ServerMessage): void
+  send(msg: ServerMessage): void;
 }
 
 export interface AgentHandlerOptions {
-  cwd?: string
+  cwd?: string;
 }
 
 /** Extract specific lines from file content */
 function extractLines(content: string, startLine: number, endLine: number): string {
-  return content.split("\n").slice(startLine - 1, endLine).join("\n")
+  return content
+    .split("\n")
+    .slice(startLine - 1, endLine)
+    .join("\n");
 }
 
 /** Read file context from disk and build into prompt format */
 async function buildFileContext(
   context: ClientMessage["context"],
   cwd: string
-): Promise<Array<{ path: string; content?: string; selection?: { startLine: number; endLine: number } }>> {
-  if (!context?.files) return []
+): Promise<
+  Array<{ path: string; content?: string; selection?: { startLine: number; endLine: number } }>
+> {
+  if (!context?.files) return [];
 
-  const files = []
+  const files = [];
   for (const file of context.files) {
     if (file.include) {
-      const fullPath = path.join(cwd, file.path)
-      const content = await readFile(fullPath, "utf-8")
+      const fullPath = path.join(cwd, file.path);
+      const content = await readFile(fullPath, "utf-8");
       files.push({
         path: file.path,
         content: file.selection
           ? extractLines(content, file.selection.startLine, file.selection.endLine)
           : content,
         selection: file.selection,
-      })
+      });
     } else {
-      files.push({ path: file.path })
+      files.push({ path: file.path });
     }
   }
-  return files
+  return files;
 }
 
 export class AgentHandler {
-  private provider: AgentProvider
-  private settings: AgentSettings
-  private history!: ChatHistory
-  private cwd: string
+  private provider: AgentProvider;
+  private settings: AgentSettings;
+  private history!: ChatHistory;
+  private cwd: string;
 
   constructor(
     public readonly agent: AgentType,
     private sender: MessageSender,
     options: AgentHandlerOptions = {}
   ) {
-    this.cwd = options.cwd || Bun.env.PROJECT_CWD || Bun.cwd()
+    this.cwd = options.cwd || Bun.env.PROJECT_CWD || Bun.cwd();
 
     if (!isAgentConfigured(agent)) {
-      throw new Error(`Agent ${agent} is not configured (missing API key)`)
+      throw new Error(`Agent ${agent} is not configured (missing API key)`);
     }
 
-    this.provider = createProvider(agent, { cwd: this.cwd })
+    this.provider = createProvider(agent, { cwd: this.cwd });
     this.settings = {
       permissionMode: "bypassPermissions",
       extendedThinking: true,
-    }
+    };
   }
 
   async initialize(): Promise<void> {
-    const existingHistory = await loadHistory(this.agent)
-    this.history = existingHistory ?? createHistory(this.agent, crypto.randomUUID())
+    const existingHistory = await loadHistory(this.agent);
+    this.history = existingHistory ?? createHistory(this.agent, crypto.randomUUID());
 
-    this.sender.send({ type: "init", sessionId: this.history.sessionId })
+    this.sender.send({ type: "init", sessionId: this.history.sessionId });
 
     if (this.history.messages.length > 0) {
       this.sender.send({
         type: "history",
         history: this.history.messages,
-      })
+      });
     }
   }
 
@@ -101,105 +106,105 @@ export class AgentHandler {
     switch (msg.type) {
       case "settings":
         if (msg.settings) {
-          this.settings = { ...this.settings, ...msg.settings }
+          this.settings = { ...this.settings, ...msg.settings };
         }
-        break
+        break;
 
       case "prompt":
         // Don't await - process in background so abort can interrupt
         this.handlePrompt(msg).catch((err) => {
-          this.sender.send({ type: "error", error: String(err) })
-        })
-        break
+          this.sender.send({ type: "error", error: String(err) });
+        });
+        break;
 
       case "abort":
-        this.provider.abort()
-        this.sender.send({ type: "done" })
-        break
+        this.provider.abort();
+        this.sender.send({ type: "done" });
+        break;
 
       case "approve":
       case "reject":
         // Tool approval not implemented yet
-        break
+        break;
 
       case "tool_response":
         if (!msg.toolResponse) {
-          this.sender.send({ type: "error", error: "Missing toolResponse payload" })
-          break
+          this.sender.send({ type: "error", error: "Missing toolResponse payload" });
+          break;
         }
         // Don't await - process in background so abort can interrupt
         this.handleToolResponse(msg.toolResponse).catch((err) => {
-          this.sender.send({ type: "error", error: String(err) })
-        })
-        break
+          this.sender.send({ type: "error", error: String(err) });
+        });
+        break;
     }
   }
 
   private async handlePrompt(msg: ClientMessage): Promise<void> {
     if (!msg.prompt) {
-      this.sender.send({ type: "error", error: "Missing prompt" })
-      return
+      this.sender.send({ type: "error", error: "Missing prompt" });
+      return;
     }
 
     // Allow inline settings
     if (msg.settings) {
-      this.settings = { ...this.settings, ...msg.settings }
+      this.settings = { ...this.settings, ...msg.settings };
     }
 
     // Build conversation history for context
     const conversationHistory = this.history.messages
       .filter((m) => m.content && m.role !== "system")
-      .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }))
+      .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
 
     // Save user message
-    addUserMessage(this.history, msg.prompt)
-    await saveHistory(this.history)
+    addUserMessage(this.history, msg.prompt);
+    await saveHistory(this.history);
 
     // Process file context and build full prompt
-    const fileContext = await buildFileContext(msg.context, this.cwd)
-    const fullPrompt = buildFullPrompt(msg.prompt, fileContext, conversationHistory, "xml")
+    const fileContext = await buildFileContext(msg.context, this.cwd);
+    const fullPrompt = buildFullPrompt(msg.prompt, fileContext, conversationHistory, "xml");
 
     try {
-      let currentAssistantContent = ""
+      let currentAssistantContent = "";
 
       for await (const event of this.provider.query(fullPrompt, {
         model: this.settings.model,
         autoApprove: this.settings.permissionMode === "bypassPermissions",
         thinkingTokens: this.settings.extendedThinking ? 10000 : undefined,
       })) {
-        this.sender.send(event)
+        this.sender.send(event);
 
         // Track content for history
         if (event.type === "text" && event.content) {
-          currentAssistantContent += event.content
+          currentAssistantContent += event.content;
         }
 
         if (event.type === "tool_use" && event.tool) {
           if (currentAssistantContent) {
-            addAssistantMessage(this.history, currentAssistantContent)
-            currentAssistantContent = ""
+            addAssistantMessage(this.history, currentAssistantContent);
+            currentAssistantContent = "";
           }
           addAssistantMessage(this.history, "", {
             id: event.tool.id,
             name: event.tool.name,
             input: event.tool.input,
             status: event.tool.status,
-          })
+          });
         }
 
         if (event.type === "tool_result" && event.toolId) {
-          updateToolResult(this.history, event.toolId, event.result, event.error)
+          updateToolResult(this.history, event.toolId, event.result, event.error);
         }
 
         if (event.type === "done") {
           if (currentAssistantContent) {
-            addAssistantMessage(this.history, currentAssistantContent)
+            addAssistantMessage(this.history, currentAssistantContent);
           }
-          await saveHistory(this.history)
+          await saveHistory(this.history);
         }
       }
     } catch (err) {
-      this.sender.send({ type: "error", error: String(err) })
+      this.sender.send({ type: "error", error: String(err) });
     }
   }
 
@@ -209,8 +214,8 @@ export class AgentHandler {
       this.sender.send({
         type: "error",
         error: `Provider ${this.provider.name} does not support tool response continuation`,
-      })
-      return
+      });
+      return;
     }
 
     // Check if there's a pending run
@@ -218,58 +223,58 @@ export class AgentHandler {
       this.sender.send({
         type: "error",
         error: "No pending run to continue - tool response may have been sent too late",
-      })
-      return
+      });
+      return;
     }
 
     try {
-      let currentAssistantContent = ""
+      let currentAssistantContent = "";
 
       const events = this.provider.continueWithToolResponse(toolResponse, {
         model: this.settings.model,
         autoApprove: this.settings.permissionMode === "bypassPermissions",
         thinkingTokens: this.settings.extendedThinking ? 10000 : undefined,
-      })
+      });
 
       if (!events) {
-        this.sender.send({ type: "error", error: "Provider returned null for continuation" })
-        return
+        this.sender.send({ type: "error", error: "Provider returned null for continuation" });
+        return;
       }
 
       for await (const event of events) {
-        this.sender.send(event)
+        this.sender.send(event);
 
         // Track content for history
         if (event.type === "text" && event.content) {
-          currentAssistantContent += event.content
+          currentAssistantContent += event.content;
         }
 
         if (event.type === "tool_use" && event.tool) {
           if (currentAssistantContent) {
-            addAssistantMessage(this.history, currentAssistantContent)
-            currentAssistantContent = ""
+            addAssistantMessage(this.history, currentAssistantContent);
+            currentAssistantContent = "";
           }
           addAssistantMessage(this.history, "", {
             id: event.tool.id,
             name: event.tool.name,
             input: event.tool.input,
             status: event.tool.status,
-          })
+          });
         }
 
         if (event.type === "tool_result" && event.toolId) {
-          updateToolResult(this.history, event.toolId, event.result, event.error)
+          updateToolResult(this.history, event.toolId, event.result, event.error);
         }
 
         if (event.type === "done") {
           if (currentAssistantContent) {
-            addAssistantMessage(this.history, currentAssistantContent)
+            addAssistantMessage(this.history, currentAssistantContent);
           }
-          await saveHistory(this.history)
+          await saveHistory(this.history);
         }
       }
     } catch (err) {
-      this.sender.send({ type: "error", error: String(err) })
+      this.sender.send({ type: "error", error: String(err) });
     }
   }
 }

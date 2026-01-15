@@ -1,5 +1,5 @@
 interface StatusBadgeProps {
-  status: string
+  status: string;
 }
 
 export function StatusBadge({ status }: StatusBadgeProps) {
@@ -29,9 +29,9 @@ export function StatusBadge({ status }: StatusBadgeProps) {
       dot: "bg-red-500",
       label: "Error",
     },
-  }
+  };
 
-  const { color, dot, label } = config[status] || config.stopped
+  const { color, dot, label } = config[status] || config.stopped;
 
   return (
     <span
@@ -40,5 +40,5 @@ export function StatusBadge({ status }: StatusBadgeProps) {
       <span className={`w-2 h-2 rounded-full ${dot}`} />
       {label}
     </span>
-  )
+  );
 }

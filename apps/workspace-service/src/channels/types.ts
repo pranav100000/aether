@@ -3,14 +3,14 @@
  * All messages have a `channel` field for routing.
  */
 
-export type Channel = "terminal" | "agent" | "files" | "ports"
+export type Channel = "terminal" | "agent" | "files" | "ports";
 
 // =============================================================================
 // Base Message
 // =============================================================================
 
 export interface BaseMessage {
-  channel: Channel
+  channel: Channel;
 }
 
 // =============================================================================
@@ -18,35 +18,35 @@ export interface BaseMessage {
 // =============================================================================
 
 export interface TerminalInputMessage extends BaseMessage {
-  channel: "terminal"
-  type: "input"
-  data: string
+  channel: "terminal";
+  type: "input";
+  data: string;
 }
 
 export interface TerminalOutputMessage extends BaseMessage {
-  channel: "terminal"
-  type: "output"
-  data: string
+  channel: "terminal";
+  type: "output";
+  data: string;
 }
 
 export interface TerminalResizeMessage extends BaseMessage {
-  channel: "terminal"
-  type: "resize"
-  cols: number
-  rows: number
+  channel: "terminal";
+  type: "resize";
+  cols: number;
+  rows: number;
 }
 
-export type TerminalMessage = TerminalInputMessage | TerminalOutputMessage | TerminalResizeMessage
+export type TerminalMessage = TerminalInputMessage | TerminalOutputMessage | TerminalResizeMessage;
 
 // =============================================================================
 // Agent Channel (existing types, wrapped with channel)
 // =============================================================================
 
 export interface AgentMessage extends BaseMessage {
-  channel: "agent"
-  type: string
-  agent?: string
-  [key: string]: unknown
+  channel: "agent";
+  type: string;
+  agent?: string;
+  [key: string]: unknown;
 }
 
 // =============================================================================
@@ -55,59 +55,59 @@ export interface AgentMessage extends BaseMessage {
 
 // File change notification (outbound only - from file watcher)
 export interface FileChangeMessage extends BaseMessage {
-  channel: "files"
-  type: "change"
-  action: "create" | "modify" | "delete"
-  path: string
-  isDirectory: boolean
+  channel: "files";
+  type: "change";
+  action: "create" | "modify" | "delete";
+  path: string;
+  isDirectory: boolean;
 }
 
 // File operation requests (inbound)
 export interface FileRequestBase extends BaseMessage {
-  channel: "files"
-  requestId: string
+  channel: "files";
+  requestId: string;
 }
 
 export interface FileReadRequest extends FileRequestBase {
-  type: "read"
-  path: string
+  type: "read";
+  path: string;
 }
 
 export interface FileWriteRequest extends FileRequestBase {
-  type: "write"
-  path: string
-  content: string
-  encoding: "utf8" | "base64"
+  type: "write";
+  path: string;
+  content: string;
+  encoding: "utf8" | "base64";
 }
 
 export interface FileListRequest extends FileRequestBase {
-  type: "list"
-  path: string
+  type: "list";
+  path: string;
 }
 
 export interface FileListTreeRequest extends FileRequestBase {
-  type: "listTree"
+  type: "listTree";
 }
 
 export interface FileMkdirRequest extends FileRequestBase {
-  type: "mkdir"
-  path: string
+  type: "mkdir";
+  path: string;
 }
 
 export interface FileDeleteRequest extends FileRequestBase {
-  type: "delete"
-  path: string
+  type: "delete";
+  path: string;
 }
 
 export interface FileRenameRequest extends FileRequestBase {
-  type: "rename"
-  oldPath: string
-  newPath: string
+  type: "rename";
+  oldPath: string;
+  newPath: string;
 }
 
 export interface FileStatRequest extends FileRequestBase {
-  type: "stat"
-  path: string
+  type: "stat";
+  path: string;
 }
 
 export type FileOperationRequest =
@@ -118,80 +118,80 @@ export type FileOperationRequest =
   | FileMkdirRequest
   | FileDeleteRequest
   | FileRenameRequest
-  | FileStatRequest
+  | FileStatRequest;
 
 // File operation responses (outbound)
 export interface FileResponseBase extends BaseMessage {
-  channel: "files"
-  requestId: string
+  channel: "files";
+  requestId: string;
 }
 
 export interface FileEntry {
-  name: string
-  type: "file" | "directory"
-  size: number
-  modified: string
+  name: string;
+  type: "file" | "directory";
+  size: number;
+  modified: string;
 }
 
 export interface FileReadResponse extends FileResponseBase {
-  type: "read"
-  success: true
-  path: string
-  content: string
-  encoding: "utf8" | "base64"
-  size: number
-  modified: string
-  isBinary: boolean
+  type: "read";
+  success: true;
+  path: string;
+  content: string;
+  encoding: "utf8" | "base64";
+  size: number;
+  modified: string;
+  isBinary: boolean;
 }
 
 export interface FileWriteResponse extends FileResponseBase {
-  type: "write"
-  success: true
-  path: string
-  size: number
-  modified: string
+  type: "write";
+  success: true;
+  path: string;
+  size: number;
+  modified: string;
 }
 
 export interface FileListResponse extends FileResponseBase {
-  type: "list"
-  success: true
-  path: string
-  entries: FileEntry[]
+  type: "list";
+  success: true;
+  path: string;
+  entries: FileEntry[];
 }
 
 export interface FileListTreeResponse extends FileResponseBase {
-  type: "listTree"
-  success: true
-  paths: string[]
-  directories: string[]
+  type: "listTree";
+  success: true;
+  paths: string[];
+  directories: string[];
 }
 
 export interface FileMkdirResponse extends FileResponseBase {
-  type: "mkdir"
-  success: true
-  path: string
+  type: "mkdir";
+  success: true;
+  path: string;
 }
 
 export interface FileDeleteResponse extends FileResponseBase {
-  type: "delete"
-  success: true
-  path: string
+  type: "delete";
+  success: true;
+  path: string;
 }
 
 export interface FileRenameResponse extends FileResponseBase {
-  type: "rename"
-  success: true
-  oldPath: string
-  newPath: string
+  type: "rename";
+  success: true;
+  oldPath: string;
+  newPath: string;
 }
 
 export interface FileStatResponse extends FileResponseBase {
-  type: "stat"
-  success: true
-  path: string
-  fileType: "file" | "directory"
-  size: number
-  modified: string
+  type: "stat";
+  success: true;
+  path: string;
+  fileType: "file" | "directory";
+  size: number;
+  modified: string;
 }
 
 export type FileErrorCode =
@@ -203,14 +203,14 @@ export type FileErrorCode =
   | "BINARY_FILE"
   | "INVALID_PATH"
   | "PATH_EXISTS"
-  | "INTERNAL_ERROR"
+  | "INTERNAL_ERROR";
 
 export interface FileErrorResponse extends FileResponseBase {
-  type: "error"
-  success: false
-  error: string
-  code: FileErrorCode
-  path?: string
+  type: "error";
+  success: false;
+  error: string;
+  code: FileErrorCode;
+  path?: string;
 }
 
 export type FileOperationResponse =
@@ -222,9 +222,9 @@ export type FileOperationResponse =
   | FileDeleteResponse
   | FileRenameResponse
   | FileStatResponse
-  | FileErrorResponse
+  | FileErrorResponse;
 
-export type FilesMessage = FileChangeMessage | FileOperationResponse
+export type FilesMessage = FileChangeMessage | FileOperationResponse;
 
 // =============================================================================
 // Ports Channel
@@ -232,31 +232,31 @@ export type FilesMessage = FileChangeMessage | FileOperationResponse
 
 // Port change notification (outbound only - from port watcher)
 export interface PortChangeMessage extends BaseMessage {
-  channel: "ports"
-  type: "change"
-  action: "open" | "close"
-  port: number
+  channel: "ports";
+  type: "change";
+  action: "open" | "close";
+  port: number;
 }
 
 // Port kill request (inbound)
 export interface PortKillRequest extends BaseMessage {
-  channel: "ports"
-  requestId: string
-  type: "kill"
-  port: number
+  channel: "ports";
+  requestId: string;
+  type: "kill";
+  port: number;
 }
 
 // Port kill response (outbound)
 export interface PortKillResponse extends BaseMessage {
-  channel: "ports"
-  requestId: string
-  type: "killResponse"
-  success: boolean
-  port: number
-  error?: string
+  channel: "ports";
+  requestId: string;
+  type: "killResponse";
+  success: boolean;
+  port: number;
+  error?: string;
 }
 
-export type PortsMessage = PortChangeMessage | PortKillResponse
+export type PortsMessage = PortChangeMessage | PortKillResponse;
 
 // =============================================================================
 // Union Types
@@ -267,7 +267,7 @@ export type IncomingMessage =
   | TerminalResizeMessage
   | AgentMessage
   | FileOperationRequest
-  | PortKillRequest
+  | PortKillRequest;
 
 export type OutgoingMessage =
   | TerminalOutputMessage
@@ -275,28 +275,28 @@ export type OutgoingMessage =
   | FileChangeMessage
   | FileOperationResponse
   | PortChangeMessage
-  | PortKillResponse
+  | PortKillResponse;
 
 // =============================================================================
 // Type Guards
 // =============================================================================
 
 export function isTerminalMessage(msg: unknown): msg is TerminalMessage {
-  return typeof msg === "object" && msg !== null && (msg as BaseMessage).channel === "terminal"
+  return typeof msg === "object" && msg !== null && (msg as BaseMessage).channel === "terminal";
 }
 
 export function isAgentMessage(msg: unknown): msg is AgentMessage {
-  return typeof msg === "object" && msg !== null && (msg as BaseMessage).channel === "agent"
+  return typeof msg === "object" && msg !== null && (msg as BaseMessage).channel === "agent";
 }
 
 export function isFileOperationRequest(msg: unknown): msg is FileOperationRequest {
-  if (typeof msg !== "object" || msg === null) return false
-  const m = msg as Record<string, unknown>
-  return m.channel === "files" && typeof m.requestId === "string" && m.type !== "change"
+  if (typeof msg !== "object" || msg === null) return false;
+  const m = msg as Record<string, unknown>;
+  return m.channel === "files" && typeof m.requestId === "string" && m.type !== "change";
 }
 
 export function isPortKillRequest(msg: unknown): msg is PortKillRequest {
-  if (typeof msg !== "object" || msg === null) return false
-  const m = msg as Record<string, unknown>
-  return m.channel === "ports" && m.type === "kill" && typeof m.requestId === "string"
+  if (typeof msg !== "object" || msg === null) return false;
+  const m = msg as Record<string, unknown>;
+  return m.channel === "ports" && m.type === "kill" && typeof m.requestId === "string";
 }

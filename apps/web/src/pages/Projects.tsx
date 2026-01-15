@@ -1,15 +1,14 @@
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Spinner } from "@/components/ui/spinner"
-import { ProjectCard } from "@/components/projects/ProjectCard"
-import { CreateProjectModal } from "@/components/projects/CreateProjectModal"
-import { useProjects } from "@/hooks/useProjects"
-import type { HardwareConfig, IdleTimeoutMinutes } from "@/lib/api"
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+import { ProjectCard } from "@/components/projects/ProjectCard";
+import { CreateProjectModal } from "@/components/projects/CreateProjectModal";
+import { useProjects } from "@/hooks/useProjects";
+import type { HardwareConfig, IdleTimeoutMinutes } from "@/lib/api";
 
 export function Projects() {
-  const { projects, loading, error, createProject, deleteProject, refresh } =
-    useProjects()
-  const [showCreate, setShowCreate] = useState(false)
+  const { projects, loading, error, createProject, deleteProject, refresh } = useProjects();
+  const [showCreate, setShowCreate] = useState(false);
 
   const handleCreate = async (
     name: string,
@@ -17,8 +16,8 @@ export function Projects() {
     hardware?: HardwareConfig,
     idleTimeoutMinutes?: IdleTimeoutMinutes
   ) => {
-    await createProject({ name, description, hardware, idle_timeout_minutes: idleTimeoutMinutes })
-  }
+    await createProject({ name, description, hardware, idle_timeout_minutes: idleTimeoutMinutes });
+  };
 
   return (
     <div className="space-y-6">
@@ -46,29 +45,20 @@ export function Projects() {
       ) : projects.length === 0 ? (
         <div className="text-center py-12 bg-card border border-border rounded-lg">
           <h3 className="text-lg font-medium mb-2">No projects yet</h3>
-          <p className="text-muted-foreground mb-4">
-            Create your first project to get started.
-          </p>
+          <p className="text-muted-foreground mb-4">Create your first project to get started.</p>
           <Button onClick={() => setShowCreate(true)}>Create project</Button>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {projects.map((project) => (
-            <ProjectCard
-              key={project.id}
-              project={project}
-              onDelete={deleteProject}
-            />
+            <ProjectCard key={project.id} project={project} onDelete={deleteProject} />
           ))}
         </div>
       )}
 
       {showCreate && (
-        <CreateProjectModal
-          onClose={() => setShowCreate(false)}
-          onCreate={handleCreate}
-        />
+        <CreateProjectModal onClose={() => setShowCreate(false)} onCreate={handleCreate} />
       )}
     </div>
-  )
+  );
 }

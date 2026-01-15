@@ -121,23 +121,23 @@ Go Backend                    Agent CLI
 
 ```typescript
 interface ClientMessage {
-  type: 'prompt' | 'approve' | 'reject' | 'abort' | 'settings'
+  type: "prompt" | "approve" | "reject" | "abort" | "settings";
 
   // For 'prompt'
-  prompt?: string
-  settings?: AgentSettings     // Optional inline settings with prompt
+  prompt?: string;
+  settings?: AgentSettings; // Optional inline settings with prompt
 
   // For 'approve' / 'reject'
-  toolId?: string
+  toolId?: string;
 
   // For 'settings' - runtime settings
-  settings?: AgentSettings
+  settings?: AgentSettings;
 }
 
 interface AgentSettings {
-  model?: string                          // Model override (e.g., 'sonnet', 'opus')
-  permissionMode?: PermissionMode         // default | acceptEdits | plan | bypassPermissions
-  extendedThinking?: boolean              // Enable extended thinking mode
+  model?: string; // Model override (e.g., 'sonnet', 'opus')
+  permissionMode?: PermissionMode; // default | acceptEdits | plan | bypassPermissions
+  extendedThinking?: boolean; // Enable extended thinking mode
 }
 ```
 
@@ -145,58 +145,58 @@ interface AgentSettings {
 
 ```typescript
 interface AgentMessage {
-  type: 'init' | 'history' | 'text' | 'tool_use' | 'tool_result' | 'thinking' | 'error' | 'done'
+  type: "init" | "history" | "text" | "tool_use" | "tool_result" | "thinking" | "error" | "done";
 
   // Which agent is responding
-  agent: 'claude' | 'codex' | 'opencode'
+  agent: "claude" | "codex" | "opencode";
 
   // Session info (type: 'init')
-  sessionId?: string
+  sessionId?: string;
 
   // Previous messages (type: 'history') - sent on reconnect
-  history?: StoredMessage[]
+  history?: StoredMessage[];
 
   // Text content (type: 'text' | 'thinking')
-  content?: string
-  streaming?: boolean
+  content?: string;
+  streaming?: boolean;
 
   // Tool usage (type: 'tool_use')
   tool?: {
-    id: string
-    name: string
-    input: Record<string, unknown>
-    status: 'pending' | 'running' | 'complete'
-  }
+    id: string;
+    name: string;
+    input: Record<string, unknown>;
+    status: "pending" | "running" | "complete";
+  };
 
   // Tool result (type: 'tool_result')
-  toolId?: string
-  result?: string
-  error?: string
+  toolId?: string;
+  result?: string;
+  error?: string;
 
   // Error (type: 'error')
-  error?: string
+  error?: string;
 
   // Usage stats (type: 'done')
   usage?: {
-    inputTokens: number
-    outputTokens: number
-    cost: number
-  }
+    inputTokens: number;
+    outputTokens: number;
+    cost: number;
+  };
 }
 
 interface StoredMessage {
-  id: string
-  timestamp: number
-  role: 'user' | 'assistant' | 'system'
-  content: string
+  id: string;
+  timestamp: number;
+  role: "user" | "assistant" | "system";
+  content: string;
   tool?: {
-    id: string
-    name: string
-    input: Record<string, unknown>
-    status: string
-    result?: string
-    error?: string
-  }
+    id: string;
+    name: string;
+    input: Record<string, unknown>;
+    status: string;
+    result?: string;
+    error?: string;
+  };
 }
 ```
 
@@ -208,34 +208,34 @@ Unified interface for all agents:
 
 ```typescript
 // src/types.ts
-export type AgentType = 'claude' | 'codex' | 'opencode'
+export type AgentType = "claude" | "codex" | "opencode";
 
-export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions'
+export type PermissionMode = "default" | "acceptEdits" | "plan" | "bypassPermissions";
 
 export interface AgentConfig {
-  cwd: string
-  autoApprove: boolean
-  model?: string
-  permissionMode?: PermissionMode
-  extendedThinking?: boolean
-  conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>
+  cwd: string;
+  autoApprove: boolean;
+  model?: string;
+  permissionMode?: PermissionMode;
+  extendedThinking?: boolean;
+  conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>;
 }
 
 export interface AgentProvider {
-  readonly name: AgentType
+  readonly name: AgentType;
 
   // Check if provider is configured (has API key)
-  isConfigured(): boolean
+  isConfigured(): boolean;
 
   // Send a prompt and stream responses
-  query(prompt: string, config: AgentConfig): AsyncIterable<AgentMessage>
+  query(prompt: string, config: AgentConfig): AsyncIterable<AgentMessage>;
 
   // Handle tool approval (optional - not all agents support it)
-  approveToolUse?(toolId: string): void
-  rejectToolUse?(toolId: string): void
+  approveToolUse?(toolId: string): void;
+  rejectToolUse?(toolId: string): void;
 
   // Abort current operation
-  abort(): void
+  abort(): void;
 }
 ```
 
@@ -278,6 +278,7 @@ Sessions are persisted to the filesystem at `{STORAGE_DIR}/{agent}/`:
 ```
 
 Environment variables:
+
 - `STORAGE_DIR`: Base directory for session storage (default: `/home/coder/project/.aether`)
 - `PROJECT_CWD`: Working directory for agent operations (default: `/home/coder/project`)
 
@@ -393,7 +394,9 @@ function useAgentConnection(options: UseAgentConnectionOptions) {
 ## Implementation Phases
 
 ### [Phase 1: Claude MVP](./agent-service/phase-1-claude-mvp.md) ✅
+
 Get Claude Code working end-to-end.
+
 - Agent CLI with stdin/stdout JSON protocol
 - ClaudeProvider using Claude CLI (`--print --output-format stream-json`)
 - Session persistence with conversation history
@@ -401,19 +404,25 @@ Get Claude Code working end-to-end.
 - Bundle into VM image
 
 ### [Phase 2: Frontend Integration](./agent-service/phase-2-frontend.md) ✅
+
 Connect frontend to agent via Go backend.
+
 - Implement `useAgentConnection` hook
 - Update `AgentWidget` component
 - Settings UI (model, permission mode, extended thinking)
 
 ### [Phase 3: Multi-Agent](./agent-service/phase-3-multi-agent.md) 🔄
+
 Add Codex and OpenCode support.
+
 - CodexProvider using Codex CLI
 - OpenCodeProvider
 - Agent selector UI
 
 ### [Phase 4: Production](./agent-service/phase-4-production.md)
+
 Production hardening.
+
 - Reconnection handling
 - Rate limiting
 - Usage tracking
