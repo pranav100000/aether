@@ -1,217 +1,63 @@
 import { CodebuffClient } from "@codebuff/sdk"
 import type { AgentProvider, AgentEvent, QueryOptions, ProviderConfig } from "../types"
 
-type RunState = Awaited<ReturnType<CodebuffClient["run"]>>
+const AGENT = "codebuff/base2-max@0.0.24"
 
 export class CodebuffProvider implements AgentProvider {
   readonly name = "codebuff" as const
-  private cwd: string
-  private client: CodebuffClient | null = null
-  private previousRun: RunState | null = null
+  private client: CodebuffClient
   private abortController: AbortController | null = null
 
   constructor(config: ProviderConfig) {
-    this.cwd = config.cwd
+    this.client = new CodebuffClient({ apiKey: Bun.env.CODEBUFF_API_KEY!, cwd: config.cwd })
   }
 
   isConfigured(): boolean {
     return !!Bun.env.CODEBUFF_API_KEY && !!Bun.env.CODEBUFF_BYOK_OPENROUTER
   }
 
-  private getClient(): CodebuffClient {
-    if (!this.client) {
-      this.client = new CodebuffClient({
-        apiKey: Bun.env.CODEBUFF_API_KEY!,
-        cwd: this.cwd,
-      })
-    }
-    return this.client
-  }
-
   async *query(prompt: string, options: QueryOptions): AsyncIterable<AgentEvent> {
     this.abortController = new AbortController()
-    const client = this.getClient()
+    const queue: AgentEvent[] = []
+    let resolve: (() => void) | null = null
+    let done = false
 
-    const eventQueue: AgentEvent[] = []
-    let resolveWait: (() => void) | null = null
-    let isComplete = false
+    const push = (e: AgentEvent) => { queue.push(e); resolve?.(); resolve = null }
 
-    const handleEvent = (event: { type: string; [key: string]: unknown }) => {
-      const mapped = this.mapEvent(event, options.autoApprove)
-      if (mapped) {
-        eventQueue.push(mapped)
-        // Always try to resolve - even if null, this is safe
-        resolveWait?.()
-        resolveWait = null
-      }
-    }
-
-    const runPromise = client
-      .run({
-        agent: options.model || "base2",
-        prompt,
-        handleEvent,
-        signal: this.abortController.signal,
-        ...(this.previousRun ? { previousRun: this.previousRun } : {}),
-      })
-      .then((result: RunState) => {
-        // Only update state if not aborted
-        if (!this.abortController?.signal.aborted) {
-          this.previousRun = result
+    console.log("[Codebuff] Starting run with prompt:", prompt.slice(0, 500))
+    const result = this.client.run({
+      agent: AGENT,
+      prompt,
+      signal: this.abortController.signal,
+      handleStreamChunk: (chunk) => {
+        console.log("[Codebuff] chunk:", typeof chunk === "string" ? chunk.slice(0, 100) : chunk)
+        if (typeof chunk === "string") {
+          push({ type: "text", content: chunk, streaming: true })
         }
-        isComplete = true
-        resolveWait?.()
-        resolveWait = null
-        return result
-      })
-      .catch((err: Error) => {
-        // Only report errors if not aborted (abort may cause expected errors)
-        if (!this.abortController?.signal.aborted) {
-          eventQueue.push({ type: "error", error: err.message })
+      },
+      handleEvent: (e) => {
+        console.log("[Codebuff] event:", e.type, e)
+        if (e.type === "tool_call") {
+          const toolName = e.toolName as string
+          // Skip internal control flow tools - they're handled by the SDK
+          if (toolName === "end_turn" || toolName === "task_completed") {
+            return
+          }
+          push({ type: "tool_use", tool: { id: e.toolCallId as string, name: toolName, input: e.input as Record<string, unknown>, status: options.autoApprove ? "running" : "pending" } })
+        } else if (e.type === "tool_result") {
+          push({ type: "tool_result", toolId: e.toolCallId as string, result: JSON.stringify(e.output) })
         }
-        isComplete = true
-        resolveWait?.()
-        resolveWait = null
-        throw err
-      })
+      },
+    }).catch(err => { push({ type: "error", error: err.message }) }).finally(() => { done = true; resolve?.() })
 
-    // Main event loop
-    while (true) {
-      if (this.abortController?.signal.aborted) break
-
-      // Drain all available events first
-      while (eventQueue.length > 0) {
-        yield eventQueue.shift()!
-      }
-
-      // Exit only after queue is empty AND processing is complete
-      if (isComplete) break
-
-      // Wait for next event or completion signal
-      await new Promise<void>((resolve) => {
-        resolveWait = resolve
-        // Also resolve on abort to prevent hanging
-        const onAbort = () => resolve()
-        this.abortController?.signal.addEventListener("abort", onAbort, { once: true })
-      })
+    while (!done || queue.length > 0) {
+      while (queue.length > 0) yield queue.shift()!
+      if (!done) await new Promise<void>(r => { resolve = r })
     }
 
-    // Ensure the SDK promise is fully settled
-    try {
-      await runPromise
-    } catch {
-      // Error already pushed to queue
-    }
-
-    // Final drain: catch any events that arrived during promise settlement
-    // This is critical - events can arrive between isComplete=true and await runPromise
-    while (eventQueue.length > 0) {
-      yield eventQueue.shift()!
-    }
-
+    await result
     yield { type: "done" }
   }
 
-  private mapEvent(
-    event: { type: string; [key: string]: unknown },
-    autoApprove: boolean
-  ): AgentEvent | null {
-    switch (event.type) {
-      case "text": {
-        const text = event.text as string | undefined
-        if (text) {
-          return { type: "text", content: text, streaming: true }
-        }
-        return null
-      }
-
-      case "reasoning_delta": {
-        // Extended thinking/reasoning from the model
-        const text = event.text as string | undefined
-        if (text) {
-          return { type: "thinking", content: text, streaming: true }
-        }
-        return null
-      }
-
-      case "tool_call": {
-        const toolName = event.toolName as string | undefined
-        const toolCallId = event.toolCallId as string | undefined
-        const input = event.input as Record<string, unknown> | undefined
-
-        if (toolName) {
-          return {
-            type: "tool_use",
-            tool: {
-              id: toolCallId || crypto.randomUUID(),
-              name: toolName,
-              input: input || {},
-              status: autoApprove ? "running" : "pending",
-            },
-          }
-        }
-        return null
-      }
-
-      case "tool_result": {
-        const toolCallId = event.toolCallId as string | undefined
-        const output = event.output as unknown
-
-        return {
-          type: "tool_result",
-          toolId: toolCallId,
-          result: typeof output === "string" ? output : JSON.stringify(output),
-        }
-      }
-
-      case "subagent_start": {
-        // Subagent spawned - display as a tool use for visibility
-        const agentId = event.agentId as string | undefined
-        const agentType = event.agentType as string | undefined
-        const displayName = event.displayName as string | undefined
-
-        return {
-          type: "tool_use",
-          tool: {
-            id: agentId || crypto.randomUUID(),
-            name: "spawn_agent_inline",
-            input: {
-              agent_type: agentType || "unknown",
-              displayName: displayName,
-            },
-            status: "running",
-          },
-        }
-      }
-
-      case "subagent_finish": {
-        // Subagent completed
-        const agentId = event.agentId as string | undefined
-
-        return {
-          type: "tool_result",
-          toolId: agentId,
-          result: JSON.stringify([{ type: "json", value: { message: "Agent completed" } }]),
-        }
-      }
-
-      case "error": {
-        const message = event.message as string | undefined
-        return { type: "error", error: message || "Unknown error" }
-      }
-
-      case "start":
-      case "finish":
-        // These are SDK lifecycle events, not user-facing
-        // finish doesn't mean completion (that's when Promise resolves)
-        return null
-
-      default:
-        return null
-    }
-  }
-
-  abort(): void {
-    this.abortController?.abort()
-  }
+  abort(): void { this.abortController?.abort() }
 }

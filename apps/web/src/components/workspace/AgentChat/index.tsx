@@ -36,9 +36,13 @@ const agentConfig: Record<AgentType, AgentConfigItem> = {
     icon: BrainIcon,
     color: "text-purple-400",
     models: [
-      { value: "base", label: "Base Agent" },
+      { value: "sonnet-4.5", label: "Claude Sonnet 4.5 (Latest)" },
+      { value: "sonnet-4", label: "Claude Sonnet 4" },
+      { value: "opus-4", label: "Claude Opus 4 (Powerful)" },
+      { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+      { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash (Fast)" },
     ],
-    defaultModel: "base",
+    defaultModel: "sonnet-4.5",
   },
   opencode: {
     name: "OpenCode",

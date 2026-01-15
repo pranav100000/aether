@@ -1,6 +1,5 @@
 import { useState, useCallback } from "react"
 import { ChevronRight, ChevronDown, Folder, FolderOpen, MoreVertical, Trash2, Pencil, FilePlus, FolderPlus } from "lucide-react"
-import { api } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { useFileTreeContext } from "@/contexts/FileTreeContext"
 import { FileIcon } from "@/components/icons/FileIcon"
@@ -30,7 +29,7 @@ export function FileTreeItem({
   const [creating, setCreating] = useState<"file" | "folder" | null>(null)
   const [createName, setCreateName] = useState("")
 
-  const { handleFileChange } = useFileTreeContext()
+  const { createFile, createDirectory, deleteItem, renameItem } = useFileTreeContext()
 
   const isSelected = selectedPath === node.path
   const isDirectory = node.type === "directory"
@@ -60,13 +59,12 @@ export function FileTreeItem({
     if (!confirm(`Delete "${node.name}"?`)) return
 
     try {
-      await api.deleteFile(projectId, node.path)
-      handleFileChange("delete", node.path, isDirectory)
+      await deleteItem(node.path, isDirectory)
     } catch (err) {
       console.error("Failed to delete:", err)
       alert("Failed to delete: " + (err instanceof Error ? err.message : "Unknown error"))
     }
-  }, [projectId, node.path, node.name, isDirectory, handleFileChange])
+  }, [node.path, node.name, isDirectory, deleteItem])
 
   const handleRename = useCallback(async () => {
     if (!newName || newName === node.name) {
@@ -77,17 +75,14 @@ export function FileTreeItem({
     try {
       const parentPath = dirname(node.path)
       const newPath = join(parentPath, newName)
-      await api.renameFile(projectId, node.path, newPath)
-      // Delete old path and add new path
-      handleFileChange("delete", node.path, isDirectory)
-      handleFileChange("create", newPath, isDirectory)
+      await renameItem(node.path, newPath, isDirectory)
     } catch (err) {
       console.error("Failed to rename:", err)
       alert("Failed to rename: " + (err instanceof Error ? err.message : "Unknown error"))
     } finally {
       setRenaming(false)
     }
-  }, [newName, node.name, projectId, node.path, isDirectory, handleFileChange])
+  }, [newName, node.name, node.path, isDirectory, renameItem])
 
   const handleCreate = useCallback(async () => {
     if (!createName || !creating) {
@@ -97,13 +92,11 @@ export function FileTreeItem({
 
     try {
       const createPath = join(node.path, createName)
-      const creatingDirectory = creating === "folder"
-      if (creatingDirectory) {
-        await api.mkdir(projectId, createPath)
+      if (creating === "folder") {
+        await createDirectory(createPath)
       } else {
-        await api.writeFile(projectId, createPath, "")
+        await createFile(createPath)
       }
-      handleFileChange("create", createPath, creatingDirectory)
       setExpanded(true)
     } catch (err) {
       console.error("Failed to create:", err)
@@ -112,7 +105,7 @@ export function FileTreeItem({
       setCreating(null)
       setCreateName("")
     }
-  }, [createName, creating, projectId, node.path, handleFileChange])
+  }, [createName, creating, node.path, createFile, createDirectory])
 
   return (
     <div>

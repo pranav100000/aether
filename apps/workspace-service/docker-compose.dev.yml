@@ -11,13 +11,13 @@ services:
       # Mount agent source for live editing
       - ./src:/app/src:ro
       # Mount a test project directory
-      - ${TEST_PROJECT_DIR:-./test-project}:/home/coder/project
-      # Persist agent history
-      - agent-data:/home/coder/project/.aether
+      - ${TEST_PROJECT_DIR:-./test-project}:/home/coder/workspace/project
+      # Persist agent history (sibling to project, not inside it)
+      - agent-data:/home/coder/workspace/.aether
     environment:
       - AGENT_PORT=3001
-      - PROJECT_CWD=/home/coder/project
-      - STORAGE_DIR=/home/coder/project/.aether
+      - PROJECT_CWD=/home/coder/workspace/project
+      - STORAGE_DIR=/home/coder/workspace/.aether
       - LOCAL_MODE=true
       # API keys from host .env
       - ANTHROPIC_API_KEY

@@ -120,6 +120,7 @@ export function useAgentConnection({
         if (connectionIdRef.current !== thisConnectionId) return
         try {
           const message: ServerMessage = JSON.parse(event.data as string)
+          console.log("[Agent Chunk]", message.type, message.streaming ? "(streaming)" : "", message)
           onMessage(message)
         } catch (e) {
           console.error("[useAgentConnection] Failed to parse message:", event.data, e)

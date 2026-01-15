@@ -49,7 +49,7 @@ function WorkspaceContent({
     updateContent,
     saveFile,
     getFile,
-  } = useEditor({ projectId: project.id, fileOps })
+  } = useEditor({ fileOps })
 
   const handleFileSelect = useCallback(
     (path: string) => {
@@ -137,6 +137,7 @@ function ConnectedWorkspace({
   terminalOpen,
   rightSidebarOpen,
   onPortChange,
+  onKillPortReady,
 }: {
   project: Project
   onDisconnect: () => void
@@ -144,6 +145,7 @@ function ConnectedWorkspace({
   terminalOpen: boolean
   rightSidebarOpen: boolean
   onPortChange: (action: "open" | "close", port: number) => void
+  onKillPortReady: (killPort: (port: number) => Promise<void>) => void
 }) {
   const [fileTreeChangeHandler, setFileTreeChangeHandler] = useState<
     ((action: string, path: string, isDirectory: boolean) => void) | null
@@ -161,6 +163,13 @@ function ConnectedWorkspace({
     workspace.connect()
     return () => workspace.disconnect()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Notify parent when killPort is ready
+  useEffect(() => {
+    if (workspace.status === "connected") {
+      onKillPortReady(workspace.killPort)
+    }
+  }, [workspace.status, workspace.killPort, onKillPortReady])
 
   // Create file operations provider from workspace connection
   const fileOps: FileOperationsProvider | undefined = useMemo(() => {
@@ -237,6 +246,11 @@ export function Workspace() {
   const [terminalOpen, setTerminalOpen] = useState(false)
   const [rightSidebarOpen, setRightSidebarOpen] = useState(true)
   const [activePorts, setActivePorts] = useState<number[]>([])
+  const [killPort, setKillPort] = useState<((port: number) => Promise<void>) | null>(null)
+
+  const handleKillPortReady = useCallback((fn: (port: number) => Promise<void>) => {
+    setKillPort(() => fn)
+  }, [])
 
   const handlePortChange = useCallback((action: "open" | "close", port: number) => {
     setActivePorts((prev) => {
@@ -291,8 +305,13 @@ export function Workspace() {
         </div>
 
         <div className="flex items-center gap-2">
-          {project.status === "running" && (
-            <PreviewButton projectId={project.id} activePorts={activePorts} previewToken={project.preview_token} />
+          {project.status === "running" && killPort && (
+            <PreviewButton
+              projectId={project.id}
+              activePorts={activePorts}
+              previewToken={project.preview_token}
+              onKillPort={killPort}
+            />
           )}
           {project.status === "running" && (
             <>
@@ -350,6 +369,7 @@ export function Workspace() {
             terminalOpen={terminalOpen}
             rightSidebarOpen={rightSidebarOpen}
             onPortChange={handlePortChange}
+            onKillPortReady={handleKillPortReady}
           />
         ) : project.status === "starting" ? (
           <div className="h-full flex items-center justify-center">

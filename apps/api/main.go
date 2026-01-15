@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/base64"
 	"net/http"
 	"os"
 	"strconv"
@@ -14,8 +13,6 @@ import (
 	"aether/apps/api/handlers"
 	authmw "aether/apps/api/middleware"
 	"aether/libs/go/logging"
-	"aether/apps/api/sftp"
-	"aether/apps/api/ssh"
 	"aether/apps/api/workspace"
 
 	"github.com/go-chi/chi/v5"
@@ -48,6 +45,13 @@ func main() {
 			logger.Debug("no .env file found, using environment variables")
 		}
 	}
+
+	// Validate configuration before proceeding
+	if err := config.ValidateStartupConfig(logger); err != nil {
+		logger.Error("startup validation failed", "error", err)
+		os.Exit(1)
+	}
+
 	port := getEnv("API_PORT", "8080")
 
 	// Initialize config (checks LOCAL_MODE env var)
@@ -71,20 +75,6 @@ func main() {
 	idleTimeoutMin := getEnvInt("IDLE_TIMEOUT_MINUTES", 10)
 
 	flyClient := fly.NewClient(flyToken, flyAppName, flyRegion)
-
-	sshClient, err := loadSSHClient()
-	if err != nil {
-		logger.Error("failed to load SSH client", "error", err)
-		os.Exit(1)
-	}
-
-	// Initialize SFTP client (uses same SSH key)
-	sftpClient, err := loadSFTPClient()
-	if err != nil {
-		logger.Error("failed to load SFTP client", "error", err)
-		os.Exit(1)
-	}
-	defer sftpClient.Close()
 
 	// Initialize database client
 	databaseURL := requireEnv(logger, "DATABASE_URL")
@@ -133,8 +123,6 @@ func main() {
 	agentHandler := handlers.NewAgentHandler(wsFactory.ConnectionResolver(), dbClient, authMiddleware, apiKeysGetter)
 	workspaceHandler := handlers.NewWorkspaceHandler(wsFactory.ConnectionResolver(), dbClient, authMiddleware, apiKeysGetter)
 	healthHandler := handlers.NewHealthHandler(dbClient, getEnv("VERSION", "dev"))
-	filesHandler := handlers.NewFilesHandler(sftpClient, wsFactory.ConnectionResolver(), dbClient)
-	portsHandler := handlers.NewPortsHandler(sshClient, wsFactory.ConnectionResolver(), dbClient)
 
 	// Start idle project checker
 	projectHandler.StartIdleChecker(1 * time.Minute)
@@ -187,19 +175,7 @@ func main() {
 			r.Delete("/{id}", projectHandler.Delete)
 			r.Post("/{id}/start", projectHandler.Start)
 			r.Post("/{id}/stop", projectHandler.Stop)
-
-			// File operations
-			r.Route("/{id}/files", func(r chi.Router) {
-				r.Get("/", filesHandler.ListOrRead)
-				r.Get("/tree", filesHandler.ListTree)
-				r.Put("/", filesHandler.Write)
-				r.Delete("/", filesHandler.Delete)
-				r.Post("/mkdir", filesHandler.Mkdir)
-				r.Post("/rename", filesHandler.Rename)
-			})
-
-			// Port operations
-			r.Post("/{id}/ports/{port}/kill", portsHandler.KillPort)
+			// File and port operations are now handled via WebSocket (workspace endpoint)
 		})
 
 		// User API keys routes
@@ -239,46 +215,6 @@ func main() {
 		logger.Error("server failed", "error", err)
 		os.Exit(1)
 	}
-}
-
-func loadSSHClient() (*ssh.Client, error) {
-	if keyPath := os.Getenv("SSH_PRIVATE_KEY_PATH"); keyPath != "" {
-		return ssh.NewClient(keyPath, "coder")
-	}
-
-	if keyBase64 := os.Getenv("SSH_PRIVATE_KEY"); keyBase64 != "" {
-		keyBytes, err := base64.StdEncoding.DecodeString(keyBase64)
-		if err != nil {
-			return nil, err
-		}
-		return ssh.NewClientFromKey(keyBytes, "coder")
-	}
-
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return nil, err
-	}
-	return ssh.NewClient(homeDir+"/.ssh/id_rsa", "coder")
-}
-
-func loadSFTPClient() (*sftp.Client, error) {
-	if keyPath := os.Getenv("SSH_PRIVATE_KEY_PATH"); keyPath != "" {
-		return sftp.NewClient(keyPath, "coder")
-	}
-
-	if keyBase64 := os.Getenv("SSH_PRIVATE_KEY"); keyBase64 != "" {
-		keyBytes, err := base64.StdEncoding.DecodeString(keyBase64)
-		if err != nil {
-			return nil, err
-		}
-		return sftp.NewClientFromKey(keyBytes, "coder")
-	}
-
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return nil, err
-	}
-	return sftp.NewClient(homeDir+"/.ssh/id_rsa", "coder")
 }
 
 func getEnv(key, defaultValue string) string {

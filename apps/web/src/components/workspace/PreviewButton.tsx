@@ -1,12 +1,13 @@
 import { useState } from "react"
 import { ExternalLink, Square } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { api } from "@/lib/api"
 
 interface PreviewButtonProps {
   projectId: string
   activePorts: number[]
   previewToken?: string
+  /** WebSocket-based killPort function */
+  onKillPort: (port: number) => Promise<void>
 }
 
 // Preview domain from env (e.g., "149.248.213.170.nip.io" for dev or "preview.aether.dev" for prod)
@@ -25,7 +26,7 @@ function getPreviewUrl(projectId: string, port: number, token?: string): string 
   return `http://${subdomain}.${PREVIEW_DOMAIN}`
 }
 
-export function PreviewButton({ projectId, activePorts, previewToken }: PreviewButtonProps) {
+export function PreviewButton({ projectId, activePorts, previewToken, onKillPort }: PreviewButtonProps) {
   const [killingPorts, setKillingPorts] = useState<Set<number>>(new Set())
 
   const openPreview = (port: number) => {
@@ -33,10 +34,10 @@ export function PreviewButton({ projectId, activePorts, previewToken }: PreviewB
     window.open(url, "_blank")
   }
 
-  const killPort = async (port: number) => {
+  const handleKillPort = async (port: number) => {
     setKillingPorts((prev) => new Set(prev).add(port))
     try {
-      await api.killPort(projectId, port)
+      await onKillPort(port)
       // Port will be removed from activePorts via WebSocket port_change event
     } catch (error) {
       console.error("Failed to kill port:", error)
@@ -70,7 +71,7 @@ export function PreviewButton({ projectId, activePorts, previewToken }: PreviewB
             {"Port " + port}
           </button>
           <button
-            onClick={() => killPort(port)}
+            onClick={() => handleKillPort(port)}
             disabled={killingPorts.has(port)}
             className={cn(
               "px-1.5 py-1.5 border-l border-primary-foreground/20",

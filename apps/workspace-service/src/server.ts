@@ -15,7 +15,7 @@ import type { ServerWebSocket } from "bun"
 
 const PORT = parseInt(Bun.env.AGENT_PORT || "3001")
 const VALID_AGENTS = ["claude", "codex", "codebuff", "opencode"]
-const PROJECT_CWD = Bun.env.PROJECT_CWD || "/home/coder/project"
+const PROJECT_CWD = Bun.env.PROJECT_CWD || "/home/coder/workspace/project"
 
 interface WSData {
   mode: "workspace" | "agent-only"

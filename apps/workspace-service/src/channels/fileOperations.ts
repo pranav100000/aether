@@ -439,6 +439,7 @@ export class FileOperations {
       "coverage",
       ".nyc_output",
       ".DS_Store",
+      "lost+found", // Linux filesystem recovery directory (root-only)
     ])
 
     // Ignore patterns in set

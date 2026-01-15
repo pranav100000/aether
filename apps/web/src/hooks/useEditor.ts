@@ -1,5 +1,4 @@
 import { useState, useCallback, useRef } from "react"
-import { api } from "@/lib/api"
 import type { FileOperationsProvider } from "./useWorkspaceConnection"
 
 export interface OpenFile {
@@ -13,9 +12,8 @@ export interface OpenFile {
 }
 
 interface UseEditorOptions {
-  projectId: string
-  /** Optional WebSocket file operations provider - uses REST API if not provided */
-  fileOps?: FileOperationsProvider
+  /** WebSocket file operations provider - required for all file operations */
+  fileOps: FileOperationsProvider
 }
 
 interface UseEditorReturn {
@@ -31,7 +29,7 @@ interface UseEditorReturn {
   getFile: (path: string) => OpenFile | undefined
 }
 
-export function useEditor({ projectId, fileOps }: UseEditorOptions): UseEditorReturn {
+export function useEditor({ fileOps }: UseEditorOptions): UseEditorReturn {
   const [openFiles, setOpenFiles] = useState<OpenFile[]>([])
   const [activeFile, setActiveFile] = useState<string | null>(null)
   const saveTimeouts = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
@@ -67,10 +65,7 @@ export function useEditor({ projectId, fileOps }: UseEditorOptions): UseEditorRe
       setActiveFile(path)
 
       try {
-        // Use WebSocket file operations if available, otherwise fall back to REST API
-        const fileInfo = fileOps
-          ? await fileOps.readFile(path)
-          : await api.readFile(projectId, path)
+        const fileInfo = await fileOps.readFile(path)
         setOpenFiles((prev) =>
           prev.map((f) =>
             f.path === path
@@ -97,7 +92,7 @@ export function useEditor({ projectId, fileOps }: UseEditorOptions): UseEditorRe
         )
       }
     },
-    [projectId, fileOps, openFiles]
+    [fileOps, openFiles]
   )
 
   const closeFile = useCallback(
@@ -153,12 +148,7 @@ export function useEditor({ projectId, fileOps }: UseEditorOptions): UseEditorRe
       )
 
       try {
-        // Use WebSocket file operations if available, otherwise fall back to REST API
-        if (fileOps) {
-          await fileOps.writeFile(path, file.content)
-        } else {
-          await api.writeFile(projectId, path, file.content)
-        }
+        await fileOps.writeFile(path, file.content)
         setOpenFiles((prev) =>
           prev.map((f) =>
             f.path === path
@@ -186,7 +176,7 @@ export function useEditor({ projectId, fileOps }: UseEditorOptions): UseEditorRe
         throw err
       }
     },
-    [projectId, fileOps, openFiles]
+    [fileOps, openFiles]
   )
 
   const saveAllFiles = useCallback(async () => {

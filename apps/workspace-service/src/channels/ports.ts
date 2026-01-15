@@ -30,14 +30,18 @@ export class PortWatcher {
     this.sendFn = send
 
     // Initial scan - emit all existing ports as "open"
-    this.getListeningPorts().then((ports) => {
-      for (const port of ports) {
-        this.knownPorts.add(port)
-        this.startForwarder(port)
-        this.send(port, "open")
-      }
-      this.log.info("started", { initial_ports: ports.size, poll_interval_ms: this.config.pollIntervalMs })
-    })
+    this.getListeningPorts()
+      .then((ports) => {
+        for (const port of ports) {
+          this.knownPorts.add(port)
+          this.startForwarder(port)
+          this.send(port, "open")
+        }
+        this.log.info("started", { initial_ports: ports.size, poll_interval_ms: this.config.pollIntervalMs })
+      })
+      .catch((err) => {
+        this.log.error("failed initial port scan", { error: String(err) })
+      })
 
     // Start polling
     this.pollInterval = setInterval(() => {

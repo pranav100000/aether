@@ -153,7 +153,7 @@ func (h *WorkspaceHandler) HandleWorkspace(w http.ResponseWriter, r *http.Reques
 	}
 
 	if err := connector.Connect(ctx, config); err != nil {
-		log.Error("workspace connector failed", "error", err)
+		log.Error("workspace connector failed", "host", connInfo.Host, "port", connInfo.WebSocketPort, "error", err)
 		sendWorkspaceError(wsConn, "Failed to connect to workspace: "+err.Error())
 		return
 	}

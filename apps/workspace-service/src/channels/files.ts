@@ -27,19 +27,19 @@ export class FileWatcher {
    */
   async initialize(send: (msg: FileChangeMessage) => void): Promise<void> {
     this.sendFn = send
-
-    try {
-      await this.watchDirectory(this.projectDir)
-      this.log.info("watching", { dir: this.projectDir })
-    } catch (err) {
-      this.log.error("failed to initialize", { error: String(err) })
-    }
+    await this.watchDirectory(this.projectDir)
+    this.log.info("watching", { dir: this.projectDir })
   }
 
   /**
    * Recursively watch a directory
    */
   private async watchDirectory(dirPath: string): Promise<void> {
+    // Don't watch ignored directories (e.g., node_modules, .git)
+    if (this.shouldIgnorePath(dirPath)) {
+      return
+    }
+
     // Watch this directory
     const watcher = watch(dirPath, { persistent: false }, (eventType, filename) => {
       if (filename) {
@@ -64,8 +64,9 @@ export class FileWatcher {
           await this.watchDirectory(join(dirPath, entry.name))
         }
       }
-    } catch {
-      // Directory might not exist or be readable
+    } catch (err) {
+      // Non-fatal: subdirectory may not exist or be readable (race condition during file operations)
+      this.log.warn("cannot watch subdirectories", { dir: dirPath, error: String(err) })
     }
   }
 
@@ -90,9 +91,23 @@ export class FileWatcher {
   }
 
   /**
+   * Check if a path should be ignored (contains ignored directories)
+   */
+  private shouldIgnorePath(fullPath: string): boolean {
+    const relPath = relative(this.projectDir, fullPath)
+    const parts = relPath.split("/")
+    return parts.some((part: string) => this.shouldIgnore(part))
+  }
+
+  /**
    * Handle file system event with debouncing
    */
   private handleEvent(eventType: string, fullPath: string): void {
+    // Skip events for ignored paths (e.g., node_modules, .git)
+    if (this.shouldIgnorePath(fullPath)) {
+      return
+    }
+
     // Debounce events for the same path
     const existing = this.pendingEvents.get(fullPath)
     if (existing) {

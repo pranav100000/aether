@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from "react"
 import ReconnectingWebSocket from "reconnecting-websocket"
 import { supabase } from "@/lib/supabase"
-import { api, type FileInfo, type FileTree, type DirListing } from "@/lib/api"
+import { api } from "@/lib/api"
+import type { FileInfo, FileTree, DirListing } from "@aether/types"
 import type {
   AgentType,
   ServerMessage,
@@ -378,6 +379,7 @@ export function useWorkspaceConnection({
 
     try {
       const message = JSON.parse(data) as IncomingMessage
+      console.log("[WS Message]", message.channel, message.type, message)
 
       switch (message.channel) {
         case "terminal":

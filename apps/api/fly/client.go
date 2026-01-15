@@ -166,7 +166,7 @@ func (c *Client) CreateMachine(name string, config handlers.MachineConfig) (*han
 
 	respBody, err := c.doRequest("POST", "/machines", req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create machine %s (region=%s): %w", name, region, err)
 	}
 
 	var machine Machine
@@ -180,7 +180,7 @@ func (c *Client) CreateMachine(name string, config handlers.MachineConfig) (*han
 func (c *Client) GetMachine(machineID string) (*handlers.Machine, error) {
 	respBody, err := c.doRequest("GET", "/machines/"+machineID, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get machine %s: %w", machineID, err)
 	}
 
 	var machine Machine
@@ -205,17 +205,26 @@ func machineToHandler(m *Machine) *handlers.Machine {
 
 func (c *Client) StartMachine(machineID string) error {
 	_, err := c.doRequest("POST", "/machines/"+machineID+"/start", nil)
-	return err
+	if err != nil {
+		return fmt.Errorf("start machine %s: %w", machineID, err)
+	}
+	return nil
 }
 
 func (c *Client) StopMachine(machineID string) error {
 	_, err := c.doRequest("POST", "/machines/"+machineID+"/stop", nil)
-	return err
+	if err != nil {
+		return fmt.Errorf("stop machine %s: %w", machineID, err)
+	}
+	return nil
 }
 
 func (c *Client) DeleteMachine(machineID string) error {
 	_, err := c.doRequest("DELETE", "/machines/"+machineID, nil)
-	return err
+	if err != nil {
+		return fmt.Errorf("delete machine %s: %w", machineID, err)
+	}
+	return nil
 }
 
 func (c *Client) ListMachines() ([]Machine, error) {
@@ -263,7 +272,7 @@ func (c *Client) WaitForState(machineID string, desiredState string, timeout tim
 	}
 
 	body, _ := io.ReadAll(resp.Body)
-	return fmt.Errorf("wait failed (%d): %s", resp.StatusCode, string(body))
+	return fmt.Errorf("wait for machine %s state=%s failed (%d): %s", machineID, desiredState, resp.StatusCode, string(body))
 }
 
 func (c *Client) GetAppName() string {
@@ -310,7 +319,7 @@ func (c *Client) CreateVolume(name string, sizeGB int, region string) (*handlers
 
 	respBody, err := c.doRequest("POST", "/volumes", req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create volume %s (region=%s, size=%dGB): %w", name, region, sizeGB, err)
 	}
 
 	var volume Volume
@@ -324,7 +333,7 @@ func (c *Client) CreateVolume(name string, sizeGB int, region string) (*handlers
 func (c *Client) GetVolume(volumeID string) (*handlers.Volume, error) {
 	respBody, err := c.doRequest("GET", "/volumes/"+volumeID, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get volume %s: %w", volumeID, err)
 	}
 
 	var volume Volume
@@ -349,7 +358,10 @@ func volumeToHandler(v *Volume) *handlers.Volume {
 
 func (c *Client) DeleteVolume(volumeID string) error {
 	_, err := c.doRequest("DELETE", "/volumes/"+volumeID, nil)
-	return err
+	if err != nil {
+		return fmt.Errorf("delete volume %s: %w", volumeID, err)
+	}
+	return nil
 }
 
 func (c *Client) ListVolumes() ([]Volume, error) {

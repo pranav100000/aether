@@ -53,8 +53,8 @@ func (b *EnvBuilder) BuildEnv(ctx context.Context, projectID, userID string, ext
 // BuildAgentEnv builds environment variables for an agent with derived keys
 func (b *EnvBuilder) BuildAgentEnv(ctx context.Context, projectID, userID string) map[string]string {
 	env := b.BuildEnv(ctx, projectID, userID, map[string]string{
-		"STORAGE_DIR": "/home/coder/project/.aether",
-		"PROJECT_CWD": "/home/coder/project",
+		"STORAGE_DIR": "/home/coder/workspace/.aether",
+		"PROJECT_CWD": "/home/coder/workspace/project",
 	})
 
 	// Add derived keys for specific SDKs

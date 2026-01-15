@@ -53,8 +53,7 @@ export class PTYHandler {
    */
   handleMessage(msg: TerminalInputMessage | TerminalResizeMessage): void {
     if (!this.ptyProcess) {
-      this.log.error("not initialized")
-      return
+      throw new Error("PTY not initialized - call initialize() first")
     }
 
     switch (msg.type) {
