@@ -24,7 +24,7 @@ func main() {
 	// Load .env file if present
 	if err := godotenv.Load(); err != nil {
 		// Try parent directory (for local dev)
-		godotenv.Load("../.env")
+		_ = godotenv.Load("../.env")
 	}
 
 	// Initialize Sentry first (if DSN is configured)
@@ -34,7 +34,9 @@ func main() {
 		TracesSampleRate: 0.1,
 	})
 	if err != nil {
-		os.Stderr.WriteString("failed to initialize Sentry: " + err.Error() + "\n")
+		if _, writeErr := os.Stderr.WriteString("failed to initialize Sentry: " + err.Error() + "\n"); writeErr != nil {
+			os.Exit(1)
+		}
 		os.Exit(1)
 	}
 	defer sentryCleanup()
@@ -50,6 +52,7 @@ func main() {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
 		logger.Error("DATABASE_URL environment variable is required")
+		sentryCleanup()
 		os.Exit(1)
 	}
 

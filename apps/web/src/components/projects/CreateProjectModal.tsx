@@ -4,7 +4,6 @@ import { Input } from "@/components/ui/input"
 import { HardwareSelector } from "./HardwareSelector"
 import { useUserSettings } from "@/hooks/useUserSettings"
 import {
-  HARDWARE_PRESETS,
   IDLE_TIMEOUT_OPTIONS,
   type HardwareConfig,
   type IdleTimeoutMinutes,
@@ -21,24 +20,25 @@ interface CreateProjectModalProps {
 }
 
 export function CreateProjectModal({ onClose, onCreate }: CreateProjectModalProps) {
-  const { settings, loading: settingsLoading } = useUserSettings()
+  const { settings } = useUserSettings()
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
-  const [hardware, setHardware] = useState<HardwareConfig>(HARDWARE_PRESETS[0].config)
-  const [idleTimeout, setIdleTimeout] = useState<0 | 5 | 10 | 30 | 60>(10)
+  const [hardware, setHardware] = useState<HardwareConfig | null>(null)
+  const [idleTimeout, setIdleTimeout] = useState<0 | 5 | 10 | 30 | 60 | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Apply user defaults when settings load (select "Default" preset by default)
+  // Initialize idle timeout from settings
   useEffect(() => {
-    if (settings) {
-      setHardware(settings.default_hardware)
+    if (settings && idleTimeout === null) {
       setIdleTimeout(settings.default_idle_timeout_minutes ?? 10)
     }
-  }, [settings])
+  }, [settings, idleTimeout])
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
+    if (!hardware || idleTimeout === null) return
+
     setError(null)
     setLoading(true)
 
@@ -84,41 +84,39 @@ export function CreateProjectModal({ onClose, onCreate }: CreateProjectModalProp
           {/* Hardware Configuration */}
           <div>
             <label className="text-sm font-medium block mb-2">Hardware Configuration</label>
-            {settingsLoading ? (
-              <div className="text-sm text-muted-foreground p-4 border rounded-md">
-                Loading defaults...
-              </div>
-            ) : (
-              <HardwareSelector
-                value={hardware}
-                onChange={setHardware}
-                defaultConfig={settings?.default_hardware}
-              />
-            )}
+            <HardwareSelector value={hardware} onChange={setHardware} />
           </div>
 
           {/* Idle Timeout */}
           <div>
             <label className="text-sm font-medium block mb-2">Idle Timeout</label>
-            <select
-              className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              value={idleTimeout}
-              onChange={(e) => setIdleTimeout(parseInt(e.target.value) as 0 | 5 | 10 | 30 | 60)}
-            >
-              {IDLE_TIMEOUT_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-            <p className="text-xs text-muted-foreground mt-1">
-              Project will automatically stop after this duration of inactivity
-            </p>
+            {idleTimeout !== null ? (
+              <>
+                <select
+                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  value={idleTimeout}
+                  onChange={(e) => setIdleTimeout(parseInt(e.target.value) as 0 | 5 | 10 | 30 | 60)}
+                >
+                  {IDLE_TIMEOUT_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Project will automatically stop after this duration of inactivity
+                </p>
+              </>
+            ) : (
+              <div className="text-sm text-muted-foreground p-4 border rounded-md">
+                Loading defaults...
+              </div>
+            )}
           </div>
 
           <div className="flex justify-end gap-3 pt-4">
             <Button type="button" variant="secondary" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" loading={loading}>
+            <Button type="submit" loading={loading} disabled={!hardware || idleTimeout === null}>
               Create project
             </Button>
           </div>

@@ -73,7 +73,7 @@ export const ToolHeader = ({
   title,
   type,
   state,
-  toolName,
+  toolName: _toolName,
   toolIcon: ToolIcon,
   toolColor,
   ...props

@@ -184,7 +184,7 @@ export type MessageBranchSelectorProps = HTMLAttributes<HTMLDivElement> & {
 
 export const MessageBranchSelector = ({
   className,
-  from,
+  from: _from,
   ...props
 }: MessageBranchSelectorProps) => {
   const { totalBranches } = useMessageBranch();
@@ -196,7 +196,7 @@ export const MessageBranchSelector = ({
 
   return (
     <ButtonGroup
-      className="[&>*:not(:first-child)]:rounded-l-md [&>*:not(:last-child)]:rounded-r-md"
+      className={cn("[&>*:not(:first-child)]:rounded-l-md [&>*:not(:last-child)]:rounded-r-md", className)}
       orientation="horizontal"
       {...props}
     />
@@ -231,6 +231,7 @@ export const MessageBranchNext = ({ children, className, ...props }: MessageBran
   return (
     <Button
       aria-label="Next branch"
+      className={className}
       disabled={totalBranches <= 1}
       onClick={goToNext}
       size="icon-sm"

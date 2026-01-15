@@ -31,7 +31,9 @@ func main() {
 	})
 	if err != nil {
 		// Can't use logger yet, fall back to stderr
-		os.Stderr.WriteString("failed to initialize Sentry: " + err.Error() + "\n")
+		if _, writeErr := os.Stderr.WriteString("failed to initialize Sentry: " + err.Error() + "\n"); writeErr != nil {
+			os.Exit(1)
+		}
 		os.Exit(1)
 	}
 	defer sentryCleanup()
@@ -49,6 +51,7 @@ func main() {
 	// Validate configuration before proceeding
 	if err := config.ValidateStartupConfig(logger); err != nil {
 		logger.Error("startup validation failed", "error", err)
+		sentryCleanup()
 		os.Exit(1)
 	}
 

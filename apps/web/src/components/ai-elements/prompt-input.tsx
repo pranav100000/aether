@@ -197,7 +197,11 @@ export function PromptInputProvider({
 
   // Keep a ref to attachments for cleanup on unmount (avoids stale closure)
   const attachmentsRef = useRef(attachmentFiles);
-  attachmentsRef.current = attachmentFiles;
+
+  // Update ref in effect to avoid updating during render
+  useEffect(() => {
+    attachmentsRef.current = attachmentFiles;
+  }, [attachmentFiles]);
 
   // Cleanup blob URLs on unmount to prevent memory leaks
   useEffect(() => {
@@ -481,7 +485,11 @@ export const PromptInput = ({
 
   // Keep a ref to files for cleanup on unmount (avoids stale closure)
   const filesRef = useRef(files);
-  filesRef.current = files;
+
+  // Update ref in effect to avoid updating during render
+  useEffect(() => {
+    filesRef.current = files;
+  }, [files]);
 
   const openFileDialogLocal = useCallback(() => {
     inputRef.current?.click();
@@ -665,7 +673,6 @@ export const PromptInput = ({
         }
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- cleanup only on unmount; filesRef always current
     [usingProvider]
   );
 
@@ -725,7 +732,7 @@ export const PromptInput = ({
 
     // Convert blob URLs to data URLs asynchronously
     Promise.all(
-      files.map(async ({ id, ...item }) => {
+      files.map(async ({ id: _id, ...item }) => {
         if (item.url && item.url.startsWith("blob:")) {
           const dataUrl = await convertBlobUrlToDataUrl(item.url);
           // If conversion failed, keep the original blob URL
@@ -1057,13 +1064,13 @@ interface SpeechRecognition extends EventTarget {
   lang: string;
   start(): void;
   stop(): void;
-  onstart: ((this: SpeechRecognition, ev: Event) => any) | null;
-  onend: ((this: SpeechRecognition, ev: Event) => any) | null;
+  onstart: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onend: ((this: SpeechRecognition, ev: Event) => void) | null;
   onresult:
-    | ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => any)
+    | ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => void)
     | null;
   onerror:
-    | ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => any)
+    | ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => void)
     | null;
 }
 
@@ -1173,6 +1180,7 @@ export const PromptInputSpeechButton = ({
       };
 
       recognitionRef.current = speechRecognition;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setRecognition(speechRecognition);
     }
 

@@ -40,7 +40,7 @@ func (b *EnvBuilder) BuildEnv(ctx context.Context, projectID, userID string, ext
 		apiKeys, err := b.apiKeys.GetDecryptedKeys(ctx, userID)
 		if err != nil {
 			log.Printf("Warning: failed to get API keys for user %s: %v", userID, err)
-		} else if apiKeys != nil {
+		} else {
 			for envName, key := range apiKeys {
 				env[envName] = key
 			}

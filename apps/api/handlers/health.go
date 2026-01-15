@@ -64,13 +64,17 @@ func (h *HealthHandler) Health(w http.ResponseWriter, r *http.Request) {
 	if overallStatus != "ok" {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
 }
 
 // Liveness is a simple check for Kubernetes-style liveness probes
-func (h *HealthHandler) Liveness(w http.ResponseWriter, r *http.Request) {
+func (h *HealthHandler) Liveness(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"status":"ok"}`))
+	if _, err := w.Write([]byte(`{"status":"ok"}`)); err != nil {
+		return
+	}
 }
 
 // Readiness checks if the service is ready to accept traffic
@@ -82,14 +86,18 @@ func (h *HealthHandler) Readiness(w http.ResponseWriter, r *http.Request) {
 		if err := h.db.Ping(ctx); err != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusServiceUnavailable)
-			json.NewEncoder(w).Encode(map[string]string{
+			if err := json.NewEncoder(w).Encode(map[string]string{
 				"status": "not ready",
 				"error":  "database unavailable",
-			})
+			}); err != nil {
+				return
+			}
 			return
 		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"status":"ready"}`))
+	if _, err := w.Write([]byte(`{"status":"ready"}`)); err != nil {
+		return
+	}
 }

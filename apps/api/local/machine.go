@@ -39,7 +39,7 @@ func (m *MachineManager) CreateMachine(name string, cfg handlers.MachineConfig) 
 
 	// Clean up any existing container with the same name
 	cleanupCmd := exec.Command("docker", "rm", "-f", id)
-	cleanupCmd.Run() // Ignore errors - container may not exist
+	_ = cleanupCmd.Run() // Ignore errors - container may not exist
 
 	// Get project directory for volume mount
 	projectDir := config.GetLocalProjectDir()
@@ -145,7 +145,10 @@ func parseContainerID(output string) string {
 
 func isHexString(s string) bool {
 	for _, c := range s {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+		isDigit := c >= '0' && c <= '9'
+		isLowerHex := c >= 'a' && c <= 'f'
+		isUpperHex := c >= 'A' && c <= 'F'
+		if !isDigit && !isLowerHex && !isUpperHex {
 			return false
 		}
 	}

@@ -389,7 +389,7 @@ export function useWorkspaceConnection({
           break
 
         case "agent": {
-          const { channel: _, ...agentMessage } = message
+          const { channel: _channel, ...agentMessage } = message
           onAgentMessageRef.current?.(agentMessage)
           break
         }

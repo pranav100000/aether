@@ -128,7 +128,11 @@ func (h *WorkspaceHandler) HandleWorkspace(w http.ResponseWriter, r *http.Reques
 		log.Error("websocket upgrade failed", "error", err)
 		return
 	}
-	defer wsConn.Close()
+	defer func() {
+		if err := wsConn.Close(); err != nil {
+			log.Error("failed to close websocket", "error", err)
+		}
+	}()
 
 	log.Info("workspace websocket connected")
 
@@ -157,7 +161,11 @@ func (h *WorkspaceHandler) HandleWorkspace(w http.ResponseWriter, r *http.Reques
 		sendWorkspaceError(wsConn, "Failed to connect to workspace: "+err.Error())
 		return
 	}
-	defer connector.Close()
+	defer func() {
+		if err := connector.Close(); err != nil {
+			log.Error("failed to close connector", "error", err)
+		}
+	}()
 
 	log.Info("workspace connector established")
 
@@ -186,7 +194,11 @@ func (h *WorkspaceHandler) bridgeConnection(ctx context.Context, wsConn *websock
 					return
 				}
 				wsMu.Lock()
-				wsConn.SetWriteDeadline(time.Now().Add(writeWait))
+				if err := wsConn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
+					wsMu.Unlock()
+					log.Debug("failed to set write deadline", "error", err)
+					return
+				}
 				err := wsConn.WriteMessage(websocket.TextMessage, data)
 				wsMu.Unlock()
 				if err != nil {
@@ -206,10 +218,12 @@ func (h *WorkspaceHandler) bridgeConnection(ctx context.Context, wsConn *websock
 	go func() {
 		defer wg.Done()
 		wsConn.SetReadLimit(maxMessageSize)
-		wsConn.SetReadDeadline(time.Now().Add(pongWait))
+		if err := wsConn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
+			log.Debug("failed to set read deadline", "error", err)
+			return
+		}
 		wsConn.SetPongHandler(func(string) error {
-			wsConn.SetReadDeadline(time.Now().Add(pongWait))
-			return nil
+			return wsConn.SetReadDeadline(time.Now().Add(pongWait))
 		})
 
 		for {
@@ -222,7 +236,9 @@ func (h *WorkspaceHandler) bridgeConnection(ctx context.Context, wsConn *websock
 			_, data, err := wsConn.ReadMessage()
 			if err != nil {
 				log.Debug("websocket read error", "error", err)
-				connector.Close()
+				if err := connector.Close(); err != nil {
+					log.Debug("failed to close connector", "error", err)
+				}
 				return
 			}
 
@@ -245,7 +261,9 @@ func (h *WorkspaceHandler) bridgeConnection(ctx context.Context, wsConn *websock
 
 	// Wait for connector to close, then close websocket to unblock ReadMessage
 	<-connector.Done()
-	wsConn.Close()
+	if err := wsConn.Close(); err != nil {
+		log.Debug("failed to close websocket", "error", err)
+	}
 	wg.Wait()
 }
 
@@ -257,7 +275,10 @@ func (h *WorkspaceHandler) pingLoop(conn *websocket.Conn, done <-chan struct{}, 
 		select {
 		case <-ticker.C:
 			wsMu.Lock()
-			conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
+				wsMu.Unlock()
+				return
+			}
 			err := conn.WriteMessage(websocket.PingMessage, nil)
 			wsMu.Unlock()
 
@@ -276,5 +297,7 @@ func sendWorkspaceError(conn *websocket.Conn, message string) {
 		"type":    "error",
 		"error":   message,
 	}
-	conn.WriteJSON(msg)
+	if err := conn.WriteJSON(msg); err != nil {
+		return
+	}
 }

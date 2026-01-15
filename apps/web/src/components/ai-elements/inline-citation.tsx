@@ -136,6 +136,8 @@ export const InlineCitationCarouselIndex = ({
       return;
     }
 
+    // Initialize carousel state - documented pattern for embla-carousel
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCount(api.scrollSnapList().length);
     setCurrent(api.selectedScrollSnap() + 1);
 

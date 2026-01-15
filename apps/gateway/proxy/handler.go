@@ -39,7 +39,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Health check endpoint
 	if r.URL.Path == "/health" {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		if _, err := w.Write([]byte("OK")); err != nil {
+			return
+		}
 		return
 	}
 

@@ -21,7 +21,9 @@ func (h *Handler) proxyWebSocket(w http.ResponseWriter, r *http.Request, private
 		http.Error(w, "Failed to connect to project", http.StatusBadGateway)
 		return
 	}
-	defer targetConn.Close()
+	defer func() {
+		_ = targetConn.Close()
+	}()
 
 	// Hijack the client connection
 	hijacker, ok := w.(http.Hijacker)
@@ -37,7 +39,9 @@ func (h *Handler) proxyWebSocket(w http.ResponseWriter, r *http.Request, private
 		http.Error(w, "Failed to upgrade connection", http.StatusInternalServerError)
 		return
 	}
-	defer clientConn.Close()
+	defer func() {
+		_ = clientConn.Close()
+	}()
 
 	// Modify Host header to localhost so dev servers don't block the request
 	r.Host = fmt.Sprintf("localhost:%d", port)
@@ -67,29 +71,5 @@ func (h *Handler) proxyWebSocket(w http.ResponseWriter, r *http.Request, private
 	err = <-errCh
 	if err != nil && err != io.EOF {
 		h.log.Debug("websocket proxy closed", "error", err)
-	}
-}
-
-// copyWithDeadline copies data with periodic deadline updates
-// This helps keep long-lived WebSocket connections alive
-func copyWithDeadline(dst, src net.Conn, deadline time.Duration) error {
-	buf := make([]byte, 32*1024)
-	for {
-		// Set read deadline
-		src.SetReadDeadline(time.Now().Add(deadline))
-
-		n, err := src.Read(buf)
-		if n > 0 {
-			// Reset write deadline
-			dst.SetWriteDeadline(time.Now().Add(deadline))
-
-			_, writeErr := dst.Write(buf[:n])
-			if writeErr != nil {
-				return writeErr
-			}
-		}
-		if err != nil {
-			return err
-		}
 	}
 }

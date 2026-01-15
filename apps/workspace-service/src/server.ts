@@ -61,7 +61,7 @@ function applyEnvironment(env: Record<string, string>): void {
   }
 }
 
-const server = Bun.serve<WSData>({
+const _server = Bun.serve<WSData>({
   port: PORT,
 
   fetch(req, server) {

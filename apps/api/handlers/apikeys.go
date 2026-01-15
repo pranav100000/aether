@@ -89,7 +89,10 @@ func (h *APIKeysHandler) List(w http.ResponseWriter, r *http.Request) {
 	if encryptedKeys != nil && *encryptedKeys != "" {
 		decrypted, err := h.encryptor.Decrypt(*encryptedKeys, userID)
 		if err == nil {
-			json.Unmarshal([]byte(decrypted), storedKeys)
+			if err := json.Unmarshal([]byte(decrypted), storedKeys); err != nil {
+				WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to parse api keys"})
+				return
+			}
 		}
 	}
 
@@ -150,7 +153,10 @@ func (h *APIKeysHandler) Add(w http.ResponseWriter, r *http.Request) {
 	if encryptedKeys != nil && *encryptedKeys != "" {
 		decrypted, err := h.encryptor.Decrypt(*encryptedKeys, userID)
 		if err == nil {
-			json.Unmarshal([]byte(decrypted), storedKeys)
+			if err := json.Unmarshal([]byte(decrypted), storedKeys); err != nil {
+				WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to parse api keys"})
+				return
+			}
 		}
 	}
 
@@ -217,7 +223,10 @@ func (h *APIKeysHandler) Remove(w http.ResponseWriter, r *http.Request) {
 	if encryptedKeys != nil && *encryptedKeys != "" {
 		decrypted, err := h.encryptor.Decrypt(*encryptedKeys, userID)
 		if err == nil {
-			json.Unmarshal([]byte(decrypted), storedKeys)
+			if err := json.Unmarshal([]byte(decrypted), storedKeys); err != nil {
+				WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to parse api keys"})
+				return
+			}
 		}
 	}
 

@@ -407,7 +407,9 @@ func (h *ProjectHandler) startMachineAsync(projectID string, project *db.Project
 		if err != nil {
 			log.Error("failed to create volume", "error", err)
 			errMsg := "Failed to create storage volume: " + err.Error()
-			h.store.UpdateProjectStatus(ctx, projectID, "error", &errMsg)
+			if err := h.store.UpdateProjectStatus(ctx, projectID, "error", &errMsg); err != nil {
+				log.Error("failed to update project status", "error", err)
+			}
 			return
 		}
 
@@ -425,7 +427,9 @@ func (h *ProjectHandler) startMachineAsync(projectID string, project *db.Project
 		if err != nil {
 			log.Error("failed to create machine", "error", err)
 			errMsg := err.Error()
-			h.store.UpdateProjectStatus(ctx, projectID, "error", &errMsg)
+			if err := h.store.UpdateProjectStatus(ctx, projectID, "error", &errMsg); err != nil {
+				log.Error("failed to update project status", "error", err)
+			}
 			return
 		}
 
@@ -439,7 +443,9 @@ func (h *ProjectHandler) startMachineAsync(projectID string, project *db.Project
 		if err := h.machines.StartMachine(*project.FlyMachineID); err != nil {
 			log.Error("failed to start machine", "error", err)
 			errMsg := err.Error()
-			h.store.UpdateProjectStatus(ctx, projectID, "error", &errMsg)
+			if err := h.store.UpdateProjectStatus(ctx, projectID, "error", &errMsg); err != nil {
+				log.Error("failed to update project status", "error", err)
+			}
 			return
 		}
 	}
@@ -448,7 +454,9 @@ func (h *ProjectHandler) startMachineAsync(projectID string, project *db.Project
 	if err := h.machines.WaitForState(*project.FlyMachineID, "started", 60*time.Second); err != nil {
 		log.Error("failed waiting for machine to start", "error", err)
 		errMsg := err.Error()
-		h.store.UpdateProjectStatus(ctx, projectID, "error", &errMsg)
+		if err := h.store.UpdateProjectStatus(ctx, projectID, "error", &errMsg); err != nil {
+			log.Error("failed to update project status", "error", err)
+		}
 		return
 	}
 
@@ -518,7 +526,9 @@ func (h *ProjectHandler) stopMachineAsync(projectID string, machineID string) {
 	if err := h.machines.StopMachine(machineID); err != nil {
 		log.Error("failed to stop machine", "error", err)
 		errMsg := err.Error()
-		h.store.UpdateProjectStatus(ctx, projectID, "error", &errMsg)
+		if err := h.store.UpdateProjectStatus(ctx, projectID, "error", &errMsg); err != nil {
+			log.Error("failed to update project status", "error", err)
+		}
 		return
 	}
 
@@ -526,7 +536,9 @@ func (h *ProjectHandler) stopMachineAsync(projectID string, machineID string) {
 	if err := h.machines.WaitForState(machineID, "stopped", 30*time.Second); err != nil {
 		log.Error("failed waiting for machine to stop", "error", err)
 		errMsg := err.Error()
-		h.store.UpdateProjectStatus(ctx, projectID, "error", &errMsg)
+		if err := h.store.UpdateProjectStatus(ctx, projectID, "error", &errMsg); err != nil {
+			log.Error("failed to update project status", "error", err)
+		}
 		return
 	}
 

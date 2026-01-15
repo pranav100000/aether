@@ -194,6 +194,7 @@ export function useAgentConnection({
 
   // Connect on mount, disconnect on unmount
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     connect()
     return () => {
       disconnect()

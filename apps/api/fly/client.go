@@ -114,7 +114,11 @@ func (c *Client) doRequest(method, path string, body interface{}) ([]byte, error
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("failed to close response body: %v", err)
+		}
+	}()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -265,13 +269,20 @@ func (c *Client) WaitForState(machineID string, desiredState string, timeout tim
 	if err != nil {
 		return fmt.Errorf("wait request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("failed to close response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode == 200 {
 		return nil
 	}
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("wait for machine %s state=%s failed (%d): failed to read body: %w", machineID, desiredState, resp.StatusCode, err)
+	}
 	return fmt.Errorf("wait for machine %s state=%s failed (%d): %s", machineID, desiredState, resp.StatusCode, string(body))
 }
 

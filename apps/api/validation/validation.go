@@ -197,14 +197,15 @@ func ValidateHardwareConfig(cpuKind string, cpus, memoryMB, volumeSizeGB int, gp
 		}
 
 		// Validate CPU count based on kind
-		if cpuKind == "shared" {
+		switch cpuKind {
+		case "shared":
 			if cpus < 1 || cpus > 8 {
 				errors = append(errors, ValidationError{
 					Field:   "cpus",
 					Message: "shared CPU must be 1, 2, 4, or 8 cores",
 				})
 			}
-		} else if cpuKind == "performance" {
+		case "performance":
 			if cpus < 1 || cpus > 16 {
 				errors = append(errors, ValidationError{
 					Field:   "cpus",

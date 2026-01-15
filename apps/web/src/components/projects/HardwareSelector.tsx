@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react"
 import { HARDWARE_PRESETS, type HardwareConfig } from "@/lib/api"
+import { useUserSettings } from "@/hooks/useUserSettings"
 
 interface HardwareSelectorProps {
-  value: HardwareConfig
+  value: HardwareConfig | null
   onChange: (config: HardwareConfig) => void
-  defaultConfig?: HardwareConfig | null
 }
 
 function formatHardwareDescription(config: HardwareConfig): string {
@@ -18,17 +18,19 @@ function formatHardwareDescription(config: HardwareConfig): string {
   return parts.join(", ")
 }
 
-export function HardwareSelector({ value, onChange, defaultConfig }: HardwareSelectorProps) {
+export function HardwareSelector({ value, onChange }: HardwareSelectorProps) {
+  const { settings } = useUserSettings()
   const [mode, setMode] = useState<"preset" | "custom">("preset")
-  const [selectedPreset, setSelectedPreset] = useState(defaultConfig ? "default" : "small")
+  const [selectedPreset, setSelectedPreset] = useState<string>("default")
 
-  // Update selected preset when defaultConfig becomes available
+  // Initialize value from settings when they load
   useEffect(() => {
-    if (defaultConfig && selectedPreset === "small") {
-      setSelectedPreset("default")
-      onChange(defaultConfig)
+    if (settings && value === null) {
+      onChange(settings.default_hardware)
     }
-  }, [defaultConfig])
+  }, [settings, value, onChange])
+
+  const defaultConfig = settings?.default_hardware
 
   const handlePresetChange = (presetId: string) => {
     setSelectedPreset(presetId)
@@ -40,6 +42,15 @@ export function HardwareSelector({ value, onChange, defaultConfig }: HardwareSel
         onChange(preset.config)
       }
     }
+  }
+
+  // Show loading state until we have a value
+  if (value === null) {
+    return (
+      <div className="text-sm text-muted-foreground p-4 border rounded-md">
+        Loading defaults...
+      </div>
+    )
   }
 
   return (

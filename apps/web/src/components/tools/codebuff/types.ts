@@ -194,10 +194,10 @@ export interface UpdateSubgoalParams {
   log?: string
 }
 
-// Empty params
-export interface EndTurnParams {}
-export interface TaskCompletedParams {}
-export interface SetOutputParams {}
+// Empty params - tools that take no parameters
+export type EndTurnParams = Record<string, never>
+export type TaskCompletedParams = Record<string, never>
+export type SetOutputParams = Record<string, never>
 
 // Map of tool names to their parameter types
 export interface ToolParamsMap {

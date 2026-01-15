@@ -25,7 +25,9 @@ func TestListMachines(t *testing.T) {
 			{ID: "m1", Name: "machine-1", State: "started", PrivateIP: "10.0.0.1"},
 			{ID: "m2", Name: "machine-2", State: "stopped", PrivateIP: "10.0.0.2"},
 		}
-		json.NewEncoder(w).Encode(machines)
+		if err := json.NewEncoder(w).Encode(machines); err != nil {
+			t.Fatalf("failed to encode response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -71,12 +73,14 @@ func TestCreateMachine(t *testing.T) {
 		}
 
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(Machine{
+		if err := json.NewEncoder(w).Encode(Machine{
 			ID:        "new-id",
 			Name:      req.Name,
 			State:     "created",
 			PrivateIP: "10.0.0.3",
-		})
+		}); err != nil {
+			t.Fatalf("failed to encode response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -107,7 +111,9 @@ func TestCreateMachine(t *testing.T) {
 func TestAPIError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(APIError{Error: "not_found", Message: "machine not found"})
+		if err := json.NewEncoder(w).Encode(APIError{Error: "not_found", Message: "machine not found"}); err != nil {
+			t.Fatalf("failed to encode response: %v", err)
+		}
 	}))
 	defer server.Close()
 

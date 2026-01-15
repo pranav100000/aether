@@ -168,5 +168,7 @@ func (m *AuthMiddleware) parseToken(tokenString string) (*jwt.Token, error) {
 func writeAuthError(w http.ResponseWriter, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusUnauthorized)
-	w.Write([]byte(fmt.Sprintf(`{"error":"%s"}`, message)))
+	if _, err := fmt.Fprintf(w, `{"error":"%s"}`, message); err != nil {
+		return
+	}
 }
