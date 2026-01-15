@@ -12,23 +12,20 @@ import (
 	"aether/apps/api/handlers/proxy"
 	authmw "aether/apps/api/middleware"
 	"aether/libs/go/logging"
-	"aether/apps/api/ssh"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/gorilla/websocket"
 )
 
 type AgentHandler struct {
-	sshClient      *ssh.Client
 	resolver       ConnectionResolver
 	db             *db.Client
 	authMiddleware *authmw.AuthMiddleware
 	apiKeys        APIKeysGetter
 }
 
-func NewAgentHandler(sshClient *ssh.Client, resolver ConnectionResolver, db *db.Client, authMiddleware *authmw.AuthMiddleware, apiKeys APIKeysGetter) *AgentHandler {
+func NewAgentHandler(resolver ConnectionResolver, db *db.Client, authMiddleware *authmw.AuthMiddleware, apiKeys APIKeysGetter) *AgentHandler {
 	return &AgentHandler{
-		sshClient:      sshClient,
 		resolver:       resolver,
 		db:             db,
 		authMiddleware: authMiddleware,

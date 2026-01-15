@@ -1,6 +1,5 @@
 import { useState, useCallback, useMemo } from "react"
 import { RefreshCw, FilePlus, FolderPlus } from "lucide-react"
-import { api } from "@/lib/api"
 import { FileTreeItem } from "./FileTreeItem"
 import { Spinner } from "@/components/ui/spinner"
 import { useFileTreeContext } from "@/contexts/FileTreeContext"
@@ -16,7 +15,7 @@ export function FileTree({ projectId, onFileSelect, selectedPath }: FileTreeProp
   const [creating, setCreating] = useState<"file" | "folder" | null>(null)
   const [createName, setCreateName] = useState("")
 
-  const { allFiles, directories, isLoading, error, refresh, handleFileChange } = useFileTreeContext()
+  const { allFiles, directories, isLoading, error, refresh, createFile, createDirectory } = useFileTreeContext()
 
   // Build tree structure from flat paths
   const treeNodes = useMemo(() => {
@@ -32,11 +31,9 @@ export function FileTree({ projectId, onFileSelect, selectedPath }: FileTreeProp
     try {
       const createPath = "/" + createName
       if (creating === "folder") {
-        await api.mkdir(projectId, createPath)
-        handleFileChange("create", createPath, true)
+        await createDirectory(createPath)
       } else {
-        await api.writeFile(projectId, createPath, "")
-        handleFileChange("create", createPath, false)
+        await createFile(createPath)
       }
     } catch (err) {
       console.error("Failed to create:", err)
@@ -45,7 +42,7 @@ export function FileTree({ projectId, onFileSelect, selectedPath }: FileTreeProp
       setCreating(null)
       setCreateName("")
     }
-  }, [createName, creating, projectId, handleFileChange])
+  }, [createName, creating, createFile, createDirectory])
 
   if (isLoading) {
     return (

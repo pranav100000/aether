@@ -203,7 +203,7 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	project, err := h.store.CreateProject(ctx, userID, input.Name, input.Description, h.baseImage, dbHwConfig, idleTimeoutMinutes)
 	if err != nil {
-		log.Error("failed to create project", "error", err)
+		log.Error("failed to create project", "name", input.Name, "error", err)
 		WriteError(w, http.StatusInternalServerError, "Failed to create project")
 		return
 	}
@@ -232,7 +232,7 @@ func (h *ProjectHandler) Get(w http.ResponseWriter, r *http.Request) {
 			WriteError(w, http.StatusNotFound, "Project not found")
 			return
 		}
-		log.Error("failed to get project", "error", err)
+		log.Error("failed to get project", "project_id", projectID, "error", err)
 		WriteError(w, http.StatusInternalServerError, "Failed to get project")
 		return
 	}
@@ -285,7 +285,7 @@ func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 			WriteError(w, http.StatusNotFound, "Project not found")
 			return
 		}
-		log.Error("failed to update project", "error", err)
+		log.Error("failed to update project", "project_id", projectID, "error", err)
 		WriteError(w, http.StatusInternalServerError, "Failed to update project")
 		return
 	}
@@ -314,7 +314,7 @@ func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 			WriteError(w, http.StatusNotFound, "Project not found")
 			return
 		}
-		log.Error("failed to get project for delete", "error", err)
+		log.Error("failed to get project for delete", "project_id", projectID, "error", err)
 		WriteError(w, http.StatusInternalServerError, "Failed to delete project")
 		return
 	}
@@ -339,7 +339,7 @@ func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	// Delete from database
 	if err := h.store.DeleteProject(ctx, projectID, userID); err != nil {
-		log.Error("failed to delete project", "error", err)
+		log.Error("failed to delete project", "project_id", projectID, "error", err)
 		WriteError(w, http.StatusInternalServerError, "Failed to delete project")
 		return
 	}
@@ -368,17 +368,17 @@ func (h *ProjectHandler) Start(w http.ResponseWriter, r *http.Request) {
 			WriteError(w, http.StatusNotFound, "Project not found")
 			return
 		}
-		log.Error("failed to get project for start", "error", err)
+		log.Error("failed to get project for start", "project_id", projectID, "error", err)
 		WriteError(w, http.StatusInternalServerError, "Failed to start project")
 		return
 	}
 
 	// Update status to starting
 	if err := h.store.UpdateProjectStatus(ctx, projectID, "starting", nil); err != nil {
-		log.Error("failed to update project status", "error", err)
+		log.Error("failed to update project status", "project_id", projectID, "status", "starting", "error", err)
 	}
 
-	log.Info("starting project")
+	log.Info("starting project", "project_id", projectID)
 
 	// Start machine in background goroutine
 	go h.startMachineAsync(projectID, project, userID)
@@ -485,7 +485,7 @@ func (h *ProjectHandler) Stop(w http.ResponseWriter, r *http.Request) {
 			WriteError(w, http.StatusNotFound, "Project not found")
 			return
 		}
-		log.Error("failed to get project for stop", "error", err)
+		log.Error("failed to get project for stop", "project_id", projectID, "error", err)
 		WriteError(w, http.StatusInternalServerError, "Failed to stop project")
 		return
 	}
@@ -497,10 +497,10 @@ func (h *ProjectHandler) Stop(w http.ResponseWriter, r *http.Request) {
 
 	// Update status to stopping
 	if err := h.store.UpdateProjectStatus(ctx, projectID, "stopping", nil); err != nil {
-		log.Error("failed to update project status", "error", err)
+		log.Error("failed to update project status", "project_id", projectID, "status", "stopping", "error", err)
 	}
 
-	log.Info("stopping project")
+	log.Info("stopping project", "project_id", projectID)
 
 	// Stop machine in background goroutine
 	go h.stopMachineAsync(projectID, *project.FlyMachineID)
@@ -573,7 +573,7 @@ func (h *ProjectHandler) createMachine(ctx context.Context, project *db.Project,
 	if project.FlyVolumeID != nil && *project.FlyVolumeID != "" {
 		config.Mounts = []Mount{{
 			Volume: *project.FlyVolumeID,
-			Path:   "/home/coder/project",
+			Path:   "/home/coder/workspace",
 		}}
 	}
 

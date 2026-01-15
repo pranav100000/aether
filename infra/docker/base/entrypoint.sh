@@ -6,10 +6,11 @@ if [ -n "$SSH_PUBLIC_KEY" ]; then
     chmod 600 /home/coder/.ssh/authorized_keys
 fi
 
-# Ensure project directory exists and has correct permissions
-# (Fly Volume mounts may create directories owned by root)
-mkdir -p /home/coder/project
-chown coder:coder /home/coder/project
+# Ensure workspace and project directories exist with correct permissions
+# (Fly Volume mounts to /home/coder/workspace, which may create directories owned by root)
+mkdir -p /home/coder/workspace/project
+chown coder:coder /home/coder/workspace
+chown coder:coder /home/coder/workspace/project
 
 # Export environment variables for SSH sessions
 # sshd doesn't pass container env vars to login shells, so we write them to a file
@@ -35,8 +36,8 @@ if [ -n "$OPENROUTER_API_KEY" ]; then
 fi
 
 # Agent service configuration
-echo "export STORAGE_DIR=\"/home/coder/project/.aether\"" >> "$ENV_FILE"
-echo "export PROJECT_CWD=\"/home/coder/project\"" >> "$ENV_FILE"
+echo "export STORAGE_DIR=\"/home/coder/workspace/.aether\"" >> "$ENV_FILE"
+echo "export PROJECT_CWD=\"/home/coder/workspace/project\"" >> "$ENV_FILE"
 
 chown coder:coder "$ENV_FILE"
 chmod 600 "$ENV_FILE"

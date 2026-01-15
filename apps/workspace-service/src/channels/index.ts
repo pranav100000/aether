@@ -1,4 +1,5 @@
 export * from "./types"
 export { PTYHandler } from "./pty"
 export { FileWatcher } from "./files"
+export { FileOperations } from "./fileOperations"
 export { PortWatcher } from "./ports"

@@ -10,10 +10,6 @@ export {
   type Project,
   type CreateProjectInput,
   type UpdateProjectInput,
-  type FileEntry,
-  type DirListing,
-  type FileInfo,
-  type FileTree,
   type UserSettings,
   type UpdateUserSettingsInput,
   type ConnectedProvider,
@@ -28,9 +24,6 @@ import type {
   Project,
   CreateProjectInput,
   UpdateProjectInput,
-  DirListing,
-  FileTree,
-  FileInfo,
   UserSettings,
   UpdateUserSettingsInput,
   ConnectedProvider,
@@ -143,46 +136,6 @@ export const api = {
     return `${wsUrl}/projects/${projectId}/workspace`
   },
 
-  // File system operations
-  async listFiles(projectId: string, path: string = "/"): Promise<DirListing> {
-    return apiRequest(`/projects/${projectId}/files?path=${encodeURIComponent(path)}`)
-  },
-
-  async listFilesTree(projectId: string): Promise<FileTree> {
-    return apiRequest(`/projects/${projectId}/files/tree`)
-  },
-
-  async readFile(projectId: string, path: string): Promise<FileInfo> {
-    return apiRequest(`/projects/${projectId}/files?path=${encodeURIComponent(path)}`)
-  },
-
-  async writeFile(projectId: string, path: string, content: string): Promise<FileInfo> {
-    return apiRequest(`/projects/${projectId}/files?path=${encodeURIComponent(path)}`, {
-      method: "PUT",
-      body: JSON.stringify({ content }),
-    })
-  },
-
-  async mkdir(projectId: string, path: string): Promise<{ path: string }> {
-    return apiRequest(`/projects/${projectId}/files/mkdir`, {
-      method: "POST",
-      body: JSON.stringify({ path }),
-    })
-  },
-
-  async deleteFile(projectId: string, path: string): Promise<void> {
-    return apiRequest(`/projects/${projectId}/files?path=${encodeURIComponent(path)}`, {
-      method: "DELETE",
-    })
-  },
-
-  async renameFile(projectId: string, oldPath: string, newPath: string): Promise<{ path: string }> {
-    return apiRequest(`/projects/${projectId}/files/rename`, {
-      method: "POST",
-      body: JSON.stringify({ old_path: oldPath, new_path: newPath }),
-    })
-  },
-
   // API Keys operations
   async getApiKeys(): Promise<ListProvidersResponse> {
     return apiRequest("/user/api-keys")
@@ -210,13 +163,6 @@ export const api = {
     return apiRequest("/user/settings", {
       method: "PUT",
       body: JSON.stringify(input),
-    })
-  },
-
-  // Port operations
-  async killPort(projectId: string, port: number): Promise<void> {
-    return apiRequest(`/projects/${projectId}/ports/${port}/kill`, {
-      method: "POST",
     })
   },
 }

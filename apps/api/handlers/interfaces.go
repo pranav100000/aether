@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"io"
 	"time"
 
 	"aether/apps/api/db"
@@ -41,25 +40,6 @@ type VolumeManager interface {
 	CreateVolume(name string, sizeGB int, region string) (*Volume, error)
 	GetVolume(volumeID string) (*Volume, error)
 	DeleteVolume(volumeID string) error
-}
-
-// TerminalSession defines the interface for terminal sessions (SSH or local PTY)
-type TerminalSession interface {
-	RequestPTY(term string, cols, rows int) error
-	StartShell() error
-	Resize(cols, rows int) error
-	Write(data []byte) (int, error)
-	Read(buf []byte) (int, error)
-	Stderr() io.Reader
-	Close() error
-	Start(cmd string) error
-	KeepAlive(interval time.Duration, done <-chan struct{})
-}
-
-// TerminalProvider creates terminal sessions
-type TerminalProvider interface {
-	CreateSession(host string, port int) (TerminalSession, error)
-	CreateSessionWithRetry(host string, port int, maxRetries int, retryDelay time.Duration) (TerminalSession, error)
 }
 
 // ConnectionInfo contains connection details for a project's VM

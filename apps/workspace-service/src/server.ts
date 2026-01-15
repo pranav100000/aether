@@ -1,13 +1,21 @@
 import { AgentHandler } from "./handler"
-import { PTYHandler, FileWatcher, PortWatcher, isTerminalMessage } from "./channels"
+import {
+  PTYHandler,
+  FileWatcher,
+  FileOperations,
+  PortWatcher,
+  isTerminalMessage,
+  isFileOperationRequest,
+  isPortKillRequest,
+} from "./channels"
 import { logger, createContextLogger, Logger, CorrelationContext } from "./logging"
 import type { AgentType, ClientMessage, ServerMessage } from "./types"
-import type { TerminalInputMessage, TerminalResizeMessage } from "./channels"
+import type { TerminalInputMessage, TerminalResizeMessage, FileOperationRequest, PortKillRequest } from "./channels"
 import type { ServerWebSocket } from "bun"
 
 const PORT = parseInt(Bun.env.AGENT_PORT || "3001")
 const VALID_AGENTS = ["claude", "codex", "codebuff", "opencode"]
-const PROJECT_CWD = Bun.env.PROJECT_CWD || "/home/coder/project"
+const PROJECT_CWD = Bun.env.PROJECT_CWD || "/home/coder/workspace/project"
 
 interface WSData {
   mode: "workspace" | "agent-only"
@@ -17,6 +25,7 @@ interface WSData {
   agentHandler?: AgentHandler
   ptyHandler?: PTYHandler
   fileWatcher?: FileWatcher
+  fileOperations?: FileOperations
   portWatcher?: PortWatcher
 }
 
@@ -126,13 +135,18 @@ const server = Bun.serve<WSData>({
           ws.data.ptyHandler = ptyHandler
           log.info("PTY initialized")
 
-          // Initialize file watcher
+          // Initialize file watcher (for change notifications)
           const fileWatcher = new FileWatcher({ projectDir: PROJECT_CWD })
           await fileWatcher.initialize((msg) => {
             ws.send(JSON.stringify(msg))
           })
           ws.data.fileWatcher = fileWatcher
           log.info("FileWatcher initialized")
+
+          // Initialize file operations handler
+          const fileOperations = new FileOperations({ projectDir: PROJECT_CWD })
+          ws.data.fileOperations = fileOperations
+          log.info("FileOperations initialized")
 
           // Initialize port watcher
           const portWatcher = new PortWatcher()
@@ -221,13 +235,25 @@ async function handleWorkspaceMessage(ws: ServerWebSocket<WSData>, msg: unknown)
       break
 
     case "files":
-      // File operations handled separately (watchers send outbound only)
-      log.debug("files channel message", { type: channelMsg.type })
+      // Handle file operation requests
+      log.info("received files channel message", { type: channelMsg.type, hasFileOps: !!ws.data.fileOperations, isFileOpRequest: isFileOperationRequest(msg) })
+      if (isFileOperationRequest(msg) && ws.data.fileOperations) {
+        log.info("processing file operation", { type: channelMsg.type })
+        const response = await ws.data.fileOperations.handleRequest(msg as FileOperationRequest)
+        log.info("file operation complete, sending response", { type: response.type, success: "success" in response ? response.success : undefined })
+        ws.send(JSON.stringify(response))
+      } else {
+        log.warn("files channel message not handled", { type: channelMsg.type, hasFileOps: !!ws.data.fileOperations, isFileOpRequest: isFileOperationRequest(msg) })
+      }
       break
 
     case "ports":
-      // Port operations handled separately (watchers send outbound only)
-      log.debug("ports channel message", { type: channelMsg.type })
+      // Handle port kill requests
+      if (isPortKillRequest(msg) && ws.data.portWatcher) {
+        await handlePortKill(ws, msg as PortKillRequest)
+      } else {
+        log.debug("ports channel message (non-kill)", { type: channelMsg.type })
+      }
       break
 
     default:
@@ -268,6 +294,47 @@ async function handleAgentMessage(ws: ServerWebSocket<WSData>, msg: unknown): Pr
 
   // Forward to agent handler
   await ws.data.agentHandler.handleMessage(agentMsg as ClientMessage)
+}
+
+/**
+ * Handle port kill requests
+ */
+async function handlePortKill(ws: ServerWebSocket<WSData>, request: PortKillRequest): Promise<void> {
+  const log = ws.data.log ?? logger
+  const { requestId, port } = request
+
+  log.info("killing port", { port, requestId })
+
+  try {
+    // Use fuser to kill processes listening on the port
+    const proc = Bun.spawn(["fuser", "-k", `${port}/tcp`], {
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+
+    await proc.exited
+
+    // fuser returns non-zero if no process found, which is fine
+    log.info("port kill completed", { port, exitCode: proc.exitCode })
+
+    ws.send(JSON.stringify({
+      channel: "ports",
+      requestId,
+      type: "killResponse",
+      success: true,
+      port,
+    }))
+  } catch (err) {
+    log.error("port kill failed", { port, error: String(err) })
+    ws.send(JSON.stringify({
+      channel: "ports",
+      requestId,
+      type: "killResponse",
+      success: false,
+      port,
+      error: String(err),
+    }))
+  }
 }
 
 logger.info("workspace service started", {

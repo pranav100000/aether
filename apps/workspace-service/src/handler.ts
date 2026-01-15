@@ -62,7 +62,7 @@ export class AgentHandler {
     private sender: MessageSender,
     options: AgentHandlerOptions = {}
   ) {
-    this.cwd = options.cwd || Bun.env.PROJECT_CWD || process.cwd()
+    this.cwd = options.cwd || Bun.env.PROJECT_CWD || Bun.cwd()
 
     if (!isAgentConfigured(agent)) {
       throw new Error(`Agent ${agent} is not configured (missing API key)`)

@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     vim \
     ripgrep \
     fd-find \
+    socat \
     && rm -rf /var/lib/apt/lists/*
 
 # Create coder user (same as VM)
@@ -25,8 +26,8 @@ RUN bun install
 # Copy as fallback
 COPY src ./src
 
-# Create project directory
-RUN mkdir -p /home/coder/project && chown -R coder:coder /home/coder
+# Create workspace and project directories
+RUN mkdir -p /home/coder/workspace/project && chown -R coder:coder /home/coder
 
 USER coder
 

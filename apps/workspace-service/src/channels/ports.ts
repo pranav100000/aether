@@ -30,14 +30,18 @@ export class PortWatcher {
     this.sendFn = send
 
     // Initial scan - emit all existing ports as "open"
-    this.getListeningPorts().then((ports) => {
-      for (const port of ports) {
-        this.knownPorts.add(port)
-        this.startForwarder(port)
-        this.send(port, "open")
-      }
-      this.log.info("started", { initial_ports: ports.size, poll_interval_ms: this.config.pollIntervalMs })
-    })
+    this.getListeningPorts()
+      .then((ports) => {
+        for (const port of ports) {
+          this.knownPorts.add(port)
+          this.startForwarder(port)
+          this.send(port, "open")
+        }
+        this.log.info("started", { initial_ports: ports.size, poll_interval_ms: this.config.pollIntervalMs })
+      })
+      .catch((err) => {
+        this.log.error("failed initial port scan", { error: String(err) })
+      })
 
     // Start polling
     this.pollInterval = setInterval(() => {
@@ -141,21 +145,25 @@ export class PortWatcher {
   }
 
   /**
-   * Start an IPv6 → IPv4 forwarder for gateway access.
-   * In production (Fly.io), the gateway connects via IPv6.
+   * Start a forwarder for external access to the port.
+   * - Production (Fly.io): IPv6 → IPv4 localhost (gateway connects via IPv6)
+   * - Local (Docker): 0.0.0.0 → 127.0.0.1 (Docker needs 0.0.0.0 binding)
    */
   private startForwarder(port: number): void {
-    if (this.isLocalMode) return
     if (this.forwarders.has(port)) return
 
     try {
+      const cmd = this.isLocalMode
+        ? ["socat", `TCP-LISTEN:${port},fork,reuseaddr,bind=0.0.0.0`, `TCP:127.0.0.1:${port}`]
+        : ["socat", `TCP6-LISTEN:${port},fork,reuseaddr,ipv6-v6only`, `TCP4:127.0.0.1:${port}`]
+
       const proc = spawn({
-        cmd: ["socat", `TCP6-LISTEN:${port},fork,reuseaddr,ipv6-v6only`, `TCP4:127.0.0.1:${port}`],
+        cmd,
         stdout: "pipe",
         stderr: "pipe",
       })
       this.forwarders.set(port, proc)
-      this.log.debug("started forwarder", { port, pid: proc.pid })
+      this.log.debug("started forwarder", { port, pid: proc.pid, local_mode: this.isLocalMode })
     } catch (err) {
       this.log.error("failed to start forwarder", { port, error: String(err) })
     }

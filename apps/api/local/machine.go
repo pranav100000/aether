@@ -75,7 +75,7 @@ func (m *MachineManager) CreateMachine(name string, cfg handlers.MachineConfig) 
 		}
 	} else {
 		// Fallback: mount base project directory (for backwards compatibility)
-		args = append(args, "-v", fmt.Sprintf("%s:/home/coder/project", projectDir))
+		args = append(args, "-v", fmt.Sprintf("%s:/home/coder/workspace", projectDir))
 	}
 
 	// Mount workspace-service for local development (agent CLI)
