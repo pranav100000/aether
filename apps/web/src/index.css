@@ -57,6 +57,12 @@
   }
 }
 
+@utility glass {
+  border-color: rgb(63 63 70 / 0.5) !important;
+  background-color: rgb(24 24 27 / 0.8) !important;
+  backdrop-filter: blur(24px);
+}
+
 body {
   @apply bg-background text-foreground antialiased;
   font-family: var(--font-sans);

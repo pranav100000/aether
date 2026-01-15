@@ -19,7 +19,7 @@ import { CodeBlock } from "./code-block";
 export type ToolProps = ComponentProps<typeof Collapsible>;
 
 export const Tool = ({ className, ...props }: ToolProps) => (
-  <Collapsible className={cn("not-prose mb-4 w-full rounded-2xl border border-zinc-700", className)} {...props} />
+  <Collapsible className={cn("not-prose w-full rounded-2xl border border-zinc-700", className)} {...props} />
 );
 
 export type ToolHeaderProps = {

@@ -168,7 +168,7 @@ export function AgentPromptInput({
 
   return (
     <div ref={containerRef} className="relative w-full flex justify-center px-4 pb-4 pointer-events-none">
-      <div className="w-full max-w-3xl pointer-events-auto">
+      <div className="w-full max-w-2xl pointer-events-auto">
         {attachedFiles.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-2">
             {attachedFiles.map((file) => (
@@ -179,7 +179,7 @@ export function AgentPromptInput({
 
         <PromptInput
           onSubmit={handleSubmit}
-          className="[&_[data-slot=input-group]]:bg-zinc-900/80 [&_[data-slot=input-group]]:backdrop-blur-xl [&_[data-slot=input-group]]:border-zinc-700/50 [&_[data-slot=input-group]]:shadow-2xl"
+          className="[&_[data-slot=input-group]]:glass [&_[data-slot=input-group]]:rounded-2xl [&_[data-slot=input-group]]:shadow-2xl [&_[data-slot=input-group]:has([data-slot=input-group-control]:focus-visible)]:ring-zinc-700"
         >
           <PromptInputBody>
             <PromptInputTextarea
