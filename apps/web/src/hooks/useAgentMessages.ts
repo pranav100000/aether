@@ -1,6 +1,25 @@
 import { useReducer, useCallback, useRef } from "react"
-import type { ServerMessage, HistoryMessage, ToolData } from "@/types/agent"
+import type { ServerMessage, HistoryMessage, ToolData, ToolStatus } from "@/types/agent"
 import type { ToolUIPart } from "ai"
+
+// Map backend ToolStatus to frontend ToolUIPart state
+function mapToolStatus(status: ToolStatus): ToolUIPart["state"] {
+  switch (status) {
+    case "pending":
+      return "input-streaming"
+    case "running":
+      return "input-available"
+    case "complete":
+      return "output-available"
+    case "error":
+      return "output-error"
+    case "awaiting_input":
+      // Use "approval-requested" for human-in-the-loop tools awaiting user input
+      return "approval-requested"
+    default:
+      return "input-available"
+  }
+}
 
 // =============================================================================
 // Message Types - Discriminated union for clarity
@@ -130,7 +149,7 @@ function messagesReducer(state: ChatMessage[], action: MessageAction): ChatMessa
             id: action.tool.id,
             name: action.tool.name,
             input: action.tool.input,
-            status: "input-available",
+            status: mapToolStatus(action.tool.status),
           },
         },
       ]

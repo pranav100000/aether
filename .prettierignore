@@ -1,0 +1,13 @@
+dist/
+node_modules/
+.next/
+coverage/
+*.d.ts
+bun.lock
+supabase/
+apps/api/
+apps/gateway/
+libs/go/
+*.go
+go.mod
+go.sum

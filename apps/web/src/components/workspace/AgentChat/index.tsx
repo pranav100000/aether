@@ -98,6 +98,7 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
     connect,
     sendPrompt,
     sendAbort,
+    sendToolResponse,
   } = useAgentConnection({
     projectId,
     agent,
@@ -167,6 +168,7 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
         agentIcon={currentAgentConfig.icon}
         agentName={currentAgentConfig.name}
         agentColor={currentAgentConfig.color}
+        onToolResponse={sendToolResponse}
       />
 
       {error && (

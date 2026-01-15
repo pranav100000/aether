@@ -24,6 +24,10 @@ export {
   type PromptContext,
   type ClientMessage,
 
+  // Human-in-the-loop types
+  type ToolResponsePayload,
+  type AskUserResponse,
+
   // Storage types
   type StoredMessage,
   type ChatHistory,

@@ -11,7 +11,10 @@ import {
   SearchResults,
   ThinkingDisplay,
   QuestionsDisplay,
+  QuestionsForm,
+  type QuestionsFormResponse,
 } from "../shared"
+import type { ToolStatus, ToolResponsePayload } from "@/types/agent"
 import { FileTreeView } from "../shared/FileTreeView"
 import type {
   ReadFilesParams,
@@ -63,6 +66,12 @@ export interface ToolRendererProps {
   input: Record<string, unknown>
   result?: string
   error?: string
+  /** Current tool status - used for human-in-the-loop tools */
+  status?: ToolStatus
+  /** Tool ID - needed for sending responses */
+  toolId?: string
+  /** Callback for human-in-the-loop tool responses */
+  onToolResponse?: (response: ToolResponsePayload) => void
 }
 
 // read_files renderer
@@ -443,16 +452,51 @@ function ThinkDeeplyRenderer({ input }: ToolRendererProps) {
 }
 
 // ask_user renderer
-function AskUserRenderer({ input }: ToolRendererProps) {
+function AskUserRenderer({ input, status, toolId, onToolResponse, result }: ToolRendererProps) {
   const params = input as unknown as AskUserParams
+  // "approval-requested" is the frontend state mapped from backend "awaiting_input"
+  const isAwaitingInput = status === "approval-requested"
+  const hasResponded = !!result
+
+  const handleSubmit = (formResponse: QuestionsFormResponse) => {
+    if (!toolId || !onToolResponse) {
+      console.error("[AskUserRenderer] Missing toolId or onToolResponse callback")
+      return
+    }
+
+    onToolResponse({
+      toolId,
+      toolName: "ask_user",
+      response: formResponse,
+    })
+  }
 
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
         <MessageCircleQuestionIcon className="size-4 text-amber-400" />
         <span className="text-sm text-zinc-300">Questions</span>
+        {isAwaitingInput && (
+          <span className="text-xs bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded ml-auto">
+            Awaiting response
+          </span>
+        )}
+        {hasResponded && (
+          <span className="text-xs bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded ml-auto">
+            Responded
+          </span>
+        )}
       </div>
-      <QuestionsDisplay questions={params.questions} />
+
+      {isAwaitingInput && onToolResponse ? (
+        <QuestionsForm
+          questions={params.questions}
+          onSubmit={handleSubmit}
+          disabled={!isAwaitingInput}
+        />
+      ) : (
+        <QuestionsDisplay questions={params.questions} />
+      )}
     </div>
   )
 }

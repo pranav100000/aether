@@ -1,6 +1,6 @@
 "use client"
 
-import type { AgentType } from "@/types/agent"
+import type { AgentType, ToolStatus, ToolResponsePayload } from "@/types/agent"
 import { CodebuffToolRenderer, getCodebuffToolIcon, getCodebuffToolColor } from "./codebuff"
 import { AlertCircleIcon } from "lucide-react"
 
@@ -10,20 +10,55 @@ export interface ToolRendererProps {
   input: Record<string, unknown>
   result?: string
   error?: string
+  /** Current tool status - used for human-in-the-loop tools */
+  status?: ToolStatus
+  /** Tool ID - needed for sending responses */
+  toolId?: string
+  /** Callback for human-in-the-loop tool responses */
+  onToolResponse?: (response: ToolResponsePayload) => void
 }
 
 // Main tool renderer that routes to agent-specific renderers
-export function ToolRenderer({ agent, name, input, result, error }: ToolRendererProps) {
+export function ToolRenderer({
+  agent,
+  name,
+  input,
+  result,
+  error,
+  status,
+  toolId,
+  onToolResponse,
+}: ToolRendererProps) {
   switch (agent) {
     case "codebuff":
-      return <CodebuffToolRenderer name={name} input={input} result={result} error={error} />
+      return (
+        <CodebuffToolRenderer
+          name={name}
+          input={input}
+          result={result}
+          error={error}
+          status={status}
+          toolId={toolId}
+          onToolResponse={onToolResponse}
+        />
+      )
     // TODO: Add Claude, Codex, OpenCode renderers
     case "claude":
     case "codex":
     case "opencode":
     default:
       // Fall back to Codebuff renderer for now (many tools are similar)
-      return <CodebuffToolRenderer name={name} input={input} result={result} error={error} />
+      return (
+        <CodebuffToolRenderer
+          name={name}
+          input={input}
+          result={result}
+          error={error}
+          status={status}
+          toolId={toolId}
+          onToolResponse={onToolResponse}
+        />
+      )
   }
 }
 
