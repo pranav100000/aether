@@ -1,3 +1,4 @@
+import { prettifyText } from "@/lib/text-formatting";
 import {
   Conversation,
   ConversationContent,
@@ -45,6 +46,9 @@ function isThinkingMessage(msg: ChatMessage): msg is ThinkingMessage {
   return msg.role === "assistant" && (msg as ThinkingMessage).variant === "thinking";
 }
 
+// Tools that should not be rendered in the UI
+const HIDDEN_TOOLS = new Set(["set_messages"]);
+
 export function AgentMessageList({
   messages,
   status,
@@ -88,10 +92,10 @@ export function AgentMessageList({
                 )}
 
                 {/* Tool message */}
-                {isToolMessage(msg) && (
+                {isToolMessage(msg) && !HIDDEN_TOOLS.has(msg.tool.name) && (
                   <Tool defaultOpen>
                     <ToolHeader
-                      title={msg.tool.name}
+                      title={prettifyText(msg.tool.name)}
                       type="tool-invocation"
                       state={msg.tool.status}
                       toolName={msg.tool.name}

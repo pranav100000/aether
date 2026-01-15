@@ -89,13 +89,18 @@ export class PortWatcher {
   }
 
   /**
-   * Get currently listening TCP ports by reading /proc/net/tcp (IPv4 only).
-   * User dev servers bind to IPv4 (localhost or 0.0.0.0).
-   * We ignore IPv6 to avoid detecting our own socat forwarders.
+   * Get currently listening TCP ports by reading /proc/net/tcp and /proc/net/tcp6.
+   * We read both IPv4 and IPv6 to detect dev servers that bind to either.
+   * Our socat forwarders are tracked in this.forwarders, so we won't double-detect them.
    */
   private async getListeningPorts(): Promise<Set<number>> {
-    const ports = await this.readProcNetTcp("/proc/net/tcp").catch(() => []);
-    const portSet = new Set<number>(ports);
+    // Read IPv4 and IPv6 in parallel
+    const [tcp4, tcp6] = await Promise.all([
+      this.readProcNetTcp("/proc/net/tcp").catch(() => []),
+      this.readProcNetTcp("/proc/net/tcp6").catch(() => []),
+    ]);
+
+    const portSet = new Set<number>([...tcp4, ...tcp6]);
 
     // Filter out ignored ports
     for (const port of this.config.ignorePorts ?? []) {

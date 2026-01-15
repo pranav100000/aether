@@ -136,13 +136,13 @@ export function CodeDisplay({
   code,
   language,
   path,
-  maxHeight = "320px",
+  maxHeight = "500px",
   className,
 }: CodeDisplayProps) {
   const lang: BundledLanguage = language || (path ? getLanguageFromPath(path) : "markdown");
 
   return (
-    <div className={cn("rounded-lg overflow-hidden", className)} style={{ maxHeight }}>
+    <div className={cn("rounded-lg overflow-auto", className)} style={{ maxHeight }}>
       <CodeBlock code={code} language={lang} />
     </div>
   );
