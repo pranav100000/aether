@@ -207,7 +207,7 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
         <div className="shrink-0 bg-red-900/50 px-4 py-2 text-sm text-red-200">{error}</div>
       )}
 
-      <div className="grid shrink-0 gap-4 pt-4">
+      <div className="absolute bottom-0 left-0 right-0 z-10">
         <AgentPromptInput
           onSubmit={handleSubmit}
           onStop={handleStop}

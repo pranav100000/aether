@@ -63,7 +63,7 @@ export function AgentMessageList({
 
   return (
     <Conversation className="flex-1">
-      <ConversationContent className="gap-6 p-5">
+      <ConversationContent className="gap-6 p-5 pb-32">
         {showEmptyState ? (
           <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
             <div className="rounded-full bg-zinc-800 p-4">

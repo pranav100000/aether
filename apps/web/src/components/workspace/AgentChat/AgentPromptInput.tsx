@@ -167,50 +167,55 @@ export function AgentPromptInput({
   const isSubmitDisabled = disabled || (!input.trim() && !isProcessing);
 
   return (
-    <div ref={containerRef} className="relative w-full px-4 pb-4">
-      {attachedFiles.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-2">
-          {attachedFiles.map((file) => (
-            <FilePill key={file} path={file} onRemove={() => handleRemoveFile(file)} />
-          ))}
-        </div>
-      )}
+    <div ref={containerRef} className="relative w-full flex justify-center px-4 pb-4 pointer-events-none">
+      <div className="w-full max-w-3xl pointer-events-auto">
+        {attachedFiles.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-2">
+            {attachedFiles.map((file) => (
+              <FilePill key={file} path={file} onRemove={() => handleRemoveFile(file)} />
+            ))}
+          </div>
+        )}
 
-      <PromptInput onSubmit={handleSubmit}>
-        <PromptInputBody>
-          <PromptInputTextarea
-            ref={textareaRef}
-            value={input}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            placeholder={disabled ? "Connecting..." : placeholder}
-            disabled={disabled || isProcessing}
-          />
-        </PromptInputBody>
-        <PromptInputFooter>
-          <PromptInputTools>
-            <PromptInputSpeechButton textareaRef={textareaRef} />
-            <PromptInputButton variant="ghost" disabled>
-              <AgentIcon className={cn("size-4", agentColor)} />
-              <span>{agentName}</span>
-            </PromptInputButton>
-          </PromptInputTools>
-          <PromptInputSubmit
-            disabled={isSubmitDisabled}
-            status={status === "ready" ? undefined : status}
-            onClick={handleStopClick}
-          />
-        </PromptInputFooter>
-      </PromptInput>
+        <PromptInput
+          onSubmit={handleSubmit}
+          className="[&_[data-slot=input-group]]:bg-zinc-900/80 [&_[data-slot=input-group]]:backdrop-blur-xl [&_[data-slot=input-group]]:border-zinc-700/50 [&_[data-slot=input-group]]:shadow-2xl"
+        >
+          <PromptInputBody>
+            <PromptInputTextarea
+              ref={textareaRef}
+              value={input}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              placeholder={disabled ? "Connecting..." : placeholder}
+              disabled={disabled || isProcessing}
+            />
+          </PromptInputBody>
+          <PromptInputFooter>
+            <PromptInputTools>
+              <PromptInputSpeechButton textareaRef={textareaRef} />
+              <PromptInputButton variant="ghost" disabled>
+                <AgentIcon className={cn("size-4", agentColor)} />
+                <span>{agentName}</span>
+              </PromptInputButton>
+            </PromptInputTools>
+            <PromptInputSubmit
+              disabled={isSubmitDisabled}
+              status={status === "ready" ? undefined : status}
+              onClick={handleStopClick}
+            />
+          </PromptInputFooter>
+        </PromptInput>
 
-      <FileMentionPopover
-        open={autocomplete.isOpen}
-        position={autocomplete.position}
-        files={searchResults}
-        loading={isLoadingFiles}
-        selectedIndex={autocomplete.selectedIndex}
-        onSelect={handleFileSelect}
-      />
+        <FileMentionPopover
+          open={autocomplete.isOpen}
+          position={autocomplete.position}
+          files={searchResults}
+          loading={isLoadingFiles}
+          selectedIndex={autocomplete.selectedIndex}
+          onSelect={handleFileSelect}
+        />
+      </div>
     </div>
   );
 }
