@@ -54,6 +54,7 @@
     --color-card-foreground: hsl(0 0% 98%);
     --color-popover: hsl(240 10% 3.9%);
     --color-popover-foreground: hsl(0 0% 98%);
+    --color-panel: #181818;
   }
 }
 

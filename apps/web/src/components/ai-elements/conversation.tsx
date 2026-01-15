@@ -54,7 +54,7 @@ const ConversationScrollShadows = () => {
       {/* Top shadow */}
       <div
         className={cn(
-          "pointer-events-none absolute inset-x-0 top-0 z-10 h-16 bg-gradient-to-b from-zinc-950 via-zinc-950/50 to-transparent transition-opacity duration-300",
+          "pointer-events-none absolute inset-x-0 top-0 z-10 h-16 bg-gradient-to-b from-panel via-panel/50 to-transparent transition-opacity duration-300",
           showTopShadow ? "opacity-100" : "opacity-0"
         )}
         aria-hidden="true"
@@ -62,7 +62,7 @@ const ConversationScrollShadows = () => {
       {/* Bottom shadow */}
       <div
         className={cn(
-          "pointer-events-none absolute inset-x-0 bottom-0 z-[5] h-24 bg-gradient-to-t from-zinc-950 via-zinc-950/50 to-transparent transition-opacity duration-300",
+          "pointer-events-none absolute inset-x-0 bottom-0 z-[5] h-24 bg-gradient-to-t from-panel via-panel/50 to-transparent transition-opacity duration-300",
           showBottomShadow ? "opacity-100" : "opacity-0"
         )}
         aria-hidden="true"

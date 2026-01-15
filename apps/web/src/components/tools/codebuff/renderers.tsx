@@ -14,7 +14,8 @@ import {
   QuestionsForm,
   type QuestionsFormResponse,
 } from "../shared";
-import type { ToolStatus, ToolResponsePayload } from "@/types/agent";
+import type { ToolResponsePayload } from "@/types/agent";
+import type { ToolUIPart } from "ai";
 import { FileTreeView } from "../shared/FileTreeView";
 import type {
   ReadFilesParams,
@@ -69,7 +70,7 @@ export interface ToolRendererProps {
   result?: string;
   error?: string;
   /** Current tool status - used for human-in-the-loop tools */
-  status?: ToolStatus;
+  status?: ToolUIPart["state"];
   /** Tool ID - needed for sending responses */
   toolId?: string;
   /** Callback for human-in-the-loop tool responses */

@@ -181,7 +181,7 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
   );
 
   return (
-    <div className="relative flex size-full flex-col divide-y divide-zinc-800 overflow-hidden bg-zinc-950">
+    <div className="relative flex size-full flex-col divide-y divide-zinc-800 overflow-hidden bg-panel">
       <AgentHeader
         agent={agent}
         agentConfig={agentConfig}

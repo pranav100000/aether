@@ -71,7 +71,7 @@ export function WorkspaceLayout({
               collapsedSize={0}
             >
               <div
-                className={`h-full bg-[#1e1e1e] border-r border-border overflow-hidden ${leftSidebarOpen ? "" : "hidden"}`}
+                className={`h-full bg-panel border-r border-border overflow-hidden ${leftSidebarOpen ? "" : "hidden"}`}
               >
                 {sidebar}
               </div>
@@ -103,7 +103,7 @@ export function WorkspaceLayout({
                 collapsedSize={0}
               >
                 <div
-                  className={`h-full bg-[#1e1e1e] border-l border-border overflow-hidden ${rightPanelOpen ? "" : "hidden"}`}
+                  className={`h-full bg-panel border-l border-border overflow-hidden ${rightPanelOpen ? "" : "hidden"}`}
                 >
                   {rightPanel}
                 </div>

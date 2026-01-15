@@ -1,6 +1,7 @@
 "use client";
 
-import type { AgentType, ToolStatus, ToolResponsePayload } from "@/types/agent";
+import type { AgentType, ToolResponsePayload } from "@/types/agent";
+import type { ToolUIPart } from "ai";
 import { CodebuffToolRenderer, getCodebuffToolIcon, getCodebuffToolColor } from "./codebuff";
 import { AlertCircleIcon } from "lucide-react";
 
@@ -11,7 +12,7 @@ export interface ToolRendererProps {
   result?: string;
   error?: string;
   /** Current tool status - used for human-in-the-loop tools */
-  status?: ToolStatus;
+  status?: ToolUIPart["state"];
   /** Tool ID - needed for sending responses */
   toolId?: string;
   /** Callback for human-in-the-loop tool responses */

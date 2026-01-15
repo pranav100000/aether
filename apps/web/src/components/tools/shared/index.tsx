@@ -440,7 +440,7 @@ export interface QuestionsFormProps {
   className?: string;
 }
 
-export interface QuestionsFormResponse {
+export interface QuestionsFormResponse extends Record<string, unknown> {
   /** Map of question index to selected option indices */
   answers: Record<number, number[]>;
   /** Custom text for "Other" responses */
