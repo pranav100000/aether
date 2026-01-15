@@ -9,7 +9,7 @@ export type AgentType = "claude" | "codex" | "codebuff" | "opencode"
 export type PermissionMode = "default" | "acceptEdits" | "plan" | "bypassPermissions"
 
 /** Tool execution status */
-export type ToolStatus = "pending" | "running" | "complete" | "error"
+export type ToolStatus = "pending" | "running" | "complete" | "error" | "awaiting_input"
 
 // =============================================================================
 // WebSocket Protocol - Server Messages
@@ -68,7 +68,27 @@ export interface ServerMessage {
 // =============================================================================
 
 /** Client -> Server message types */
-export type ClientMessageType = "prompt" | "abort" | "approve" | "reject" | "settings"
+export type ClientMessageType = "prompt" | "abort" | "approve" | "reject" | "settings" | "tool_response"
+
+// =============================================================================
+// Human-in-the-Loop Types
+// =============================================================================
+
+/** Response payload for tools that require user input (e.g., ask_user) */
+export interface ToolResponsePayload {
+  toolId: string
+  toolName: string
+  /** The user's response - structure depends on the tool */
+  response: Record<string, unknown>
+}
+
+/** Response for ask_user tool questions */
+export interface AskUserResponse {
+  /** Map of question index to selected option indices */
+  answers: Record<number, number[]>
+  /** Optional custom text for "Other" options */
+  customAnswers?: Record<number, string>
+}
 
 /** Agent settings from client */
 export interface AgentSettings {
@@ -107,6 +127,8 @@ export interface ClientMessage {
   toolId?: string
   settings?: AgentSettings
   context?: PromptContext
+  /** Response for human-in-the-loop tools (used with type: "tool_response") */
+  toolResponse?: ToolResponsePayload
 }
 
 // =============================================================================
@@ -169,6 +191,8 @@ export interface AgentEvent {
   result?: string
   error?: string
   usage?: UsageStats
+  /** Indicates the agent is paused waiting for user input */
+  awaitingInput?: boolean
 }
 
 /** Provider interface - all agent implementations must satisfy this */
@@ -177,6 +201,16 @@ export interface AgentProvider {
   isConfigured(): boolean
   query(prompt: string, options: QueryOptions): AsyncIterable<AgentEvent>
   abort(): void
+  /**
+   * Continue execution with a tool response (for human-in-the-loop tools).
+   * Returns null if the provider doesn't support continuation.
+   */
+  continueWithToolResponse?(
+    toolResponse: ToolResponsePayload,
+    options: QueryOptions
+  ): AsyncIterable<AgentEvent> | null
+  /** Check if the provider has a pending run that can be continued */
+  hasPendingRun?(): boolean
 }
 
 /** Factory function type for creating providers */

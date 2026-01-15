@@ -54,9 +54,7 @@ export async function highlightCode(
   language: BundledLanguage,
   showLineNumbers = false
 ) {
-  const transformers: ShikiTransformer[] = showLineNumbers
-    ? [lineNumberTransformer]
-    : [];
+  const transformers: ShikiTransformer[] = showLineNumbers ? [lineNumberTransformer] : [];
 
   return await Promise.all([
     codeToHtml(code, {
@@ -119,9 +117,7 @@ export const CodeBlock = ({
             dangerouslySetInnerHTML={{ __html: darkHtml }}
           />
           {children && (
-            <div className="absolute top-2 right-2 flex items-center gap-2">
-              {children}
-            </div>
+            <div className="absolute top-2 right-2 flex items-center gap-2">{children}</div>
           )}
         </div>
       </div>

@@ -1,6 +1,7 @@
 {
   "name": "aether",
   "private": true,
+  "type": "module",
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -9,6 +10,20 @@
     "dev": "cd apps/web && bun run dev",
     "dev:web": "cd apps/web && bun run dev",
     "build:web": "cd apps/web && bun run build",
-    "typecheck": "bun run --filter '*' typecheck"
+    "typecheck": "bun run --filter '*' typecheck",
+    "lint:ts": "eslint .",
+    "fmt:ts": "prettier --write .",
+    "fmt:ts:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "eslint": "^9.39.1",
+    "eslint-config-prettier": "^10.1.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "globals": "^16.5.0",
+    "prettier": "^3.5.3",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.46.4"
   }
 }

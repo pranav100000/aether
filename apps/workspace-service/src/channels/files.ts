@@ -1,5 +1,5 @@
 import { watch, type FSWatcher } from "fs"
-import { readdir, stat } from "fs/promises"
+import { stat } from "fs/promises"
 import { join, relative } from "path"
 import { logger } from "../logging"
 import type { FileChangeMessage } from "./types"
@@ -9,8 +9,26 @@ export interface FileWatcherConfig {
   debounceMs?: number
 }
 
+/**
+ * Patterns to ignore when watching files.
+ * These are checked against each path segment.
+ */
+const IGNORE_PATTERNS = [
+  "node_modules",
+  ".git",
+  ".next",
+  ".cache",
+  "dist",
+  "build",
+  ".turbo",
+  "__pycache__",
+  ".pytest_cache",
+  "coverage",
+  ".nyc_output",
+]
+
 export class FileWatcher {
-  private watchers: FSWatcher[] = []
+  private watcher: FSWatcher | null = null
   private sendFn: ((msg: FileChangeMessage) => void) | null = null
   private projectDir: string
   private debounceMs: number
@@ -23,80 +41,48 @@ export class FileWatcher {
   }
 
   /**
-   * Initialize file watcher and start watching
+   * Initialize file watcher with a SINGLE recursive watcher.
+   * This is much more efficient than creating one watcher per directory.
    */
   async initialize(send: (msg: FileChangeMessage) => void): Promise<void> {
     this.sendFn = send
-    await this.watchDirectory(this.projectDir)
-    this.log.info("watching", { dir: this.projectDir })
-  }
 
-  /**
-   * Recursively watch a directory
-   */
-  private async watchDirectory(dirPath: string): Promise<void> {
-    // Don't watch ignored directories (e.g., node_modules, .git)
-    if (this.shouldIgnorePath(dirPath)) {
-      return
-    }
-
-    // Watch this directory
-    const watcher = watch(dirPath, { persistent: false }, (eventType, filename) => {
-      if (filename) {
-        this.handleEvent(eventType, join(dirPath, filename))
-      }
-    })
-
-    watcher.on("error", (err) => {
-      this.log.error("watch error", { dir: dirPath, error: String(err) })
-    })
-
-    this.watchers.push(watcher)
-
-    // Recursively watch subdirectories
-    try {
-      const entries = await readdir(dirPath, { withFileTypes: true })
-      for (const entry of entries) {
-        // Skip node_modules, .git, and other common ignore patterns
-        if (this.shouldIgnore(entry.name)) continue
-
-        if (entry.isDirectory()) {
-          await this.watchDirectory(join(dirPath, entry.name))
+    // Use a single recursive watcher instead of one per directory
+    // This dramatically reduces resource usage
+    this.watcher = watch(
+      this.projectDir,
+      { persistent: false, recursive: true },
+      (eventType: string, filename: string | null) => {
+        if (filename) {
+          this.handleEvent(eventType, join(this.projectDir, filename))
         }
       }
-    } catch (err) {
-      // Non-fatal: subdirectory may not exist or be readable (race condition during file operations)
-      this.log.warn("cannot watch subdirectories", { dir: dirPath, error: String(err) })
-    }
+    )
+
+    this.watcher.on("error", (err: Error) => {
+      this.log.error("watch error", { dir: this.projectDir, error: String(err) })
+    })
+
+    this.log.info("watching", { dir: this.projectDir, recursive: true })
   }
 
   /**
-   * Check if a path should be ignored
+   * Check if a path segment should be ignored
    */
-  private shouldIgnore(name: string): boolean {
-    const ignorePatterns = [
-      "node_modules",
-      ".git",
-      ".next",
-      ".cache",
-      "dist",
-      "build",
-      ".turbo",
-      "__pycache__",
-      ".pytest_cache",
-      "coverage",
-      ".nyc_output",
-    ]
-    return ignorePatterns.includes(name) || name.startsWith(".")
+  private shouldIgnoreSegment(name: string): boolean {
+    return IGNORE_PATTERNS.includes(name) || name.startsWith(".")
   }
 
   /**
-   * Check if a path should be ignored (contains ignored directories)
+   * Check if a full path should be ignored.
+   * Returns true if any segment of the path matches ignore patterns.
    */
   private shouldIgnorePath(fullPath: string): boolean {
     const relPath = relative(this.projectDir, fullPath)
+    if (!relPath) return false // Don't ignore the root directory itself
+
     const parts = relPath.split("/")
-    return parts.some((part: string) => this.shouldIgnore(part))
+    return parts.some((part: string) => this.shouldIgnoreSegment(part))
   }
 
   /**
@@ -138,11 +124,6 @@ export class FileWatcher {
       // We can't distinguish create from modify with basic fs.watch
       // So we'll report all existing files as "modify"
       action = "modify"
-
-      // If it's a new directory, start watching it
-      if (isDirectory) {
-        await this.watchDirectory(fullPath)
-      }
     } catch {
       // File doesn't exist, must be deleted
       action = "delete"
@@ -165,13 +146,13 @@ export class FileWatcher {
   }
 
   /**
-   * Close all watchers
+   * Close the watcher
    */
   close(): void {
-    for (const watcher of this.watchers) {
-      watcher.close()
+    if (this.watcher) {
+      this.watcher.close()
+      this.watcher = null
     }
-    this.watchers = []
 
     for (const timeout of this.pendingEvents.values()) {
       clearTimeout(timeout)

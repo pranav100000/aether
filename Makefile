@@ -1,6 +1,7 @@
 .PHONY: help setup dev dev-services dev-frontend dev-backend stop clean clean-vms logs check
 .PHONY: dev-real dev-api-real dev-gateway-real dev-web-real
 .PHONY: supabase-start supabase-stop supabase-status supabase-reset db-shell
+.PHONY: fmt fmt-go fmt-ts lint lint-go lint-ts
 
 # Default target
 help:
@@ -27,6 +28,14 @@ help:
 	@echo "  make supabase-stop  - Stop local Supabase"
 	@echo "  make supabase-reset - Reset database"
 	@echo "  make db-shell       - Open psql shell"
+	@echo ""
+	@echo "Linting & Formatting:"
+	@echo "  make fmt            - Format all code (Go + TypeScript)"
+	@echo "  make fmt-go         - Format Go code"
+	@echo "  make fmt-ts         - Format TypeScript code"
+	@echo "  make lint           - Lint all code (Go + TypeScript)"
+	@echo "  make lint-go        - Lint Go code"
+	@echo "  make lint-ts        - Lint TypeScript code"
 	@echo ""
 	@echo "Utilities:"
 	@echo "  make stop           - Stop all services"
@@ -72,6 +81,8 @@ check:
 	@command -v bun >/dev/null 2>&1 || { echo "ERROR: bun is not installed (curl -fsSL https://bun.sh/install | bash)"; exit 1; }
 	@command -v docker >/dev/null 2>&1 || { echo "ERROR: docker is not installed"; exit 1; }
 	@command -v supabase >/dev/null 2>&1 || { echo "ERROR: supabase CLI not installed (brew install supabase/tap/supabase)"; exit 1; }
+	@command -v golangci-lint >/dev/null 2>&1 || { echo "WARNING: golangci-lint not installed (brew install golangci-lint)"; }
+	@command -v goimports >/dev/null 2>&1 || { echo "WARNING: goimports not installed (go install golang.org/x/tools/cmd/goimports@latest)"; }
 	@echo "All prerequisites met!"
 
 # ===========================================
@@ -165,3 +176,30 @@ logs:
 
 logs-backend:
 	docker compose logs -f backend
+
+# ===========================================
+# Linting & Formatting
+# ===========================================
+
+fmt: fmt-go fmt-ts
+
+fmt-go:
+	@echo "Formatting Go code..."
+	@command -v goimports >/dev/null 2>&1 || { echo "ERROR: goimports not installed. Run: go install golang.org/x/tools/cmd/goimports@latest"; exit 1; }
+	@gofmt -w -s apps/api apps/gateway libs/go
+	@goimports -w -local aether apps/api apps/gateway libs/go
+
+fmt-ts:
+	@echo "Formatting TypeScript code..."
+	@bun run fmt:ts
+
+lint: lint-go lint-ts
+
+lint-go:
+	@echo "Linting Go code..."
+	@command -v golangci-lint >/dev/null 2>&1 || { echo "ERROR: golangci-lint not installed. Run: brew install golangci-lint"; exit 1; }
+	@golangci-lint run ./...
+
+lint-ts:
+	@echo "Linting TypeScript code..."
+	@bun run lint:ts

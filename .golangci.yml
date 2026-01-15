@@ -1,0 +1,22 @@
+version: "2"
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gocritic
+
+issues:
+  exclude-dirs:
+    - vendor
+
+output:
+  formats:
+    colored-line-number: {}
+  sort-order:
+    - linter
+    - severity
+    - file

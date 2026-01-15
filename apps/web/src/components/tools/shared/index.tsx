@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useCallback } from "react"
 import { cn } from "@/lib/utils"
 import {
   FileIcon,
@@ -7,6 +8,9 @@ import {
   CheckSquareIcon,
   SquareIcon,
   ChevronRightIcon,
+  CircleIcon,
+  CheckCircleIcon,
+  SendIcon,
 } from "lucide-react"
 import type { BundledLanguage } from "shiki"
 import { CodeBlock } from "@/components/ai-elements/code-block"
@@ -395,6 +399,238 @@ export function QuestionsDisplay({ questions, className }: QuestionsDisplayProps
           </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+// Interactive question form for human-in-the-loop tools
+export interface QuestionsFormProps {
+  questions: Question[]
+  onSubmit: (response: QuestionsFormResponse) => void
+  disabled?: boolean
+  className?: string
+}
+
+export interface QuestionsFormResponse {
+  /** Map of question index to selected option indices */
+  answers: Record<number, number[]>
+  /** Custom text for "Other" responses */
+  customAnswers?: Record<number, string>
+}
+
+export function QuestionsForm({ questions, onSubmit, disabled, className }: QuestionsFormProps) {
+  // Track selections: questionIndex -> optionIndices
+  const [selections, setSelections] = useState<Record<number, number[]>>({})
+  // Track custom "Other" answers
+  const [customAnswers, setCustomAnswers] = useState<Record<number, string>>({})
+  // Track if "Other" is selected for each question
+  const [otherSelected, setOtherSelected] = useState<Record<number, boolean>>({})
+
+  const handleOptionClick = useCallback(
+    (questionIndex: number, optionIndex: number, multiSelect: boolean) => {
+      setSelections((prev) => {
+        const current = prev[questionIndex] || []
+
+        if (multiSelect) {
+          // Toggle selection for multi-select
+          if (current.includes(optionIndex)) {
+            return { ...prev, [questionIndex]: current.filter((i) => i !== optionIndex) }
+          }
+          return { ...prev, [questionIndex]: [...current, optionIndex] }
+        }
+
+        // Single select: replace
+        // Also clear "Other" if selecting a regular option
+        setOtherSelected((o) => ({ ...o, [questionIndex]: false }))
+        return { ...prev, [questionIndex]: [optionIndex] }
+      })
+    },
+    []
+  )
+
+  const handleOtherClick = useCallback((questionIndex: number, multiSelect: boolean) => {
+    setOtherSelected((prev) => {
+      const isSelected = !prev[questionIndex]
+      if (!multiSelect && isSelected) {
+        // For single-select, clear regular selections when selecting "Other"
+        setSelections((s) => ({ ...s, [questionIndex]: [] }))
+      }
+      return { ...prev, [questionIndex]: isSelected }
+    })
+  }, [])
+
+  const handleCustomAnswerChange = useCallback((questionIndex: number, value: string) => {
+    setCustomAnswers((prev) => ({ ...prev, [questionIndex]: value }))
+  }, [])
+
+  const handleSubmit = useCallback(() => {
+    const response: QuestionsFormResponse = { answers: {} }
+
+    // Build answers including "Other" selections
+    for (let i = 0; i < questions.length; i++) {
+      const regularSelections = selections[i] || []
+      const hasOther = otherSelected[i] && customAnswers[i]?.trim()
+
+      if (regularSelections.length > 0 || hasOther) {
+        // Use -1 as a special index for "Other"
+        response.answers[i] = hasOther ? [...regularSelections, -1] : regularSelections
+      }
+    }
+
+    // Include custom answers if any
+    const validCustomAnswers: Record<number, string> = {}
+    for (const [idx, answer] of Object.entries(customAnswers)) {
+      if (answer.trim() && otherSelected[Number(idx)]) {
+        validCustomAnswers[Number(idx)] = answer.trim()
+      }
+    }
+    if (Object.keys(validCustomAnswers).length > 0) {
+      response.customAnswers = validCustomAnswers
+    }
+
+    onSubmit(response)
+  }, [questions, selections, otherSelected, customAnswers, onSubmit])
+
+  // Check if form is valid (at least one selection per question)
+  const isValid = questions.every((_, i) => {
+    const hasRegularSelection = (selections[i]?.length || 0) > 0
+    const hasOtherSelection = otherSelected[i] && customAnswers[i]?.trim()
+    return hasRegularSelection || hasOtherSelection
+  })
+
+  return (
+    <div className={cn("space-y-3", className)}>
+      {questions.map((q, questionIndex) => {
+        const currentSelections = selections[questionIndex] || []
+        const isOtherActive = otherSelected[questionIndex]
+
+        return (
+          <div
+            key={questionIndex}
+            className="rounded-lg border border-amber-500/30 bg-amber-500/5 overflow-hidden"
+          >
+            <div className="px-3 py-2 border-b border-amber-500/20 bg-amber-500/10 flex items-center gap-2">
+              {q.header && (
+                <span className="text-xs bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded">
+                  {q.header}
+                </span>
+              )}
+              <span className="text-sm font-medium text-zinc-200">{q.question}</span>
+              {q.multiSelect && (
+                <span className="text-xs text-amber-400/70 ml-auto">(select multiple)</span>
+              )}
+            </div>
+            <div className="p-2 space-y-1">
+              {q.options.map((opt, optionIndex) => {
+                const isSelected = currentSelections.includes(optionIndex)
+
+                return (
+                  <button
+                    key={optionIndex}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => handleOptionClick(questionIndex, optionIndex, q.multiSelect ?? false)}
+                    className={cn(
+                      "w-full flex items-start gap-2 px-2 py-2 rounded transition-colors text-left",
+                      isSelected
+                        ? "bg-amber-500/20 border border-amber-500/40"
+                        : "hover:bg-amber-500/10 border border-transparent",
+                      disabled && "opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    {q.multiSelect ? (
+                      isSelected ? (
+                        <CheckSquareIcon className="size-4 text-amber-400 mt-0.5 flex-shrink-0" />
+                      ) : (
+                        <SquareIcon className="size-4 text-zinc-500 mt-0.5 flex-shrink-0" />
+                      )
+                    ) : isSelected ? (
+                      <CheckCircleIcon className="size-4 text-amber-400 mt-0.5 flex-shrink-0" />
+                    ) : (
+                      <CircleIcon className="size-4 text-zinc-500 mt-0.5 flex-shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <span className={cn("text-sm", isSelected ? "text-zinc-100" : "text-zinc-300")}>
+                        {opt.label}
+                      </span>
+                      {opt.description && (
+                        <p className="text-xs text-zinc-500 mt-0.5">{opt.description}</p>
+                      )}
+                    </div>
+                  </button>
+                )
+              })}
+
+              {/* "Other" option */}
+              <div className="mt-2 pt-2 border-t border-amber-500/10">
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => handleOtherClick(questionIndex, q.multiSelect ?? false)}
+                  className={cn(
+                    "w-full flex items-start gap-2 px-2 py-2 rounded transition-colors text-left",
+                    isOtherActive
+                      ? "bg-amber-500/20 border border-amber-500/40"
+                      : "hover:bg-amber-500/10 border border-transparent",
+                    disabled && "opacity-50 cursor-not-allowed"
+                  )}
+                >
+                  {q.multiSelect ? (
+                    isOtherActive ? (
+                      <CheckSquareIcon className="size-4 text-amber-400 mt-0.5 flex-shrink-0" />
+                    ) : (
+                      <SquareIcon className="size-4 text-zinc-500 mt-0.5 flex-shrink-0" />
+                    )
+                  ) : isOtherActive ? (
+                    <CheckCircleIcon className="size-4 text-amber-400 mt-0.5 flex-shrink-0" />
+                  ) : (
+                    <CircleIcon className="size-4 text-zinc-500 mt-0.5 flex-shrink-0" />
+                  )}
+                  <span className={cn("text-sm", isOtherActive ? "text-zinc-100" : "text-zinc-400")}>
+                    Other...
+                  </span>
+                </button>
+
+                {isOtherActive && (
+                  <div className="px-2 mt-2">
+                    <input
+                      type="text"
+                      placeholder="Enter your answer..."
+                      value={customAnswers[questionIndex] || ""}
+                      onChange={(e) => handleCustomAnswerChange(questionIndex, e.target.value)}
+                      disabled={disabled}
+                      className={cn(
+                        "w-full px-3 py-2 rounded-md text-sm",
+                        "bg-zinc-900 border border-zinc-700",
+                        "text-zinc-100 placeholder-zinc-500",
+                        "focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/30",
+                        disabled && "opacity-50 cursor-not-allowed"
+                      )}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })}
+
+      {/* Submit button */}
+      <button
+        type="button"
+        onClick={handleSubmit}
+        disabled={disabled || !isValid}
+        className={cn(
+          "w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg",
+          "font-medium text-sm transition-colors",
+          isValid && !disabled
+            ? "bg-amber-500 text-zinc-900 hover:bg-amber-400"
+            : "bg-zinc-800 text-zinc-500 cursor-not-allowed"
+        )}
+      >
+        <SendIcon className="size-4" />
+        Submit Response
+      </button>
     </div>
   )
 }

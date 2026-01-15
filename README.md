@@ -150,21 +150,10 @@ aether/
 
 ## Environment Variables
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `FLY_API_TOKEN` | Yes | - | Fly.io API token |
-| `FLY_VMS_APP_NAME` | Yes | - | Fly app for VMs |
-| `FLY_REGION` | No | `sjc` | Default region |
-| `PORT` | No | `8080` | Server port |
-| `SSH_PRIVATE_KEY_PATH` | One of these | - | Path to SSH private key |
-| `SSH_PRIVATE_KEY` | One of these | - | Base64-encoded private key |
-| `BASE_IMAGE` | No | Auto | Docker image for VMs |
-| `IDLE_TIMEOUT_MINUTES` | No | `10` | Auto-stop idle machines |
-| `SUPABASE_URL` | Yes | - | Supabase project URL |
-| `SUPABASE_ANON_KEY` | Yes | - | Supabase anon/public key |
-| `SUPABASE_SERVICE_KEY` | Yes | - | Supabase service role key |
-| `SUPABASE_JWT_SECRET` | Yes | - | JWT secret for token validation |
-| `DATABASE_URL` | Yes | - | Postgres connection string |
+See [docs/ENV.md](docs/ENV.md) for complete environment variable documentation including:
+- Required variables for production and local development
+- Optional configuration with defaults
+- Validation rules and configuration conflicts
 
 ## Development Phases
 

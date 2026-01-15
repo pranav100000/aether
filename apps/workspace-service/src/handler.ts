@@ -2,7 +2,15 @@ import { readFile } from "node:fs/promises"
 import path from "node:path"
 import { createProvider, isAgentConfigured } from "./agents"
 import { buildFullPrompt } from "./utils/context"
-import type { AgentType, ClientMessage, ServerMessage, AgentSettings, AgentProvider, ChatHistory } from "./types"
+import type {
+  AgentType,
+  ClientMessage,
+  ServerMessage,
+  AgentSettings,
+  AgentProvider,
+  ChatHistory,
+  ToolResponsePayload,
+} from "./types"
 import {
   loadHistory,
   saveHistory,
@@ -113,6 +121,17 @@ export class AgentHandler {
       case "reject":
         // Tool approval not implemented yet
         break
+
+      case "tool_response":
+        if (!msg.toolResponse) {
+          this.sender.send({ type: "error", error: "Missing toolResponse payload" })
+          break
+        }
+        // Don't await - process in background so abort can interrupt
+        this.handleToolResponse(msg.toolResponse).catch((err) => {
+          this.sender.send({ type: "error", error: String(err) })
+        })
+        break
     }
   }
 
@@ -148,6 +167,76 @@ export class AgentHandler {
         autoApprove: this.settings.permissionMode === "bypassPermissions",
         thinkingTokens: this.settings.extendedThinking ? 10000 : undefined,
       })) {
+        this.sender.send(event)
+
+        // Track content for history
+        if (event.type === "text" && event.content) {
+          currentAssistantContent += event.content
+        }
+
+        if (event.type === "tool_use" && event.tool) {
+          if (currentAssistantContent) {
+            addAssistantMessage(this.history, currentAssistantContent)
+            currentAssistantContent = ""
+          }
+          addAssistantMessage(this.history, "", {
+            id: event.tool.id,
+            name: event.tool.name,
+            input: event.tool.input,
+            status: event.tool.status,
+          })
+        }
+
+        if (event.type === "tool_result" && event.toolId) {
+          updateToolResult(this.history, event.toolId, event.result, event.error)
+        }
+
+        if (event.type === "done") {
+          if (currentAssistantContent) {
+            addAssistantMessage(this.history, currentAssistantContent)
+          }
+          await saveHistory(this.history)
+        }
+      }
+    } catch (err) {
+      this.sender.send({ type: "error", error: String(err) })
+    }
+  }
+
+  private async handleToolResponse(toolResponse: ToolResponsePayload): Promise<void> {
+    // Check if provider supports continuation
+    if (!this.provider.continueWithToolResponse) {
+      this.sender.send({
+        type: "error",
+        error: `Provider ${this.provider.name} does not support tool response continuation`,
+      })
+      return
+    }
+
+    // Check if there's a pending run
+    if (this.provider.hasPendingRun && !this.provider.hasPendingRun()) {
+      this.sender.send({
+        type: "error",
+        error: "No pending run to continue - tool response may have been sent too late",
+      })
+      return
+    }
+
+    try {
+      let currentAssistantContent = ""
+
+      const events = this.provider.continueWithToolResponse(toolResponse, {
+        model: this.settings.model,
+        autoApprove: this.settings.permissionMode === "bypassPermissions",
+        thinkingTokens: this.settings.extendedThinking ? 10000 : undefined,
+      })
+
+      if (!events) {
+        this.sender.send({ type: "error", error: "Provider returned null for continuation" })
+        return
+      }
+
+      for await (const event of events) {
         this.sender.send(event)
 
         // Track content for history

@@ -1,6 +1,27 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react"
-import { basename, isChildOrEqualPath } from "@/lib/path-utils"
+import { basename, dirname, isChildOrEqualPath } from "@/lib/path-utils"
 import type { FileOperationsProvider } from "@/hooks/useWorkspaceConnection"
+
+/** Get all parent directories for a path (excluding root) */
+function getParentDirectories(filePath: string): string[] {
+  const parents: string[] = []
+  let current = dirname(filePath)
+  while (current && current !== "/" && current !== ".") {
+    parents.push(current)
+    current = dirname(current)
+  }
+  return parents
+}
+
+/** Add paths to a set and return sorted array, or original if unchanged */
+function addToSortedSet(prev: string[], toAdd: string[]): string[] {
+  const newSet = new Set(prev)
+  for (const item of toAdd) {
+    newSet.add(item)
+  }
+  if (newSet.size === prev.length) return prev
+  return Array.from(newSet).sort()
+}
 
 interface FileTreeContextValue {
   // All file paths in the project
@@ -80,26 +101,20 @@ export function FileTreeProvider({ children, fileOps, onHandleFileChangeReady }:
   }, [loadFileTree])
 
   const handleFileChange = useCallback((action: string, path: string, isDirectory: boolean) => {
-    // Normalize path to ensure it starts with /
     const normalizedPath = path.startsWith("/") ? path : `/${path}`
+    const parents = getParentDirectories(normalizedPath)
 
     if (action === "create" || action === "modify") {
-      // Treat modify as create if file doesn't exist (fs.watch can't distinguish)
       if (isDirectory) {
-        setDirectories(prev => {
-          if (prev.includes(normalizedPath)) return prev
-          return [...prev, normalizedPath].sort()
-        })
+        setDirectories(prev => addToSortedSet(prev, [normalizedPath, ...parents]))
       } else {
-        setAllFiles(prev => {
-          if (prev.includes(normalizedPath)) return prev
-          return [...prev, normalizedPath].sort()
-        })
+        if (parents.length > 0) {
+          setDirectories(prev => addToSortedSet(prev, parents))
+        }
+        setAllFiles(prev => addToSortedSet(prev, [normalizedPath]))
       }
     } else if (action === "delete") {
-      // Remove from files
       setAllFiles(prev => prev.filter(p => !isChildOrEqualPath(p, normalizedPath)))
-      // Remove from directories
       setDirectories(prev => prev.filter(p => !isChildOrEqualPath(p, normalizedPath)))
     }
   }, [])

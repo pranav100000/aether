@@ -8,6 +8,7 @@ import type {
   ClientMessage,
   AgentSettings,
   PromptContext,
+  ToolResponsePayload,
 } from "@/types/agent"
 
 export type ConnectionStatus = "disconnected" | "connecting" | "connected" | "error"
@@ -30,6 +31,7 @@ export interface UseAgentConnectionReturn {
   sendApprove: (toolId: string) => void
   sendReject: (toolId: string) => void
   sendSettings: (settings: AgentSettings) => void
+  sendToolResponse: (toolResponse: ToolResponsePayload) => void
 }
 
 export function useAgentConnection({
@@ -186,6 +188,10 @@ export function useAgentConnection({
     send({ type: "settings", settings })
   }, [send])
 
+  const sendToolResponse = useCallback((toolResponse: ToolResponsePayload) => {
+    send({ type: "tool_response", toolResponse })
+  }, [send])
+
   // Connect on mount, disconnect on unmount
   useEffect(() => {
     connect()
@@ -204,5 +210,6 @@ export function useAgentConnection({
     sendApprove,
     sendReject,
     sendSettings,
+    sendToolResponse,
   }
 }

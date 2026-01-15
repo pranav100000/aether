@@ -28,7 +28,7 @@ import type {
   ToolMessage,
   ThinkingMessage,
 } from "@/hooks/useAgentMessages"
-import type { AgentType } from "@/types/agent"
+import type { AgentType, ToolResponsePayload } from "@/types/agent"
 import type { LucideIcon } from "lucide-react"
 
 export interface AgentMessageListProps {
@@ -38,6 +38,8 @@ export interface AgentMessageListProps {
   agentIcon: LucideIcon
   agentName: string
   agentColor: string
+  /** Callback for human-in-the-loop tool responses */
+  onToolResponse?: (response: ToolResponsePayload) => void
 }
 
 // Type guards for rendering
@@ -60,6 +62,7 @@ export function AgentMessageList({
   agentIcon: AgentIcon,
   agentName,
   agentColor,
+  onToolResponse,
 }: AgentMessageListProps) {
   const showEmptyState = messages.length === 0
 
@@ -113,6 +116,9 @@ export function AgentMessageList({
                         input={msg.tool.input}
                         result={msg.tool.result}
                         error={msg.tool.error}
+                        status={msg.tool.status}
+                        toolId={msg.tool.id}
+                        onToolResponse={onToolResponse}
                       />
                     </ToolContent>
                   </Tool>
