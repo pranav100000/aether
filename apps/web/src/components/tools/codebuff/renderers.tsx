@@ -37,6 +37,7 @@ import type {
   AddSubgoalParams,
   UpdateSubgoalParams,
   SubgoalStatus,
+  SuggestFollowupsParams,
 } from "./types";
 import {
   FileTextIcon,
@@ -58,6 +59,7 @@ import {
   CheckCircleIcon,
   TargetIcon,
   RefreshCwIcon,
+  LightbulbIcon,
 } from "lucide-react";
 import { CodeBlock } from "@/components/ai-elements/code-block";
 
@@ -72,6 +74,8 @@ export interface ToolRendererProps {
   toolId?: string;
   /** Callback for human-in-the-loop tool responses */
   onToolResponse?: (response: ToolResponsePayload) => void;
+  /** Callback for followup selection - sends a new prompt */
+  onFollowupSelect?: (prompt: string) => void;
 }
 
 // read_files renderer
@@ -672,6 +676,46 @@ function UpdateSubgoalRenderer({ input, error }: ToolRendererProps) {
   );
 }
 
+// suggest_followups renderer
+function SuggestFollowupsRenderer({ input, onFollowupSelect }: ToolRendererProps) {
+  const params = input as unknown as SuggestFollowupsParams;
+
+  const handleFollowupClick = (prompt: string) => {
+    if (!onFollowupSelect) {
+      console.error("[SuggestFollowupsRenderer] Missing onFollowupSelect callback");
+      return;
+    }
+    onFollowupSelect(prompt);
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <LightbulbIcon className="size-4 text-yellow-400" />
+        <span className="text-sm text-zinc-300">Suggested Follow-ups</span>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {params.followups.map((followup, i) => (
+          <button
+            key={i}
+            type="button"
+            onClick={() => handleFollowupClick(followup.prompt)}
+            disabled={!onFollowupSelect}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg
+                     bg-zinc-800 border border-zinc-700 text-zinc-200
+                     hover:bg-zinc-700 hover:border-zinc-600 hover:text-zinc-100
+                     disabled:opacity-50 disabled:cursor-not-allowed
+                     transition-colors duration-150"
+          >
+            <LightbulbIcon className="size-3.5 text-yellow-400" />
+            {followup.label || followup.prompt}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // Helper to parse JSON result messages
 function parseResultMessage(result?: string): string | null {
   if (!result) return null;
@@ -751,6 +795,7 @@ export const toolIcons: Record<string, typeof FileIcon> = {
   end_turn: CheckCircleIcon,
   add_subgoal: TargetIcon,
   update_subgoal: RefreshCwIcon,
+  suggest_followups: LightbulbIcon,
 };
 
 // Tool color mapping
@@ -777,6 +822,7 @@ export const toolColors: Record<string, string> = {
   end_turn: "text-green-400",
   add_subgoal: "text-cyan-400",
   update_subgoal: "text-cyan-400",
+  suggest_followups: "text-yellow-400",
 };
 
 // Main renderer component
@@ -827,6 +873,8 @@ export function CodebuffToolRenderer(props: ToolRendererProps) {
       return <AddSubgoalRenderer {...props} />;
     case "update_subgoal":
       return <UpdateSubgoalRenderer {...props} />;
+    case "suggest_followups":
+      return <SuggestFollowupsRenderer {...props} />;
     default:
       return <DefaultRenderer {...props} />;
   }

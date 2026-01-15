@@ -28,6 +28,8 @@ export interface AgentMessageListProps {
   agentColor: string;
   /** Callback for human-in-the-loop tool responses */
   onToolResponse?: (response: ToolResponsePayload) => void;
+  /** Callback for followup selection - sends a new prompt */
+  onFollowupSelect?: (prompt: string) => void;
 }
 
 // Type guards for rendering
@@ -51,6 +53,7 @@ export function AgentMessageList({
   agentName,
   agentColor,
   onToolResponse,
+  onFollowupSelect,
 }: AgentMessageListProps) {
   const showEmptyState = messages.length === 0;
 
@@ -105,6 +108,7 @@ export function AgentMessageList({
                         status={msg.tool.status}
                         toolId={msg.tool.id}
                         onToolResponse={onToolResponse}
+                        onFollowupSelect={onFollowupSelect}
                       />
                     </ToolContent>
                   </Tool>

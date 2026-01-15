@@ -16,6 +16,8 @@ export interface ToolRendererProps {
   toolId?: string;
   /** Callback for human-in-the-loop tool responses */
   onToolResponse?: (response: ToolResponsePayload) => void;
+  /** Callback for followup selection - sends a new prompt */
+  onFollowupSelect?: (prompt: string) => void;
 }
 
 // Main tool renderer that routes to agent-specific renderers
@@ -28,6 +30,7 @@ export function ToolRenderer({
   status,
   toolId,
   onToolResponse,
+  onFollowupSelect,
 }: ToolRendererProps) {
   switch (agent) {
     case "codebuff":
@@ -40,6 +43,7 @@ export function ToolRenderer({
           status={status}
           toolId={toolId}
           onToolResponse={onToolResponse}
+          onFollowupSelect={onFollowupSelect}
         />
       );
     // TODO: Add Claude, Codex, OpenCode renderers
@@ -57,6 +61,7 @@ export function ToolRenderer({
           status={status}
           toolId={toolId}
           onToolResponse={onToolResponse}
+          onFollowupSelect={onFollowupSelect}
         />
       );
   }

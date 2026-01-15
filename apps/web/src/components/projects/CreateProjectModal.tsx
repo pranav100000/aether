@@ -1,4 +1,4 @@
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { HardwareSelector } from "./HardwareSelector";
@@ -20,16 +20,13 @@ export function CreateProjectModal({ onClose, onCreate }: CreateProjectModalProp
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [hardware, setHardware] = useState<HardwareConfig | null>(null);
-  const [idleTimeout, setIdleTimeout] = useState<0 | 5 | 10 | 30 | 60 | null>(null);
+  // Track if user has explicitly set idle timeout
+  const [userIdleTimeout, setUserIdleTimeout] = useState<0 | 5 | 10 | 30 | 60 | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Initialize idle timeout from settings
-  useEffect(() => {
-    if (settings && idleTimeout === null) {
-      setIdleTimeout(settings.default_idle_timeout_minutes ?? 10);
-    }
-  }, [settings, idleTimeout]);
+  // Compute effective idle timeout: user override > settings default > null (loading)
+  const idleTimeout = userIdleTimeout ?? settings?.default_idle_timeout_minutes ?? null;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -91,7 +88,7 @@ export function CreateProjectModal({ onClose, onCreate }: CreateProjectModalProp
                 <select
                   className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                   value={idleTimeout}
-                  onChange={(e) => setIdleTimeout(parseInt(e.target.value) as 0 | 5 | 10 | 30 | 60)}
+                  onChange={(e) => setUserIdleTimeout(parseInt(e.target.value) as 0 | 5 | 10 | 30 | 60)}
                 >
                   {IDLE_TIMEOUT_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value}>

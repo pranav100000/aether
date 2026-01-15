@@ -161,6 +161,25 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
     setStatus("ready");
   }, [sendAbort, setStatus]);
 
+  const handleFollowupSelect = useCallback(
+    (prompt: string) => {
+      if (!isConnected) return;
+
+      addUserMessage(prompt);
+
+      sendPrompt(
+        prompt,
+        {
+          model: settings.model,
+          permissionMode: settings.permissionMode,
+          extendedThinking: settings.extendedThinking,
+        },
+        undefined
+      );
+    },
+    [isConnected, addUserMessage, sendPrompt, settings]
+  );
+
   return (
     <div className="relative flex size-full flex-col divide-y divide-zinc-800 overflow-hidden bg-zinc-950">
       <AgentHeader
@@ -181,6 +200,7 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
         agentName={currentAgentConfig.name}
         agentColor={currentAgentConfig.color}
         onToolResponse={sendToolResponse}
+        onFollowupSelect={handleFollowupSelect}
       />
 
       {error && (
