@@ -179,7 +179,7 @@ export function AgentPromptInput({
 
         <PromptInput
           onSubmit={handleSubmit}
-          className="[&_[data-slot=input-group]]:glass [&_[data-slot=input-group]]:rounded-2xl [&_[data-slot=input-group]]:shadow-2xl [&_[data-slot=input-group]:has([data-slot=input-group-control]:focus-visible)]:ring-zinc-700"
+          className="**:data-[slot=input-group]:glass **:data-[slot=input-group]:rounded-2xl **:data-[slot=input-group]:shadow-2xl [&_[data-slot=input-group]:has([data-slot=input-group-control]:focus-visible)]:ring-zinc-700"
         >
           <PromptInputBody>
             <PromptInputTextarea
@@ -188,7 +188,7 @@ export function AgentPromptInput({
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
               placeholder={disabled ? "Connecting..." : placeholder}
-              disabled={disabled || isProcessing}
+              disabled={disabled || isProcessing || isSubmitDisabled}
             />
           </PromptInputBody>
           <PromptInputFooter>
