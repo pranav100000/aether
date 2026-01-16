@@ -54,3 +54,38 @@ type Mount struct {
 	Volume string
 	Path   string
 }
+
+// InfraService represents a provisioned infrastructure service.
+// This is a provider-agnostic type used by handlers.
+type InfraService struct {
+	ID           string
+	ProjectID    string
+	ServiceType  string
+	Name         string
+	Status       string
+	MachineID    string
+	VolumeID     string
+	Connection   *ConnectionDetails
+	ErrorMessage string
+	Config       map[string]interface{}
+	CreatedAt    string
+	UpdatedAt    string
+}
+
+// ConnectionDetails contains connection information for an infrastructure service.
+type ConnectionDetails struct {
+	Host     string            `json:"host"`
+	Port     int               `json:"port,omitempty"`
+	Ports    map[string]int    `json:"ports,omitempty"`
+	Username string            `json:"username,omitempty"`
+	Password string            `json:"password,omitempty"`
+	URL      string            `json:"url,omitempty"`
+	Env      map[string]string `json:"env,omitempty"`
+}
+
+// InfraServiceConfig contains configuration for creating an infrastructure service.
+type InfraServiceConfig struct {
+	ServiceType string
+	Name        string
+	Config      map[string]interface{}
+}

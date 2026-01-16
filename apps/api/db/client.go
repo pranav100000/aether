@@ -518,3 +518,191 @@ func (c *Client) UpdateUserSettings(ctx context.Context, userID string, settings
 
 	return &s, nil
 }
+
+// ============================================
+// Infrastructure Service Methods
+// ============================================
+
+// InfraService represents an infrastructure service (database, cache, etc.)
+type InfraService struct {
+	ID                         string     `json:"id"`
+	ProjectID                  string     `json:"project_id"`
+	ServiceType                string     `json:"service_type"`
+	Name                       *string    `json:"name,omitempty"`
+	FlyMachineID               *string    `json:"fly_machine_id,omitempty"`
+	FlyVolumeID                *string    `json:"fly_volume_id,omitempty"`
+	Status                     string     `json:"status"`
+	ErrorMessage               *string    `json:"error_message,omitempty"`
+	ConnectionDetailsEncrypted *string    `json:"connection_details_encrypted,omitempty"`
+	Config                     any        `json:"config"`
+	CreatedAt                  time.Time  `json:"created_at"`
+	UpdatedAt                  time.Time  `json:"updated_at"`
+}
+
+// CreateInfraService creates a new infrastructure service record
+func (c *Client) CreateInfraService(ctx context.Context, projectID, serviceType string, name *string, config any) (*InfraService, error) {
+	var s InfraService
+	err := c.pool.QueryRow(ctx, `
+		INSERT INTO infra_services (project_id, service_type, name, config, status)
+		VALUES ($1, $2, $3, $4, 'provisioning')
+		RETURNING id, project_id, service_type, name, fly_machine_id, fly_volume_id,
+		          status, error_message, connection_details_encrypted, config,
+		          created_at, updated_at
+	`, projectID, serviceType, name, config).Scan(
+		&s.ID, &s.ProjectID, &s.ServiceType, &s.Name,
+		&s.FlyMachineID, &s.FlyVolumeID, &s.Status, &s.ErrorMessage,
+		&s.ConnectionDetailsEncrypted, &s.Config,
+		&s.CreatedAt, &s.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create infra service: %w", err)
+	}
+
+	return &s, nil
+}
+
+// GetInfraService retrieves an infrastructure service by ID
+func (c *Client) GetInfraService(ctx context.Context, serviceID string) (*InfraService, error) {
+	row := c.pool.QueryRow(ctx, `
+		SELECT id, project_id, service_type, name, fly_machine_id, fly_volume_id,
+		       status, error_message, connection_details_encrypted, config,
+		       created_at, updated_at
+		FROM infra_services
+		WHERE id = $1
+	`, serviceID)
+
+	var s InfraService
+	err := row.Scan(
+		&s.ID, &s.ProjectID, &s.ServiceType, &s.Name,
+		&s.FlyMachineID, &s.FlyVolumeID, &s.Status, &s.ErrorMessage,
+		&s.ConnectionDetailsEncrypted, &s.Config,
+		&s.CreatedAt, &s.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to get infra service: %w", err)
+	}
+
+	return &s, nil
+}
+
+// GetInfraServiceByProject retrieves an infrastructure service verifying project ownership
+func (c *Client) GetInfraServiceByProject(ctx context.Context, serviceID, projectID string) (*InfraService, error) {
+	row := c.pool.QueryRow(ctx, `
+		SELECT id, project_id, service_type, name, fly_machine_id, fly_volume_id,
+		       status, error_message, connection_details_encrypted, config,
+		       created_at, updated_at
+		FROM infra_services
+		WHERE id = $1 AND project_id = $2
+	`, serviceID, projectID)
+
+	var s InfraService
+	err := row.Scan(
+		&s.ID, &s.ProjectID, &s.ServiceType, &s.Name,
+		&s.FlyMachineID, &s.FlyVolumeID, &s.Status, &s.ErrorMessage,
+		&s.ConnectionDetailsEncrypted, &s.Config,
+		&s.CreatedAt, &s.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to get infra service: %w", err)
+	}
+
+	return &s, nil
+}
+
+// ListInfraServices retrieves all infrastructure services for a project
+func (c *Client) ListInfraServices(ctx context.Context, projectID string) ([]InfraService, error) {
+	rows, err := c.pool.Query(ctx, `
+		SELECT id, project_id, service_type, name, fly_machine_id, fly_volume_id,
+		       status, error_message, connection_details_encrypted, config,
+		       created_at, updated_at
+		FROM infra_services
+		WHERE project_id = $1 AND status != 'deleted'
+		ORDER BY created_at DESC
+	`, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list infra services: %w", err)
+	}
+	defer rows.Close()
+
+	var services []InfraService
+	for rows.Next() {
+		var s InfraService
+		err := rows.Scan(
+			&s.ID, &s.ProjectID, &s.ServiceType, &s.Name,
+			&s.FlyMachineID, &s.FlyVolumeID, &s.Status, &s.ErrorMessage,
+			&s.ConnectionDetailsEncrypted, &s.Config,
+			&s.CreatedAt, &s.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan infra service: %w", err)
+		}
+		services = append(services, s)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating infra services: %w", err)
+	}
+
+	return services, nil
+}
+
+// UpdateInfraServiceStatus updates the status of an infrastructure service
+func (c *Client) UpdateInfraServiceStatus(ctx context.Context, serviceID, status string, errorMsg *string) error {
+	_, err := c.pool.Exec(ctx, `
+		UPDATE infra_services SET status = $1, error_message = $2 WHERE id = $3
+	`, status, errorMsg, serviceID)
+	if err != nil {
+		return fmt.Errorf("failed to update infra service status: %w", err)
+	}
+	return nil
+}
+
+// UpdateInfraServiceMachine updates the Fly machine ID for an infrastructure service
+func (c *Client) UpdateInfraServiceMachine(ctx context.Context, serviceID, machineID string) error {
+	_, err := c.pool.Exec(ctx, `
+		UPDATE infra_services SET fly_machine_id = $1 WHERE id = $2
+	`, machineID, serviceID)
+	if err != nil {
+		return fmt.Errorf("failed to update infra service machine: %w", err)
+	}
+	return nil
+}
+
+// UpdateInfraServiceVolume updates the Fly volume ID for an infrastructure service
+func (c *Client) UpdateInfraServiceVolume(ctx context.Context, serviceID, volumeID string) error {
+	_, err := c.pool.Exec(ctx, `
+		UPDATE infra_services SET fly_volume_id = $1 WHERE id = $2
+	`, volumeID, serviceID)
+	if err != nil {
+		return fmt.Errorf("failed to update infra service volume: %w", err)
+	}
+	return nil
+}
+
+// UpdateInfraServiceConnection updates the encrypted connection details for an infrastructure service
+func (c *Client) UpdateInfraServiceConnection(ctx context.Context, serviceID string, connectionDetailsEncrypted string) error {
+	_, err := c.pool.Exec(ctx, `
+		UPDATE infra_services SET connection_details_encrypted = $1 WHERE id = $2
+	`, connectionDetailsEncrypted, serviceID)
+	if err != nil {
+		return fmt.Errorf("failed to update infra service connection: %w", err)
+	}
+	return nil
+}
+
+// DeleteInfraService marks an infrastructure service as deleted
+func (c *Client) DeleteInfraService(ctx context.Context, serviceID string) error {
+	_, err := c.pool.Exec(ctx, `
+		UPDATE infra_services SET status = 'deleted' WHERE id = $1
+	`, serviceID)
+	if err != nil {
+		return fmt.Errorf("failed to delete infra service: %w", err)
+	}
+	return nil
+}

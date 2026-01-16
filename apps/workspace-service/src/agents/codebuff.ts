@@ -6,6 +6,7 @@ import type {
   ProviderConfig,
   ToolResponsePayload,
 } from "../types";
+import { infraTools } from "./infra-tools";
 
 const AGENT = "codebuff/base2-max@0.0.24";
 
@@ -182,6 +183,8 @@ export class CodebuffProvider implements AgentProvider {
         agent: AGENT,
         prompt,
         signal: this.abortController.signal,
+        // Add custom infrastructure tools for provisioning services
+        customToolDefinitions: infraTools,
         // Override ask_user to wait for user input
         overrideTools: {
           ask_user: async (input) => {
