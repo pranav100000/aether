@@ -64,7 +64,7 @@ type UserSettings struct {
 	DefaultMemoryMB           int       `json:"default_memory_mb"`
 	DefaultVolumeSizeGB       int       `json:"default_volume_size_gb"`
 	DefaultGPUKind            *string   `json:"default_gpu_kind,omitempty"`
-	DefaultIdleTimeoutMinutes *int      `json:"default_idle_timeout_minutes,omitempty"`
+	DefaultIdleTimeoutMinutes int       `json:"default_idle_timeout_minutes"`
 	CreatedAt                 time.Time `json:"created_at"`
 	UpdatedAt                 time.Time `json:"updated_at"`
 }
@@ -462,7 +462,33 @@ func (c *Client) SetUserAPIKeys(ctx context.Context, userID string, encrypted *s
 // User Settings Methods
 // ============================================
 
-// GetUserSettings retrieves user settings (creates with defaults if not exists)
+// Default user settings values
+const (
+	DefaultCPUKind            = "shared"
+	DefaultCPUs               = 1
+	DefaultMemoryMB           = 1024
+	DefaultVolumeSizeGB       = 5
+	DefaultIdleTimeoutMinutes = 30
+)
+
+// InitializeUserSettings creates default settings for a new user.
+// Uses INSERT ON CONFLICT DO NOTHING so it's safe to call multiple times.
+func (c *Client) InitializeUserSettings(ctx context.Context, userID string) error {
+	defaultTimeout := DefaultIdleTimeoutMinutes
+	_, err := c.pool.Exec(ctx, `
+		INSERT INTO user_settings (
+			user_id, default_cpu_kind, default_cpus, default_memory_mb,
+			default_volume_size_gb, default_gpu_kind, default_idle_timeout_minutes
+		) VALUES ($1, $2, $3, $4, $5, NULL, $6)
+		ON CONFLICT (user_id) DO NOTHING
+	`, userID, DefaultCPUKind, DefaultCPUs, DefaultMemoryMB, DefaultVolumeSizeGB, defaultTimeout)
+	if err != nil {
+		return fmt.Errorf("failed to initialize user settings: %w", err)
+	}
+	return nil
+}
+
+// GetUserSettings retrieves user settings, initializing with defaults if not exists
 func (c *Client) GetUserSettings(ctx context.Context, userID string) (*UserSettings, error) {
 	row := c.pool.QueryRow(ctx, `
 		SELECT user_id, default_cpu_kind, default_cpus, default_memory_mb,
@@ -480,7 +506,12 @@ func (c *Client) GetUserSettings(ctx context.Context, userID string) (*UserSetti
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
+			// Initialize settings for new user
+			if initErr := c.InitializeUserSettings(ctx, userID); initErr != nil {
+				return nil, initErr
+			}
+			// Re-fetch after initialization
+			return c.GetUserSettings(ctx, userID)
 		}
 		return nil, fmt.Errorf("failed to get user settings: %w", err)
 	}
@@ -488,7 +519,7 @@ func (c *Client) GetUserSettings(ctx context.Context, userID string) (*UserSetti
 	return &s, nil
 }
 
-// UpdateUserSettings updates user default settings
+// UpdateUserSettings updates user default settings, initializing if not exists
 func (c *Client) UpdateUserSettings(ctx context.Context, userID string, settings *UserSettings) (*UserSettings, error) {
 	var s UserSettings
 	err := c.pool.QueryRow(ctx, `
@@ -511,7 +542,11 @@ func (c *Client) UpdateUserSettings(ctx context.Context, userID string, settings
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
+			// Initialize settings for new user, then retry update
+			if initErr := c.InitializeUserSettings(ctx, userID); initErr != nil {
+				return nil, initErr
+			}
+			return c.UpdateUserSettings(ctx, userID, settings)
 		}
 		return nil, fmt.Errorf("failed to update user settings: %w", err)
 	}

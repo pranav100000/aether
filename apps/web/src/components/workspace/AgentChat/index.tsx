@@ -203,11 +203,12 @@ export function AgentChat({ projectId, defaultAgent = "claude" }: AgentChatProps
         onFollowupSelect={handleFollowupSelect}
       />
 
-      {error && (
-        <div className="shrink-0 bg-red-900/50 px-4 py-2 text-sm text-red-200">{error}</div>
-      )}
+
 
       <div className="absolute bottom-0 left-0 right-0 z-10">
+        {error && (
+        <div className="shrink-0 bg-red-900/50 px-4 py-2 text-sm text-red-200">{error}</div>
+        )}
         <AgentPromptInput
           onSubmit={handleSubmit}
           onStop={handleStop}

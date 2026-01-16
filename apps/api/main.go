@@ -123,23 +123,46 @@ func main() {
 	// Initialize infra registry
 	infraRegistry := infra.NewRegistry()
 
+	// Get the repo root directory for compose paths
+	// In local mode, we need this to resolve relative compose paths
+	// When running in a container (Docker-in-Docker), we need both container and host paths
+
+	// Container repo root is always computed from working directory
+	// Assumes we're running from apps/api, so go up two levels
+	var containerRepoRoot string
+	if wd, err := os.Getwd(); err == nil {
+		containerRepoRoot = wd + "/../.."
+	}
+
+	// Host repo root is passed via REPO_ROOT when running in Docker (set in docker-compose.yml)
+	// If not set, we assume we're running directly on the host, so container path = host path
+	hostRepoRoot := os.Getenv("REPO_ROOT")
+	if hostRepoRoot == "" {
+		hostRepoRoot = containerRepoRoot
+	}
+
 	// Create implementations based on mode
 	var machineManager handlers.MachineManager
 	var volumeManager handlers.VolumeManager
 	var connectionResolver handlers.ConnectionResolver
+	var composeManager handlers.ComposeManager
 
 	if cfg.LocalMode {
 		machineManager = local.NewMachineManager()
 		volumeManager = local.NewVolumeManager()
 		connectionResolver = workspace.NewLocalConnectionResolver()
+		composeManager = local.NewComposeManager(containerRepoRoot, hostRepoRoot)
 	} else {
 		machineManager = flyClient
 		volumeManager = flyClient
 		connectionResolver = workspace.NewFlyConnectionResolver(flyClient)
+		// For Fly.io, we'll use compose compatibility (future implementation)
+		// For now, use local compose manager as placeholder
+		composeManager = local.NewComposeManager(containerRepoRoot, hostRepoRoot)
 	}
 
 	// Create infra manager with the appropriate implementations
-	infraManager := infra.NewManager(machineManager, volumeManager, infraRegistry, flyRegion)
+	infraManager := infra.NewManager(machineManager, volumeManager, composeManager, infraRegistry, flyRegion, containerRepoRoot)
 
 	// Create workspace factory with all implementations
 	wsFactory := workspace.NewFactory(machineManager, volumeManager, connectionResolver, infraManager)

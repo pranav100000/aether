@@ -42,6 +42,33 @@ type VolumeManager interface {
 	DeleteVolume(volumeID string) error
 }
 
+// ComposeStack represents a running docker compose stack
+type ComposeStack struct {
+	ID        string            // Unique identifier (project name in compose)
+	Name      string            // Human-readable name
+	Status    string            // running, stopped, etc.
+	Services  []string          // List of service names in the stack
+	Ports     map[string]int    // Exposed ports by service name
+	Env       map[string]string // Environment variables used
+	Directory string            // Working directory for the stack
+}
+
+// ComposeManager defines operations for managing docker compose stacks.
+// Used for multi-container services like Supabase.
+type ComposeManager interface {
+	// Up starts a compose stack from the given directory
+	Up(ctx context.Context, stackID string, composeDir string, env map[string]string) (*ComposeStack, error)
+
+	// Down stops and removes a compose stack
+	Down(ctx context.Context, stackID string) error
+
+	// Status gets the current status of a compose stack
+	Status(ctx context.Context, stackID string) (*ComposeStack, error)
+
+	// Logs retrieves logs from a compose stack
+	Logs(ctx context.Context, stackID string, service string) (string, error)
+}
+
 // ConnectionInfo contains connection details for a project's VM
 type ConnectionInfo struct {
 	Host          string

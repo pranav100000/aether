@@ -5,8 +5,8 @@ WORKDIR /app
 # Install air for hot reloading
 RUN go install github.com/air-verse/air@v1.61.0
 
-# Install git for go mod download and docker-cli for local mode
-RUN apk add --no-cache git docker-cli
+# Install git for go mod download and docker-cli + docker-compose for local mode
+RUN apk add --no-cache git docker-cli docker-cli-compose
 
 # Copy go mod files first for better caching (from root)
 COPY go.mod go.sum ./

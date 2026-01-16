@@ -25,21 +25,30 @@ type ServiceDefinition struct {
 	// Description explains what this service provides
 	Description string
 
-	// Image is the Docker/Fly image to use
+	// ComposePath is the path to docker-compose.yml relative to repo root.
+	// If set, this service uses docker compose instead of a single container.
+	ComposePath string
+
+	// Image is the Docker/Fly image to use (for single-container services)
 	Image string
 
-	// Guest specifies compute resources
+	// Guest specifies compute resources (for single-container services)
 	Guest GuestConfig
 
 	// Ports lists the ports exposed by this service
 	Ports []PortConfig
 
-	// Volumes lists persistent storage requirements
+	// Volumes lists persistent storage requirements (for single-container services)
 	Volumes []VolumeConfig
 
 	// EnvTemplate contains environment variables with placeholders
 	// Supported placeholders: {{.GeneratedPassword}}, {{.GeneratedJWTSecret}}, {{.GeneratedAnonKey}}, {{.GeneratedServiceKey}}
 	EnvTemplate map[string]string
+}
+
+// IsCompose returns true if this service uses docker compose
+func (d ServiceDefinition) IsCompose() bool {
+	return d.ComposePath != ""
 }
 
 // PortConfig defines a port exposed by a service
@@ -82,38 +91,20 @@ func NewRegistry() *Registry {
 
 // registerDefaults adds built-in service definitions
 func (r *Registry) registerDefaults() {
-	// Supabase - full stack (Postgres + PostgREST + GoTrue + Realtime + Studio)
+	// Supabase - full stack via docker compose (Postgres + PostgREST + GoTrue + Storage + Realtime + Studio)
+	// Uses .env.example defaults for local dev - Supabase has many interdependent services
+	// that all need consistent credentials (db, auth, realtime, storage, etc.)
 	r.Register(ServiceDefinition{
 		Type:        "supabase",
 		DisplayName: "Supabase",
-		Description: "Full Supabase stack: PostgreSQL + PostgREST API + GoTrue auth + Realtime + Studio",
-		Image:       "supabase/postgres:15.1.1.41", // Start with postgres, can upgrade to full stack
-		Guest: GuestConfig{
-			CPUKind:  "shared",
-			CPUs:     2,
-			MemoryMB: 2048,
-			GPUKind:  "",
-		},
+		Description: "Full Supabase stack: PostgreSQL + PostgREST API + GoTrue auth + Storage + Realtime + Studio",
+		ComposePath: "infra/supabase/docker", // Uses official Supabase docker-compose.yml
 		Ports: []PortConfig{
-			{Name: "postgres", InternalPort: 5432, Protocol: "tcp"},
-			// Future: Add these when using full stack image
-			// {Name: "api", InternalPort: 3000, Protocol: "http"},
-			// {Name: "auth", InternalPort: 9999, Protocol: "http"},
-			// {Name: "realtime", InternalPort: 4000, Protocol: "tcp"},
-			// {Name: "studio", InternalPort: 3001, Protocol: "http"},
+			{Name: "kong", InternalPort: 8000, Protocol: "http"},     // API Gateway (main entry point)
+			{Name: "postgres", InternalPort: 5432, Protocol: "tcp"},  // Direct DB access
+			{Name: "studio", InternalPort: 3000, Protocol: "http"},   // Admin UI
 		},
-		Volumes: []VolumeConfig{
-			{Name: "data", Path: "/var/lib/postgresql/data", SizeGB: 1},
-		},
-		EnvTemplate: map[string]string{
-			"POSTGRES_USER":     "postgres",
-			"POSTGRES_PASSWORD": "{{.GeneratedPassword}}",
-			"POSTGRES_DB":       "postgres",
-			// Future: Add these when using full stack image
-			// "JWT_SECRET":       "{{.GeneratedJWTSecret}}",
-			// "ANON_KEY":         "{{.GeneratedAnonKey}}",
-			// "SERVICE_ROLE_KEY": "{{.GeneratedServiceKey}}",
-		},
+		EnvTemplate: map[string]string{}, // Use .env.example defaults - credentials are pre-configured
 	})
 
 	// Redis - in-memory data store

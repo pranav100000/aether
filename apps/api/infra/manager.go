@@ -9,26 +9,32 @@ import (
 )
 
 // Manager provisions infrastructure services using the existing MachineManager and VolumeManager abstractions.
-// This ensures consistent behavior between workspace VMs and infrastructure services.
+// For compose-based services (like Supabase), it uses ComposeManager instead.
 type Manager struct {
 	machineManager handlers.MachineManager
 	volumeManager  handlers.VolumeManager
+	composeManager handlers.ComposeManager
 	registry       *Registry
 	region         string
+	baseDir        string // Repo root directory for resolving compose paths
 }
 
 // NewManager creates a new infrastructure manager using the provided abstractions
 func NewManager(
 	machineManager handlers.MachineManager,
 	volumeManager handlers.VolumeManager,
+	composeManager handlers.ComposeManager,
 	registry *Registry,
 	region string,
+	baseDir string,
 ) *Manager {
 	return &Manager{
 		machineManager: machineManager,
 		volumeManager:  volumeManager,
+		composeManager: composeManager,
 		registry:       registry,
 		region:         region,
+		baseDir:        baseDir,
 	}
 }
 
@@ -49,6 +55,83 @@ func (m *Manager) Provision(ctx context.Context, projectID string, serviceType s
 	// Build environment variables from template
 	env := BuildEnv(def.EnvTemplate, secrets)
 
+	// Use compose or single container based on service definition
+	if def.IsCompose() {
+		return m.provisionCompose(ctx, projectID, serviceType, name, def, env, secrets)
+	}
+	return m.provisionMachine(ctx, projectID, serviceType, name, def, env, secrets)
+}
+
+// provisionCompose provisions a compose-based service (like Supabase)
+func (m *Manager) provisionCompose(ctx context.Context, projectID, serviceType, name string, def ServiceDefinition, env map[string]string, secrets *GeneratedEnv) (*handlers.InfraService, error) {
+	// Generate unique stack ID
+	stackID := fmt.Sprintf("infra-%s-%s", projectID[:8], serviceType)
+
+	// Start the compose stack
+	stack, err := m.composeManager.Up(ctx, stackID, def.ComposePath, env)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start compose stack: %w", err)
+	}
+
+	// Build connection details for compose stack
+	conn := &handlers.ConnectionDetails{
+		Host:  "localhost", // Compose services are accessible on localhost
+		Ports: make(map[string]int),
+		Env:   make(map[string]string),
+	}
+
+	// Map ports from the stack
+	for serviceName, port := range stack.Ports {
+		conn.Ports[serviceName] = port
+	}
+
+	// Set primary port (kong for supabase)
+	if len(def.Ports) > 0 {
+		conn.Port = def.Ports[0].InternalPort
+	}
+
+	// Build connection URLs based on service type
+	switch serviceType {
+	case "supabase":
+		// Supabase connection details - use default password from .env.example
+		// Supabase has many interdependent services that need consistent credentials
+		password := "your-super-secret-and-long-postgres-password"
+		conn.Username = "postgres"
+		conn.Password = password
+
+		// Database URL (direct postgres access)
+		dbPort := 5432
+		if p, ok := stack.Ports["supabase-db-1"]; ok {
+			dbPort = p
+		}
+		conn.URL = fmt.Sprintf("postgresql://postgres:%s@localhost:%d/postgres", password, dbPort)
+		conn.Env["DATABASE_URL"] = conn.URL
+
+		// Supabase API URL (via Kong)
+		apiPort := 8000
+		if p, ok := stack.Ports["supabase-kong-1"]; ok {
+			apiPort = p
+		}
+		conn.Env["SUPABASE_URL"] = fmt.Sprintf("http://localhost:%d", apiPort)
+
+		// Use default keys from .env.example (these are well-known demo keys)
+		conn.Env["SUPABASE_ANON_KEY"] = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE"
+		conn.Env["SUPABASE_SERVICE_ROLE_KEY"] = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJzZXJ2aWNlX3JvbGUiLAogICAgImlzcyI6ICJzdXBhYmFzZS1kZW1vIiwKICAgICJpYXQiOiAxNjQxNzY5MjAwLAogICAgImV4cCI6IDE3OTk1MzU2MDAKfQ.DaYlNEoUrrEn2Ig7tqibS-PHK5vgusbcbo7X36XVt4Q"
+	}
+
+	return &handlers.InfraService{
+		ID:          stackID, // Use stack ID as service ID
+		ProjectID:   projectID,
+		ServiceType: serviceType,
+		Name:        name,
+		Status:      "ready",
+		MachineID:   stackID, // For compose, machine ID is the stack ID
+		Connection:  conn,
+	}, nil
+}
+
+// provisionMachine provisions a single-container service (like Redis)
+func (m *Manager) provisionMachine(ctx context.Context, projectID, serviceType, name string, def ServiceDefinition, env map[string]string, secrets *GeneratedEnv) (*handlers.InfraService, error) {
 	// Generate unique names for machine and volume
 	machinePrefix := fmt.Sprintf("infra-%s-%s", projectID[:8], serviceType)
 	volumeName := fmt.Sprintf("vol-infra-%s-%s", projectID[:8], serviceType)
@@ -124,7 +207,7 @@ func (m *Manager) Provision(ctx context.Context, projectID string, serviceType s
 
 		// Build connection URL based on service type
 		switch serviceType {
-		case "supabase", "postgres":
+		case "postgres":
 			password := secrets.GeneratedPassword
 			conn.Username = env["POSTGRES_USER"]
 			conn.Password = password
@@ -159,6 +242,16 @@ func (m *Manager) Provision(ctx context.Context, projectID string, serviceType s
 
 // Get retrieves a specific infrastructure service
 func (m *Manager) Get(ctx context.Context, serviceID string) (*handlers.InfraService, error) {
+	// Try compose first
+	if stack, err := m.composeManager.Status(ctx, serviceID); err == nil {
+		return &handlers.InfraService{
+			ID:        stack.ID,
+			MachineID: stack.ID,
+			Status:    stack.Status,
+		}, nil
+	}
+
+	// Fall back to machine
 	machine, err := m.machineManager.GetMachine(serviceID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get machine: %w", err)
@@ -187,6 +280,12 @@ func (m *Manager) List(ctx context.Context, projectID string) ([]*handlers.Infra
 
 // Delete removes an infrastructure service
 func (m *Manager) Delete(ctx context.Context, serviceID string) error {
+	// Try compose first
+	if err := m.composeManager.Down(ctx, serviceID); err == nil {
+		return nil // Successfully deleted compose stack
+	}
+
+	// Fall back to machine deletion
 	// Stop the machine first
 	if err := m.machineManager.StopMachine(serviceID); err != nil {
 		// Ignore errors, machine might already be stopped
@@ -207,6 +306,8 @@ func (m *Manager) Delete(ctx context.Context, serviceID string) error {
 
 // Stop stops a running infrastructure service
 func (m *Manager) Stop(ctx context.Context, serviceID string) error {
+	// For compose stacks, we don't support stop/start - use delete instead
+	// This is because docker compose doesn't have a clean "pause" semantic
 	if err := m.machineManager.StopMachine(serviceID); err != nil {
 		return fmt.Errorf("failed to stop machine: %w", err)
 	}

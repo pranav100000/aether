@@ -25,6 +25,8 @@ services:
       # These are set by the Makefile (make dev-services)
       - LOCAL_PROJECT_DIR=${LOCAL_PROJECT_DIR}
       - LOCAL_WORKSPACE_SERVICE_DIR=${LOCAL_WORKSPACE_SERVICE_DIR}
+      # Repo root for compose file resolution (host path for DinD volume mounts)
+      - REPO_ROOT=${REPO_ROOT:-${PWD}}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
