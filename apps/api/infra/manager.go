@@ -1,4 +1,4 @@
-package fly
+package infra
 
 import (
 	"context"
@@ -6,25 +6,34 @@ import (
 	"time"
 
 	"aether/apps/api/handlers"
-	"aether/apps/api/infra"
 )
 
-// InfraManager provisions infrastructure services on Fly.io
-type InfraManager struct {
-	client   *Client
-	registry *infra.Registry
+// Manager provisions infrastructure services using the existing MachineManager and VolumeManager abstractions.
+// This ensures consistent behavior between workspace VMs and infrastructure services.
+type Manager struct {
+	machineManager handlers.MachineManager
+	volumeManager  handlers.VolumeManager
+	registry       *Registry
+	region         string
 }
 
-// NewInfraManager creates a new Fly.io infrastructure manager
-func NewInfraManager(client *Client, registry *infra.Registry) *InfraManager {
-	return &InfraManager{
-		client:   client,
-		registry: registry,
+// NewManager creates a new infrastructure manager using the provided abstractions
+func NewManager(
+	machineManager handlers.MachineManager,
+	volumeManager handlers.VolumeManager,
+	registry *Registry,
+	region string,
+) *Manager {
+	return &Manager{
+		machineManager: machineManager,
+		volumeManager:  volumeManager,
+		registry:       registry,
+		region:         region,
 	}
 }
 
-// Provision creates a new infrastructure service on Fly.io
-func (m *InfraManager) Provision(ctx context.Context, projectID string, serviceType string, name string, config map[string]interface{}) (*handlers.InfraService, error) {
+// Provision creates a new infrastructure service
+func (m *Manager) Provision(ctx context.Context, projectID string, serviceType string, name string, config map[string]interface{}) (*handlers.InfraService, error) {
 	// Get service definition
 	def, ok := m.registry.Get(serviceType)
 	if !ok {
@@ -32,30 +41,30 @@ func (m *InfraManager) Provision(ctx context.Context, projectID string, serviceT
 	}
 
 	// Generate secrets for the service
-	secrets, err := infra.GenerateSecrets()
+	secrets, err := GenerateSecrets()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate secrets: %w", err)
 	}
 
 	// Build environment variables from template
-	env := infra.BuildEnv(def.EnvTemplate, secrets)
+	env := BuildEnv(def.EnvTemplate, secrets)
 
 	// Generate unique names for machine and volume
 	machinePrefix := fmt.Sprintf("infra-%s-%s", projectID[:8], serviceType)
-	volumeName := fmt.Sprintf("vol-%s-%s", projectID[:8], serviceType)
+	volumeName := fmt.Sprintf("vol-infra-%s-%s", projectID[:8], serviceType)
 
 	// Create volume if needed
 	var volumeID string
 	if len(def.Volumes) > 0 {
 		volDef := def.Volumes[0] // Use first volume definition
-		volume, err := m.client.CreateVolume(volumeName, volDef.SizeGB, m.client.GetRegion())
+		volume, err := m.volumeManager.CreateVolume(volumeName, volDef.SizeGB, m.region)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create volume: %w", err)
 		}
 		volumeID = volume.ID
 	}
 
-	// Build machine config
+	// Build machine config using the handlers types
 	machineConfig := handlers.MachineConfig{
 		Image: def.Image,
 		Guest: handlers.GuestConfig{
@@ -77,28 +86,28 @@ func (m *InfraManager) Provision(ctx context.Context, projectID string, serviceT
 		}
 	}
 
-	// Create the machine
-	machine, err := m.client.CreateMachine(machinePrefix, machineConfig)
+	// Create the machine using the abstraction
+	machine, err := m.machineManager.CreateMachine(machinePrefix, machineConfig)
 	if err != nil {
 		// Cleanup volume if machine creation failed
 		if volumeID != "" {
-			_ = m.client.DeleteVolume(volumeID)
+			_ = m.volumeManager.DeleteVolume(volumeID)
 		}
 		return nil, fmt.Errorf("failed to create machine: %w", err)
 	}
 
 	// Wait for machine to be running
-	if err := m.client.WaitForState(machine.ID, "started", 2*time.Minute); err != nil {
+	if err := m.machineManager.WaitForState(machine.ID, "started", 2*time.Minute); err != nil {
 		// Cleanup on failure
-		_ = m.client.DeleteMachine(machine.ID)
+		_ = m.machineManager.DeleteMachine(machine.ID)
 		if volumeID != "" {
-			_ = m.client.DeleteVolume(volumeID)
+			_ = m.volumeManager.DeleteVolume(volumeID)
 		}
 		return nil, fmt.Errorf("machine failed to start: %w", err)
 	}
 
 	// Get updated machine info with private IP
-	machine, err = m.client.GetMachine(machine.ID)
+	machine, err = m.machineManager.GetMachine(machine.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get machine info: %w", err)
 	}
@@ -137,7 +146,7 @@ func (m *InfraManager) Provision(ctx context.Context, projectID string, serviceT
 	}
 
 	return &handlers.InfraService{
-		ID:          machine.ID, // Use machine ID as service ID for now
+		ID:          machine.ID, // Use machine ID as service ID
 		ProjectID:   projectID,
 		ServiceType: serviceType,
 		Name:        name,
@@ -149,8 +158,8 @@ func (m *InfraManager) Provision(ctx context.Context, projectID string, serviceT
 }
 
 // Get retrieves a specific infrastructure service
-func (m *InfraManager) Get(ctx context.Context, serviceID string) (*handlers.InfraService, error) {
-	machine, err := m.client.GetMachine(serviceID)
+func (m *Manager) Get(ctx context.Context, serviceID string) (*handlers.InfraService, error) {
+	machine, err := m.machineManager.GetMachine(serviceID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get machine: %w", err)
 	}
@@ -170,48 +179,49 @@ func (m *InfraManager) Get(ctx context.Context, serviceID string) (*handlers.Inf
 }
 
 // List retrieves all infrastructure services for a project
-func (m *InfraManager) List(ctx context.Context, projectID string) ([]*handlers.InfraService, error) {
-	// Not implemented - would need to track services in database
+func (m *Manager) List(ctx context.Context, projectID string) ([]*handlers.InfraService, error) {
+	// Infrastructure services are tracked in the database, not queried from the machine manager
+	// This method returns nil - the handler uses the database store for listing
 	return nil, nil
 }
 
 // Delete removes an infrastructure service
-func (m *InfraManager) Delete(ctx context.Context, serviceID string) error {
+func (m *Manager) Delete(ctx context.Context, serviceID string) error {
 	// Stop the machine first
-	if err := m.client.StopMachine(serviceID); err != nil {
+	if err := m.machineManager.StopMachine(serviceID); err != nil {
 		// Ignore errors, machine might already be stopped
 	}
 
 	// Wait for it to stop
-	_ = m.client.WaitForState(serviceID, "stopped", 30*time.Second)
+	_ = m.machineManager.WaitForState(serviceID, "stopped", 30*time.Second)
 
 	// Delete the machine
-	if err := m.client.DeleteMachine(serviceID); err != nil {
+	if err := m.machineManager.DeleteMachine(serviceID); err != nil {
 		return fmt.Errorf("failed to delete machine: %w", err)
 	}
 
-	// Note: Volume deletion would need to be handled separately
-	// The volume ID would need to be tracked in the database
+	// Note: Volume deletion would need the volume ID from the database
+	// The handler should handle volume cleanup separately
 	return nil
 }
 
 // Stop stops a running infrastructure service
-func (m *InfraManager) Stop(ctx context.Context, serviceID string) error {
-	if err := m.client.StopMachine(serviceID); err != nil {
+func (m *Manager) Stop(ctx context.Context, serviceID string) error {
+	if err := m.machineManager.StopMachine(serviceID); err != nil {
 		return fmt.Errorf("failed to stop machine: %w", err)
 	}
-	return m.client.WaitForState(serviceID, "stopped", 30*time.Second)
+	return m.machineManager.WaitForState(serviceID, "stopped", 30*time.Second)
 }
 
 // Start starts a stopped infrastructure service
-func (m *InfraManager) Start(ctx context.Context, serviceID string) error {
-	if err := m.client.StartMachine(serviceID); err != nil {
+func (m *Manager) Start(ctx context.Context, serviceID string) error {
+	if err := m.machineManager.StartMachine(serviceID); err != nil {
 		return fmt.Errorf("failed to start machine: %w", err)
 	}
-	return m.client.WaitForState(serviceID, "started", 2*time.Minute)
+	return m.machineManager.WaitForState(serviceID, "started", 2*time.Minute)
 }
 
 // WaitForReady waits for a service to become ready
-func (m *InfraManager) WaitForReady(ctx context.Context, serviceID string, timeout time.Duration) error {
-	return m.client.WaitForState(serviceID, "started", timeout)
+func (m *Manager) WaitForReady(ctx context.Context, serviceID string, timeout time.Duration) error {
+	return m.machineManager.WaitForState(serviceID, "started", timeout)
 }

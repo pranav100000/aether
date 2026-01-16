@@ -8,6 +8,8 @@ import (
 	"aether/apps/api/local"
 )
 
+// Note: local is still used for MachineManager and VolumeManager in local mode
+
 // Factory creates workspace-related managers based on the runtime mode
 type Factory struct {
 	flyClient *fly.Client
@@ -45,10 +47,13 @@ func (f *Factory) ConnectionResolver() handlers.ConnectionResolver {
 	return NewFlyConnectionResolver(f.flyClient)
 }
 
-// InfraServiceManager returns the appropriate InfraServiceManager implementation
+// InfraServiceManager returns the InfraServiceManager implementation
+// Uses the same MachineManager/VolumeManager abstractions as workspace VMs
 func (f *Factory) InfraServiceManager() handlers.InfraServiceManager {
-	if config.IsLocalMode() {
-		return local.NewInfraManager(f.registry)
-	}
-	return fly.NewInfraManager(f.flyClient, f.registry)
+	return infra.NewManager(
+		f.MachineManager(),
+		f.VolumeManager(),
+		f.registry,
+		f.flyClient.GetRegion(),
+	)
 }
