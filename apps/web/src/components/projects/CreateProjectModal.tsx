@@ -16,7 +16,7 @@ interface CreateProjectModalProps {
 }
 
 export function CreateProjectModal({ onClose, onCreate }: CreateProjectModalProps) {
-  const { settings } = useUserSettings();
+  const { settings, loading: settingsLoading, error: settingsError } = useUserSettings();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [hardware, setHardware] = useState<HardwareConfig | null>(null);
@@ -30,7 +30,8 @@ export function CreateProjectModal({ onClose, onCreate }: CreateProjectModalProp
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!hardware || idleTimeout === null) return;
+    console.log('hardware, settingsLoaded, settingsError, idleTimeout', hardware, settingsLoading, settingsError, idleTimeout);
+    if (!hardware || settingsLoading || settingsError || idleTimeout === null) return;
 
     setError(null);
     setLoading(true);
@@ -83,11 +84,19 @@ export function CreateProjectModal({ onClose, onCreate }: CreateProjectModalProp
           {/* Idle Timeout */}
           <div>
             <label className="text-sm font-medium block mb-2">Idle Timeout</label>
-            {idleTimeout !== null ? (
+            {settingsError ? (
+              <div className="text-sm text-destructive p-4 border border-destructive/50 rounded-md">
+                Failed to load settings: {settingsError}
+              </div>
+            ) : settingsLoading ? (
+              <div className="text-sm text-muted-foreground p-4 border rounded-md">
+                Loading defaults...
+              </div>
+            ) : (
               <>
                 <select
                   className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  value={idleTimeout}
+                  value={idleTimeout ?? 30}
                   onChange={(e) => setUserIdleTimeout(parseInt(e.target.value) as 0 | 5 | 10 | 30 | 60)}
                 >
                   {IDLE_TIMEOUT_OPTIONS.map((opt) => (
@@ -100,10 +109,6 @@ export function CreateProjectModal({ onClose, onCreate }: CreateProjectModalProp
                   Project will automatically stop after this duration of inactivity
                 </p>
               </>
-            ) : (
-              <div className="text-sm text-muted-foreground p-4 border rounded-md">
-                Loading defaults...
-              </div>
             )}
           </div>
 
@@ -111,7 +116,7 @@ export function CreateProjectModal({ onClose, onCreate }: CreateProjectModalProp
             <Button type="button" variant="secondary" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" loading={loading} disabled={!hardware || idleTimeout === null}>
+            <Button type="submit" loading={loading} disabled={!hardware || settingsLoading || !!settingsError}>
               Create project
             </Button>
           </div>

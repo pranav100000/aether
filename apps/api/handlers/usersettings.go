@@ -32,7 +32,7 @@ type HardwareSettingsResponse = HardwareConfig
 // UserSettingsResponse is the response for GET /user/settings
 type UserSettingsResponse struct {
 	DefaultHardware           HardwareSettingsResponse `json:"default_hardware"`
-	DefaultIdleTimeoutMinutes *int                     `json:"default_idle_timeout_minutes,omitempty"`
+	DefaultIdleTimeoutMinutes int                      `json:"default_idle_timeout_minutes"`
 }
 
 // UpdateUserSettingsRequest is the request body for PUT /user/settings
@@ -133,11 +133,11 @@ func (h *UserSettingsHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	// Handle idle timeout update
 	if req.DefaultIdleTimeoutMinutes != nil {
-		updated.DefaultIdleTimeoutMinutes = req.DefaultIdleTimeoutMinutes
-		if validationErr := validation.ValidateIdleTimeout(updated.DefaultIdleTimeoutMinutes); validationErr != nil {
+		if validationErr := validation.ValidateIdleTimeout(req.DefaultIdleTimeoutMinutes); validationErr != nil {
 			WriteJSON(w, http.StatusBadRequest, map[string]string{"error": validationErr.Message})
 			return
 		}
+		updated.DefaultIdleTimeoutMinutes = *req.DefaultIdleTimeoutMinutes
 	}
 
 	// Save updates

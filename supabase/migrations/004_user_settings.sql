@@ -21,9 +21,8 @@ CREATE TABLE public.user_settings (
 
     -- Default Idle Timeout (in minutes)
     -- Preset values: 5, 10, 30, 60, 0 (0 = never auto-stop)
-    -- NULL means use system default
-    default_idle_timeout_minutes integer DEFAULT NULL
-        CHECK (default_idle_timeout_minutes IS NULL OR default_idle_timeout_minutes IN (0, 5, 10, 30, 60)),
+    default_idle_timeout_minutes integer DEFAULT 30 NOT NULL
+        CHECK (default_idle_timeout_minutes IN (0, 5, 10, 30, 60)),
 
     created_at timestamptz DEFAULT now() NOT NULL,
     updated_at timestamptz DEFAULT now() NOT NULL

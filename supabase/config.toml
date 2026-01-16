@@ -1,6 +1,8 @@
 # Supabase Local Development Configuration
 # See: https://supabase.com/docs/guides/cli/config
 
+project_id = "aether"
+
 [api]
 enabled = true
 port = 54321

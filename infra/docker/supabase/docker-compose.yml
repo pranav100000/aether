@@ -1,0 +1,99 @@
+# Supabase Full Stack Reference Configuration
+#
+# This file documents the components of a full Supabase stack.
+# Currently, Aether uses the simpler supabase/postgres image which provides
+# just PostgreSQL with Supabase extensions (see apps/api/infra/registry.go).
+#
+# For future expansion to full Supabase stack, this configuration can be used
+# as a reference for building a combined image or multi-container deployment.
+
+version: "3.8"
+
+services:
+  # PostgreSQL Database
+  # Currently in use: supabase/postgres:15.1.1.41
+  db:
+    image: supabase/postgres:15.1.1.41
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: postgres
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # PostgREST - Auto-generated REST API (future expansion)
+  # Provides instant REST API from PostgreSQL schema
+  rest:
+    image: postgrest/postgrest:v12.0.2
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGRST_DB_URI: postgres://postgres:${POSTGRES_PASSWORD}@db:5432/postgres
+      PGRST_DB_SCHEMA: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${JWT_SECRET}
+    ports:
+      - "3000:3000"
+
+  # GoTrue - Authentication service (future expansion)
+  # Handles user signup, login, JWT tokens
+  auth:
+    image: supabase/gotrue:v2.143.0
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@db:5432/postgres
+      GOTRUE_SITE_URL: ${SITE_URL}
+      GOTRUE_JWT_SECRET: ${JWT_SECRET}
+      GOTRUE_JWT_EXP: 3600
+    ports:
+      - "9999:9999"
+
+  # Realtime - WebSocket subscriptions (future expansion)
+  # Enables real-time database change notifications
+  realtime:
+    image: supabase/realtime:v2.25.50
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: 4000
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_NAME: postgres
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+    ports:
+      - "4000:4000"
+
+  # Studio - Admin UI (future expansion)
+  # Web interface for managing database, users, etc.
+  studio:
+    image: supabase/studio:20240101-8e4a094
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      STUDIO_PG_META_URL: http://meta:8080
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      SUPABASE_URL: http://localhost:8000
+      SUPABASE_ANON_KEY: ${ANON_KEY}
+      SUPABASE_SERVICE_KEY: ${SERVICE_KEY}
+    ports:
+      - "3001:3000"
+
+volumes:
+  db_data:

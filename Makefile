@@ -1,4 +1,4 @@
-.PHONY: help setup dev dev-services dev-frontend dev-backend stop clean clean-vms logs check
+.PHONY: help setup install dev dev-services dev-frontend dev-backend stop clean clean-vms logs check
 .PHONY: dev-real dev-api-real dev-gateway-real dev-web-real
 .PHONY: supabase-start supabase-stop supabase-status supabase-reset db-shell
 .PHONY: fmt fmt-go fmt-ts lint lint-go lint-ts
@@ -9,6 +9,7 @@ help:
 	@echo ""
 	@echo "Setup:"
 	@echo "  make setup          - Initial setup (install deps, generate keys)"
+	@echo "  make install        - Install dependencies (bun install)"
 	@echo "  make check          - Check prerequisites"
 	@echo ""
 	@echo "Development (local):"
@@ -85,11 +86,15 @@ check:
 	@command -v goimports >/dev/null 2>&1 || { echo "WARNING: goimports not installed (go install golang.org/x/tools/cmd/goimports@latest)"; }
 	@echo "All prerequisites met!"
 
+install:
+	@echo "Installing dependencies..."
+	@bun install
+
 # ===========================================
 # Development (uses .env files, no Infisical)
 # ===========================================
 
-dev: supabase-start dev-services dev-frontend
+dev: install supabase-start dev-services dev-frontend
 
 dev-services:
 	@echo "Starting Docker services..."
@@ -136,6 +141,8 @@ dev-web-real:
 supabase-start:
 	@echo "Starting local Supabase..."
 	@supabase start || true
+	@echo "Applying pending migrations..."
+	@supabase migration up --local
 	@echo ""
 	@echo "Supabase running at:"
 	@echo "  - API:    http://localhost:54321"
