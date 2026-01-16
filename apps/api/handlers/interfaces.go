@@ -54,3 +54,56 @@ type ConnectionInfo struct {
 type ConnectionResolver interface {
 	GetConnectionInfo(project *db.Project) (*ConnectionInfo, error)
 }
+
+// InfraServiceManager defines operations for managing infrastructure services.
+// Implementations include Fly.io machines and local Docker containers.
+type InfraServiceManager interface {
+	// Provision creates a new infrastructure service
+	Provision(ctx context.Context, projectID string, serviceType string, name string, config map[string]interface{}) (*InfraService, error)
+
+	// Get retrieves a specific infrastructure service
+	Get(ctx context.Context, serviceID string) (*InfraService, error)
+
+	// List retrieves all infrastructure services for a project
+	List(ctx context.Context, projectID string) ([]*InfraService, error)
+
+	// Delete removes an infrastructure service
+	Delete(ctx context.Context, serviceID string) error
+
+	// Stop stops a running infrastructure service
+	Stop(ctx context.Context, serviceID string) error
+
+	// Start starts a stopped infrastructure service
+	Start(ctx context.Context, serviceID string) error
+
+	// WaitForReady waits for a service to become ready
+	WaitForReady(ctx context.Context, serviceID string, timeout time.Duration) error
+}
+
+// ServiceDefinition defines a type of infrastructure service that can be provisioned
+type ServiceDefinition struct {
+	Type        string
+	DisplayName string
+	Description string
+}
+
+// ServiceRegistry provides available service type definitions
+type ServiceRegistry interface {
+	// IsAvailable checks if a service type is registered
+	IsAvailable(serviceType string) bool
+	// List returns all registered service definitions
+	List() []ServiceDefinition
+}
+
+// InfraServiceStore defines the database operations needed for infrastructure services
+type InfraServiceStore interface {
+	CreateInfraService(ctx context.Context, projectID, serviceType string, name *string, config any) (*db.InfraService, error)
+	GetInfraService(ctx context.Context, serviceID string) (*db.InfraService, error)
+	GetInfraServiceByProject(ctx context.Context, serviceID, projectID string) (*db.InfraService, error)
+	ListInfraServices(ctx context.Context, projectID string) ([]db.InfraService, error)
+	UpdateInfraServiceStatus(ctx context.Context, serviceID, status string, errorMsg *string) error
+	UpdateInfraServiceMachine(ctx context.Context, serviceID, machineID string) error
+	UpdateInfraServiceVolume(ctx context.Context, serviceID, volumeID string) error
+	UpdateInfraServiceConnection(ctx context.Context, serviceID string, connectionDetailsEncrypted string) error
+	DeleteInfraService(ctx context.Context, serviceID string) error
+}

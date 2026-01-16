@@ -1,43 +1,48 @@
 package workspace
 
 import (
-	"aether/apps/api/config"
-	"aether/apps/api/fly"
 	"aether/apps/api/handlers"
-	"aether/apps/api/local"
 )
 
-// Factory creates workspace-related managers based on the runtime mode
+// Factory provides workspace-related managers.
+// All implementations are injected at construction time - no runtime branching.
 type Factory struct {
-	flyClient *fly.Client
+	machines           handlers.MachineManager
+	volumes            handlers.VolumeManager
+	connectionResolver handlers.ConnectionResolver
+	infraManager       handlers.InfraServiceManager
 }
 
-func NewFactory(flyClient *fly.Client) *Factory {
+func NewFactory(
+	machines handlers.MachineManager,
+	volumes handlers.VolumeManager,
+	connectionResolver handlers.ConnectionResolver,
+	infraManager handlers.InfraServiceManager,
+) *Factory {
 	return &Factory{
-		flyClient: flyClient,
+		machines:           machines,
+		volumes:            volumes,
+		connectionResolver: connectionResolver,
+		infraManager:       infraManager,
 	}
 }
 
-// MachineManager returns the appropriate MachineManager implementation
+// MachineManager returns the MachineManager implementation
 func (f *Factory) MachineManager() handlers.MachineManager {
-	if config.IsLocalMode() {
-		return local.NewMachineManager()
-	}
-	return f.flyClient
+	return f.machines
 }
 
-// VolumeManager returns the appropriate VolumeManager implementation
+// VolumeManager returns the VolumeManager implementation
 func (f *Factory) VolumeManager() handlers.VolumeManager {
-	if config.IsLocalMode() {
-		return local.NewVolumeManager()
-	}
-	return f.flyClient
+	return f.volumes
 }
 
-// ConnectionResolver returns the appropriate ConnectionResolver implementation
+// ConnectionResolver returns the ConnectionResolver implementation
 func (f *Factory) ConnectionResolver() handlers.ConnectionResolver {
-	if config.IsLocalMode() {
-		return NewLocalConnectionResolver()
-	}
-	return NewFlyConnectionResolver(f.flyClient)
+	return f.connectionResolver
+}
+
+// InfraServiceManager returns the InfraServiceManager implementation
+func (f *Factory) InfraServiceManager() handlers.InfraServiceManager {
+	return f.infraManager
 }

@@ -11,6 +11,8 @@ import (
 	"aether/apps/api/db"
 	"aether/apps/api/fly"
 	"aether/apps/api/handlers"
+	"aether/apps/api/infra"
+	"aether/apps/api/local"
 	authmw "aether/apps/api/middleware"
 	"aether/apps/api/workspace"
 	"aether/libs/go/logging"
@@ -118,8 +120,31 @@ func main() {
 
 	idleTimeout := time.Duration(idleTimeoutMin) * time.Minute
 
-	// Create workspace factory (returns local or Fly implementations based on LOCAL_MODE)
-	wsFactory := workspace.NewFactory(flyClient)
+	// Initialize infra registry
+	infraRegistry := infra.NewRegistry()
+
+	// Create implementations based on mode
+	var machineManager handlers.MachineManager
+	var volumeManager handlers.VolumeManager
+	var connectionResolver handlers.ConnectionResolver
+
+	if cfg.LocalMode {
+		machineManager = local.NewMachineManager()
+		volumeManager = local.NewVolumeManager()
+		connectionResolver = workspace.NewLocalConnectionResolver()
+	} else {
+		machineManager = flyClient
+		volumeManager = flyClient
+		connectionResolver = workspace.NewFlyConnectionResolver(flyClient)
+	}
+
+	// Create infra manager with the appropriate implementations
+	infraManager := infra.NewManager(machineManager, volumeManager, infraRegistry, flyRegion)
+
+	// Create workspace factory with all implementations
+	wsFactory := workspace.NewFactory(machineManager, volumeManager, connectionResolver, infraManager)
+	infraRegistryAdapter := &serviceRegistryAdapter{registry: infraRegistry}
+	infraHandler := handlers.NewInfraHandler(dbClient, dbClient, wsFactory.InfraServiceManager(), infraRegistryAdapter, encryptor)
 
 	// New project-based handlers
 	projectHandler := handlers.NewProjectHandler(dbClient, wsFactory.MachineManager(), wsFactory.VolumeManager(), apiKeysGetter, baseImage, flyRegion, idleTimeout)
@@ -179,6 +204,12 @@ func main() {
 			r.Post("/{id}/start", projectHandler.Start)
 			r.Post("/{id}/stop", projectHandler.Stop)
 			// File and port operations are now handled via WebSocket (workspace endpoint)
+
+			// Infrastructure service routes
+			r.Get("/{id}/infra", infraHandler.List)
+			r.Post("/{id}/infra", infraHandler.Provision)
+			r.Get("/{id}/infra/{serviceId}", infraHandler.Get)
+			r.Delete("/{id}/infra/{serviceId}", infraHandler.Delete)
 		})
 
 		// User API keys routes
@@ -203,6 +234,13 @@ func main() {
 
 	// Unified workspace endpoint (terminal + agent + files + ports over single WebSocket)
 	r.Get("/projects/{id}/workspace", workspaceHandler.HandleWorkspace)
+
+	// Internal routes (for workspace-service, no user auth required)
+	r.Route("/internal", func(r chi.Router) {
+		r.Get("/infra/types", infraHandler.ListServiceTypes)
+		r.Get("/projects/{id}/infra", infraHandler.InternalList)
+		r.Post("/projects/{id}/infra", infraHandler.InternalProvision)
+	})
 
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("../frontend"))))
 
@@ -253,4 +291,26 @@ func asAPIKeysGetter(h *handlers.APIKeysHandler) handlers.APIKeysGetter {
 		return nil
 	}
 	return h
+}
+
+// serviceRegistryAdapter adapts infra.Registry to handlers.ServiceRegistry
+type serviceRegistryAdapter struct {
+	registry *infra.Registry
+}
+
+func (a *serviceRegistryAdapter) IsAvailable(serviceType string) bool {
+	return a.registry.IsAvailable(serviceType)
+}
+
+func (a *serviceRegistryAdapter) List() []handlers.ServiceDefinition {
+	infraDefs := a.registry.List()
+	result := make([]handlers.ServiceDefinition, len(infraDefs))
+	for i, def := range infraDefs {
+		result[i] = handlers.ServiceDefinition{
+			Type:        def.Type,
+			DisplayName: def.DisplayName,
+			Description: def.Description,
+		}
+	}
+	return result
 }
