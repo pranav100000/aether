@@ -1,59 +1,48 @@
 package workspace
 
 import (
-	"aether/apps/api/config"
-	"aether/apps/api/fly"
 	"aether/apps/api/handlers"
-	"aether/apps/api/infra"
-	"aether/apps/api/local"
 )
 
-// Note: local is still used for MachineManager and VolumeManager in local mode
-
-// Factory creates workspace-related managers based on the runtime mode
+// Factory provides workspace-related managers.
+// All implementations are injected at construction time - no runtime branching.
 type Factory struct {
-	flyClient *fly.Client
-	registry  *infra.Registry
+	machines           handlers.MachineManager
+	volumes            handlers.VolumeManager
+	connectionResolver handlers.ConnectionResolver
+	infraManager       handlers.InfraServiceManager
 }
 
-func NewFactory(flyClient *fly.Client, registry *infra.Registry) *Factory {
+func NewFactory(
+	machines handlers.MachineManager,
+	volumes handlers.VolumeManager,
+	connectionResolver handlers.ConnectionResolver,
+	infraManager handlers.InfraServiceManager,
+) *Factory {
 	return &Factory{
-		flyClient: flyClient,
-		registry:  registry,
+		machines:           machines,
+		volumes:            volumes,
+		connectionResolver: connectionResolver,
+		infraManager:       infraManager,
 	}
 }
 
-// MachineManager returns the appropriate MachineManager implementation
+// MachineManager returns the MachineManager implementation
 func (f *Factory) MachineManager() handlers.MachineManager {
-	if config.IsLocalMode() {
-		return local.NewMachineManager()
-	}
-	return f.flyClient
+	return f.machines
 }
 
-// VolumeManager returns the appropriate VolumeManager implementation
+// VolumeManager returns the VolumeManager implementation
 func (f *Factory) VolumeManager() handlers.VolumeManager {
-	if config.IsLocalMode() {
-		return local.NewVolumeManager()
-	}
-	return f.flyClient
+	return f.volumes
 }
 
-// ConnectionResolver returns the appropriate ConnectionResolver implementation
+// ConnectionResolver returns the ConnectionResolver implementation
 func (f *Factory) ConnectionResolver() handlers.ConnectionResolver {
-	if config.IsLocalMode() {
-		return NewLocalConnectionResolver()
-	}
-	return NewFlyConnectionResolver(f.flyClient)
+	return f.connectionResolver
 }
 
 // InfraServiceManager returns the InfraServiceManager implementation
-// Uses the same MachineManager/VolumeManager abstractions as workspace VMs
 func (f *Factory) InfraServiceManager() handlers.InfraServiceManager {
-	return infra.NewManager(
-		f.MachineManager(),
-		f.VolumeManager(),
-		f.registry,
-		f.flyClient.GetRegion(),
-	)
+	return f.infraManager
 }

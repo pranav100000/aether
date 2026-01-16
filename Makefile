@@ -136,6 +136,8 @@ dev-web-real:
 supabase-start:
 	@echo "Starting local Supabase..."
 	@supabase start || true
+	@echo "Applying pending migrations..."
+	@supabase migration up --local
 	@echo ""
 	@echo "Supabase running at:"
 	@echo "  - API:    http://localhost:54321"

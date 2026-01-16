@@ -12,6 +12,7 @@ import (
 	"aether/apps/api/fly"
 	"aether/apps/api/handlers"
 	"aether/apps/api/infra"
+	"aether/apps/api/local"
 	authmw "aether/apps/api/middleware"
 	"aether/apps/api/workspace"
 	"aether/libs/go/logging"
@@ -122,8 +123,26 @@ func main() {
 	// Initialize infra registry
 	infraRegistry := infra.NewRegistry()
 
-	// Create workspace factory (returns local or Fly implementations based on LOCAL_MODE)
-	wsFactory := workspace.NewFactory(flyClient, infraRegistry)
+	// Create implementations based on mode
+	var machineManager handlers.MachineManager
+	var volumeManager handlers.VolumeManager
+	var connectionResolver handlers.ConnectionResolver
+
+	if cfg.LocalMode {
+		machineManager = local.NewMachineManager()
+		volumeManager = local.NewVolumeManager()
+		connectionResolver = workspace.NewLocalConnectionResolver()
+	} else {
+		machineManager = flyClient
+		volumeManager = flyClient
+		connectionResolver = workspace.NewFlyConnectionResolver(flyClient)
+	}
+
+	// Create infra manager with the appropriate implementations
+	infraManager := infra.NewManager(machineManager, volumeManager, infraRegistry, flyRegion)
+
+	// Create workspace factory with all implementations
+	wsFactory := workspace.NewFactory(machineManager, volumeManager, connectionResolver, infraManager)
 	infraRegistryAdapter := &serviceRegistryAdapter{registry: infraRegistry}
 	infraHandler := handlers.NewInfraHandler(dbClient, dbClient, wsFactory.InfraServiceManager(), infraRegistryAdapter, encryptor)
 
